@@ -1,0 +1,67 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: ${API_BUILD_CONTEXT}
+      dockerfile: ${API_DOCKERFILE}
+
+    container_name: ${API_CONTAINER_NAME}
+
+    env_file:
+      - .env
+
+    environment:
+      INFINITO_REPO_PATH: ${INFINITO_REPO_PATH}
+      STATE_DIR: ${STATE_DIR}
+
+      APP_ENV: ${APP_ENV}
+      APP_HOST: ${API_APP_HOST}
+      APP_PORT: ${API_APP_PORT}
+
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS}
+
+    volumes:
+      - ${INFINITO_REPO_HOST_PATH}:${INFINITO_REPO_PATH}:ro
+      - ${STATE_HOST_PATH}:${STATE_DIR}
+
+      # Optional: enable only if you really need Docker access
+      # - ${DOCKER_SOCKET_PATH}:/var/run/docker.sock
+
+    ports:
+      - "${API_PORT}:${API_APP_PORT}"
+
+    healthcheck:
+      test: ["CMD", "sh", "-lc", "wget -qO- http://${API_APP_HOST}:${API_APP_PORT}/health || exit 1"]
+      interval: ${API_HEALTHCHECK_INTERVAL}
+      timeout: ${API_HEALTHCHECK_TIMEOUT}
+      retries: ${API_HEALTHCHECK_RETRIES}
+
+    restart: ${RESTART_POLICY}
+
+  web:
+    build:
+      context: ${WEB_BUILD_CONTEXT}
+      dockerfile: ${WEB_DOCKERFILE}
+
+    container_name: ${WEB_CONTAINER_NAME}
+
+    env_file:
+      - .env
+
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+
+    ports:
+      - "${WEB_PORT}:3000"
+
+    depends_on:
+      api:
+        condition: service_healthy
+
+    restart: ${RESTART_POLICY}
+
+networks:
+  default:
+    name: ${DOCKER_NETWORK_NAME}
