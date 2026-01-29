@@ -3,8 +3,10 @@ from __future__ import annotations
 import os
 from typing import List
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+
+from infinito_deployer.services.role_catalog import RoleCatalogError, RoleCatalogService
 
 
 def _parse_origins(raw: str) -> List[str]:
@@ -25,9 +27,25 @@ def create_app() -> FastAPI:
             allow_headers=["*"],
         )
 
+    catalog = RoleCatalogService()
+
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok"}
+
+    @app.get("/api/roles")
+    def list_roles() -> dict:
+        """
+        Canonical role list endpoint (1.1).
+
+        Strict:
+          - If ROLE_CATALOG_LIST_JSON is missing or invalid -> HTTP 500
+        """
+        try:
+            roles = catalog.load_roles()
+        except RoleCatalogError as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        return {"roles": [r.id for r in roles]}
 
     return app
 

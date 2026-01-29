@@ -25,18 +25,18 @@
 
 ### 1.1 Canonical Role Source
 
-* [ ] Load role list from canonical source:
+* [x] Load role list from canonical source:
 
-  * [ ] `roles/list.json` (primary)
+  * [x] `roles/list.json` (primary)
   * [ ] `roles/categories.yml` (optional)
-* [ ] Validate uniqueness of role IDs
-* [ ] Ignore disabled/hidden roles if marked
+* [x] Validate uniqueness of role IDs
+* [x] Ignore disabled/hidden roles if marked
 
 **A/C**
 
-* API can return a complete list of deployable roles
-* No role duplication
-* Missing or malformed entries are skipped with warnings (not fatal)
+* [x] API can return a complete list of deployable roles
+* [x] No role duplication
+* [x] Missing or malformed entries are skipped with warnings (not fatal)
 
 ---
 
@@ -61,13 +61,13 @@ For each role:
 
 **A/C**
 
-* Every role has:
+* [ ] Every role has:
 
   * ID
   * Display name
   * Status
   * At least one deploy target
-* Roles without optional metadata still render correctly
+* [ ] Roles without optional metadata still render correctly
 
 ---
 
@@ -82,9 +82,9 @@ For each role:
 
 **A/C**
 
-* Every role tile has a visible icon
-* No broken image URLs
-* simpleicons lookup is cached
+* [ ] Every role tile has a visible icon
+* [ ] No broken image URLs
+* [ ] simpleicons lookup is cached
 
 ---
 
@@ -105,9 +105,9 @@ For each role:
 
 **A/C**
 
-* Filters are combinable
-* API response time < 200ms for cached index
-* Invalid filters return empty results, not errors
+* [ ] Filters are combinable
+* [ ] API response time < 200ms for cached index
+* [ ] Invalid filters return empty results, not errors
 
 ---
 
@@ -133,9 +133,9 @@ For each role:
 
 **A/C**
 
-* Preview matches the inventory used during deployment
-* No secrets are logged or returned unmasked
-* Invalid input returns clear validation errors
+* [ ] Preview matches the inventory used during deployment
+* [ ] No secrets are logged or returned unmasked
+* [ ] Invalid input returns clear validation errors
 
 ---
 
@@ -152,9 +152,9 @@ For each role:
 
 **A/C**
 
-* Each deployment has a unique, traceable job ID
-* Job state transitions are consistent
-* Cancel reliably stops the deployment
+* [ ] Each deployment has a unique, traceable job ID
+* [ ] Job state transitions are consistent
+* [ ] Cancel reliably stops the deployment
 
 ---
 
@@ -170,9 +170,9 @@ For each role:
 
 **A/C**
 
-* Logs appear in the UI within < 1 second
-* ANSI output is readable
-* Secrets are never visible
+* [ ] Logs appear in the UI within < 1 second
+* [ ] ANSI output is readable
+* [ ] Secrets are never visible
 
 ---
 
@@ -192,8 +192,8 @@ For each job:
 
 **A/C**
 
-* Jobs are isolated from each other
-* Restarting the API does not corrupt jobs
+* [ ] Jobs are isolated from each other
+* [ ] Restarting the API does not corrupt jobs
 
 ---
 
@@ -208,9 +208,9 @@ For each job:
 
 **A/C**
 
-* Output matches CLI behavior when run manually
-* Exit codes propagate correctly
-* Wrapper can be reused outside the web UI
+* [ ] Output matches CLI behavior when run manually
+* [ ] Exit codes propagate correctly
+* [ ] Wrapper can be reused outside the web UI
 
 ---
 
@@ -229,8 +229,8 @@ For each job:
 
 **A/C**
 
-* No secret value is ever retrievable after submission
-* Masking does not break readability
+* [ ] No secret value is ever retrievable after submission
+* [ ] Masking does not break readability
 
 ---
 
@@ -253,9 +253,9 @@ For each job:
 
 **A/C**
 
-* UI remains responsive with 100+ roles
-* Filtering is client-side fast
-* Selection state is preserved during filtering
+* [ ] UI remains responsive with 100+ roles
+* [ ] Filtering is client-side fast
+* [ ] Selection state is preserved during filtering
 
 ---
 
@@ -272,9 +272,9 @@ For each job:
 
 **A/C**
 
-* Form prevents invalid combinations
-* Secrets are cleared on page reload
-* UI explains where credentials are used
+* [ ] Form prevents invalid combinations
+* [ ] Secrets are cleared on page reload
+* [ ] UI explains where credentials are used
 
 ---
 
@@ -286,8 +286,8 @@ For each job:
 
 **A/C**
 
-* Invalid JSON is detected before submit
-* Preview matches deployment behavior exactly
+* [ ] Invalid JSON is detected before submit
+* [ ] Preview matches deployment behavior exactly
 
 ---
 
@@ -299,9 +299,9 @@ For each job:
 
 **A/C**
 
-* Terminal output feels “docker-like”
-* User can follow deployment in real time
-* Final status is clearly visible
+* [ ] Terminal output feels “docker-like”
+* [ ] User can follow deployment in real time
+* [ ] Final status is clearly visible
 
 ---
 
@@ -315,8 +315,8 @@ For each job:
 
 **A/C**
 
-* Dashboard loads < 1s on warm cache
-* Multiple concurrent viewers do not crash API
+* [ ] Dashboard loads < 1s on warm cache
+* [ ] Multiple concurrent viewers do not crash API
 
 ---
 
@@ -328,8 +328,8 @@ For each job:
 
 **A/C**
 
-* Secrets never appear in logs or browser devtools
-* API rejects malformed or malicious input
+* [ ] Secrets never appear in logs or browser devtools
+* [ ] API rejects malformed or malicious input
 
 ---
 
@@ -339,32 +339,32 @@ For each job:
 
 **A/C**
 
-* Roles are visible as tiles
-* Filtering works
-* Logos render correctly
+* [ ] Roles are visible as tiles
+* [ ] Filtering works
+* [ ] Logos render correctly
 
 ### Milestone 2 – Inventory Preview
 
 **A/C**
 
-* User can configure target + vars
-* Inventory preview is accurate
+* [ ] User can configure target + vars
+* [ ] Inventory preview is accurate
 
 ### Milestone 3 – Live Deployment
 
 **A/C**
 
-* Deployment runs from UI
-* Logs stream live
-* Cancel works
+* [ ] Deployment runs from UI
+* [ ] Logs stream live
+* [ ] Cancel works
 
 ### Milestone 4 – Harden & Polish
 
 **A/C**
 
-* Caching enabled
-* Masking verified
-* UX refinements complete
+* [ ] Caching enabled
+* [ ] Masking verified
+* [ ] UX refinements complete
 Below is a **very detailed, checklist-style TODO list with explicit Acceptance Criteria (A/C)**, written in **English**, designed so you can **reuse individual sections verbatim in future AI conversations, GitHub issues, or project planning**.
 
 Scope matches your stated goal exactly: **Deployment dashboard → app tiles → filtering → target selection → credentials → inventory vars → deployment → live web terminal**.
@@ -400,18 +400,18 @@ Scope matches your stated goal exactly: **Deployment dashboard → app tiles →
 
 ### 1.1 Canonical Role Source
 
-* [ ] Load role list from canonical source:
+* [x] Load role list from canonical source:
 
-  * [ ] `roles/list.json` (primary)
+  * [x] `roles/list.json` (primary)
   * [ ] `roles/categories.yml` (optional)
-* [ ] Validate uniqueness of role IDs
-* [ ] Ignore disabled/hidden roles if marked
+* [x] Validate uniqueness of role IDs
+* [x] Ignore disabled/hidden roles if marked
 
 **A/C**
 
-* API can return a complete list of deployable roles
-* No role duplication
-* Missing or malformed entries are skipped with warnings (not fatal)
+* [x] API can return a complete list of deployable roles
+* [x] No role duplication
+* [x] Missing or malformed entries are skipped with warnings (not fatal)
 
 ---
 
@@ -436,13 +436,13 @@ For each role:
 
 **A/C**
 
-* Every role has:
+* [ ] Every role has:
 
   * ID
   * Display name
   * Status
   * At least one deploy target
-* Roles without optional metadata still render correctly
+* [ ] Roles without optional metadata still render correctly
 
 ---
 
@@ -457,9 +457,9 @@ For each role:
 
 **A/C**
 
-* Every role tile has a visible icon
-* No broken image URLs
-* simpleicons lookup is cached
+* [ ] Every role tile has a visible icon
+* [ ] No broken image URLs
+* [ ] simpleicons lookup is cached
 
 ---
 
@@ -480,9 +480,9 @@ For each role:
 
 **A/C**
 
-* Filters are combinable
-* API response time < 200ms for cached index
-* Invalid filters return empty results, not errors
+* [ ] Filters are combinable
+* [ ] API response time < 200ms for cached index
+* [ ] Invalid filters return empty results, not errors
 
 ---
 
@@ -508,9 +508,9 @@ For each role:
 
 **A/C**
 
-* Preview matches the inventory used during deployment
-* No secrets are logged or returned unmasked
-* Invalid input returns clear validation errors
+* [ ] Preview matches the inventory used during deployment
+* [ ] No secrets are logged or returned unmasked
+* [ ] Invalid input returns clear validation errors
 
 ---
 
@@ -527,9 +527,9 @@ For each role:
 
 **A/C**
 
-* Each deployment has a unique, traceable job ID
-* Job state transitions are consistent
-* Cancel reliably stops the deployment
+* [ ] Each deployment has a unique, traceable job ID
+* [ ] Job state transitions are consistent
+* [ ] Cancel reliably stops the deployment
 
 ---
 
@@ -545,9 +545,9 @@ For each role:
 
 **A/C**
 
-* Logs appear in the UI within < 1 second
-* ANSI output is readable
-* Secrets are never visible
+* [ ] Logs appear in the UI within < 1 second
+* [ ] ANSI output is readable
+* [ ] Secrets are never visible
 
 ---
 
@@ -567,8 +567,8 @@ For each job:
 
 **A/C**
 
-* Jobs are isolated from each other
-* Restarting the API does not corrupt jobs
+* [ ] Jobs are isolated from each other
+* [ ] Restarting the API does not corrupt jobs
 
 ---
 
@@ -583,9 +583,9 @@ For each job:
 
 **A/C**
 
-* Output matches CLI behavior when run manually
-* Exit codes propagate correctly
-* Wrapper can be reused outside the web UI
+* [ ] Output matches CLI behavior when run manually
+* [ ] Exit codes propagate correctly
+* [ ] Wrapper can be reused outside the web UI
 
 ---
 
@@ -604,8 +604,8 @@ For each job:
 
 **A/C**
 
-* No secret value is ever retrievable after submission
-* Masking does not break readability
+* [ ] No secret value is ever retrievable after submission
+* [ ] Masking does not break readability
 
 ---
 
@@ -628,9 +628,9 @@ For each job:
 
 **A/C**
 
-* UI remains responsive with 100+ roles
-* Filtering is client-side fast
-* Selection state is preserved during filtering
+* [ ] UI remains responsive with 100+ roles
+* [ ] Filtering is client-side fast
+* [ ] Selection state is preserved during filtering
 
 ---
 
@@ -647,9 +647,9 @@ For each job:
 
 **A/C**
 
-* Form prevents invalid combinations
-* Secrets are cleared on page reload
-* UI explains where credentials are used
+* [ ] Form prevents invalid combinations
+* [ ] Secrets are cleared on page reload
+* [ ] UI explains where credentials are used
 
 ---
 
@@ -661,8 +661,8 @@ For each job:
 
 **A/C**
 
-* Invalid JSON is detected before submit
-* Preview matches deployment behavior exactly
+* [ ] Invalid JSON is detected before submit
+* [ ] Preview matches deployment behavior exactly
 
 ---
 
@@ -674,9 +674,9 @@ For each job:
 
 **A/C**
 
-* Terminal output feels “docker-like”
-* User can follow deployment in real time
-* Final status is clearly visible
+* [ ] Terminal output feels “docker-like”
+* [ ] User can follow deployment in real time
+* [ ] Final status is clearly visible
 
 ---
 
@@ -690,8 +690,8 @@ For each job:
 
 **A/C**
 
-* Dashboard loads < 1s on warm cache
-* Multiple concurrent viewers do not crash API
+* [ ] Dashboard loads < 1s on warm cache
+* [ ] Multiple concurrent viewers do not crash API
 
 ---
 
@@ -703,8 +703,8 @@ For each job:
 
 **A/C**
 
-* Secrets never appear in logs or browser devtools
-* API rejects malformed or malicious input
+* [ ] Secrets never appear in logs or browser devtools
+* [ ] API rejects malformed or malicious input
 
 ---
 
@@ -714,37 +714,29 @@ For each job:
 
 **A/C**
 
-* Roles are visible as tiles
-* Filtering works
-* Logos render correctly
+* [ ] Roles are visible as tiles
+* [ ] Filtering works
+* [ ] Logos render correctly
 
 ### Milestone 2 – Inventory Preview
 
 **A/C**
 
-* User can configure target + vars
-* Inventory preview is accurate
+* [ ] User can configure target + vars
+* [ ] Inventory preview is accurate
 
 ### Milestone 3 – Live Deployment
 
 **A/C**
 
-* Deployment runs from UI
-* Logs stream live
-* Cancel works
+* [ ] Deployment runs from UI
+* [ ] Logs stream live
+* [ ] Cancel works
 
 ### Milestone 4 – Harden & Polish
 
 **A/C**
 
-* Caching enabled
-* Masking verified
-* UX refinements complete
-
----
-
-If you want, next I can:
-
-* Convert this into **GitHub Issues with labels & priorities**
-* Extract a **pure MVP subset**
-* Or write a **formal architecture document** based on this TODO list
+* [ ] Caching enabled
+* [ ] Masking verified
+* [ ] UX refinements complete

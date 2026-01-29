@@ -1,6 +1,41 @@
 version: "3.9"
 
 services:
+  # ---------------------------------------------------------
+  # Catalog generator (writes roles/list.json into STATE_DIR)
+  # ---------------------------------------------------------
+  catalog:
+    image: ${INFINITO_NEXUS_IMAGE}
+    container_name: infinito-deployer-catalog
+
+    env_file:
+      - .env
+
+    environment:
+      INFINITO_REPO_PATH: ${INFINITO_REPO_PATH}
+      STATE_DIR: ${STATE_DIR}
+      CATALOG_DIR: ${CATALOG_DIR}
+
+    volumes:
+      - ${INFINITO_REPO_HOST_PATH}:${INFINITO_REPO_PATH}:ro
+      - ${STATE_HOST_PATH}:${STATE_DIR}
+
+    entrypoint: ["sh", "-lc"]
+    command: |
+      set -euo pipefail
+      mkdir -p "${CATALOG_DIR}/roles"
+      echo "→ Generating roles list into ${CATALOG_DIR}/roles/list.json"
+      infinito build roles_list \
+        --roles-dir "${INFINITO_REPO_PATH}/roles" \
+        --output "${CATALOG_DIR}/roles/list.json"
+      echo "✔ Catalog generated."
+      tail -f /dev/null
+
+    restart: ${RESTART_POLICY}
+
+  # ---------------------------------------------------------
+  # API
+  # ---------------------------------------------------------
   api:
     build:
       context: ${API_BUILD_CONTEXT}
@@ -21,6 +56,9 @@ services:
 
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS}
 
+      ROLE_CATALOG_LIST_JSON: ${ROLE_CATALOG_LIST_JSON}
+      ROLE_CATALOG_CATEGORIES_YML: ${ROLE_CATALOG_CATEGORIES_YML}
+
     volumes:
       - ${INFINITO_REPO_HOST_PATH}:${INFINITO_REPO_PATH}:ro
       - ${STATE_HOST_PATH}:${STATE_DIR}
@@ -31,14 +69,31 @@ services:
     ports:
       - "${API_PORT}:${API_APP_PORT}"
 
+    depends_on:
+      catalog:
+        condition: service_started
+
     healthcheck:
-      test: ["CMD", "sh", "-lc", "wget -qO- http://${API_APP_HOST}:${API_APP_PORT}/health || exit 1"]
+      test:
+        - CMD
+        - python
+        - -c
+        - >
+          import os,urllib.request;
+          p=os.environ.get("API_APP_PORT","8000");
+          urllib.request.urlopen(f"http://127.0.0.1:{p}/health", timeout=2).read();
+          print("ok")
       interval: ${API_HEALTHCHECK_INTERVAL}
       timeout: ${API_HEALTHCHECK_TIMEOUT}
       retries: ${API_HEALTHCHECK_RETRIES}
 
+
+
     restart: ${RESTART_POLICY}
 
+  # ---------------------------------------------------------
+  # Web
+  # ---------------------------------------------------------
   web:
     build:
       context: ${WEB_BUILD_CONTEXT}
