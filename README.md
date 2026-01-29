@@ -22,3 +22,29 @@ At its core, Infinito Deployer does **not replace** Infinito.Nexus—it **orches
 
 The result is a bridge between **infrastructure-as-code discipline** and **human-friendly operations**:
 a single interface where complex, multi-role deployments become **discoverable, explainable, and safely executable**—by experts and non-experts alike.
+
+---
+
+## Quickstart
+
+```bash
+make setup
+```
+
+Then open:
+- Web UI: http://localhost:3000
+- API: http://localhost:8000/health
+
+---
+
+## Development
+
+Show logs:
+```bash
+make logs
+```
+
+Stop stack:
+```bash
+make down
+```

@@ -4,22 +4,20 @@
 
 ### 0.1 Repository & Bootstrap
 
-* [ ] Repository initialized (`infinito-deployer`)
-* [ ] Monorepo structure created
-
-  * [ ] `apps/web` (Next.js)
-  * [ ] `apps/api` (FastAPI)
-  * [ ] `state/` (jobs, logs, sqlite)
-* [ ] `.gitignore` includes `state/`, `.env`
-* [ ] `docker-compose.yml` is fully env-driven
-* [ ] `env.example` exists and is complete
-* [ ] `Makefile` includes `setup` and `up`
+* [x] Repository initialized (`infinito-deployer`)
+* [x] Monorepo structure created
+  * [x] `apps/web` (Next.js)
+  * [x] `apps/api` (FastAPI)
+  * [x] `state/` (jobs, logs, sqlite)
+* [x] `.gitignore` includes `state/`, `.env`
+* [x] `docker-compose.yml` is fully env-driven
+* [x] `env.example` exists and is complete
+* [x] `Makefile` includes `setup` and `up`
 
 **A/C**
-
-* `make setup` works on a clean checkout
-* No secrets or state files are committed
-* Stack starts successfully via Docker Compose
+* [x] `make setup` works on a clean checkout
+* [x] No secrets or state files are committed
+* [x] Stack starts successfully via Docker Compose
 
 ---
 

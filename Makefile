@@ -1,4 +1,4 @@
-.PHONY: setup env dirs up
+.PHONY: setup env dirs up down logs ps
 
 # Use docker compose v2 by default; override via env if needed:
 #   make setup DOCKER_COMPOSE="docker-compose"
@@ -24,3 +24,12 @@ dirs:
 up:
 	@echo "→ Starting stack via compose ($(COMPOSE_FILE), env=$(ENV_FILE))"
 	@$(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" up -d --build --remove-orphans
+
+down:
+	@$(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" down
+
+logs:
+	@$(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" logs -f --tail=200
+
+ps:
+	@$(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" ps
