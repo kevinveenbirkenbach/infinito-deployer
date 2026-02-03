@@ -328,15 +328,15 @@ For each job:
 
 ### 4.4 Live Deployment View
 
-* [ ] xterm.js embedded terminal
-* [ ] SSE client implementation
-* [ ] Status indicator + cancel button
+* [x] xterm.js embedded terminal
+* [x] SSE client implementation
+* [x] Status indicator + cancel button
 
 **A/C**
 
-* [ ] Terminal output feels “docker-like”
-* [ ] User can follow deployment in real time
-* [ ] Final status is clearly visible
+* [x] Terminal output feels “docker-like”
+* [x] User can follow deployment in real time
+* [x] Final status is clearly visible
 
 ---
 
@@ -703,15 +703,15 @@ For each job:
 
 ### 4.4 Live Deployment View
 
-* [ ] xterm.js embedded terminal
-* [ ] SSE client implementation
-* [ ] Status indicator + cancel button
+* [x] xterm.js embedded terminal
+* [x] SSE client implementation
+* [x] Status indicator + cancel button
 
 **A/C**
 
-* [ ] Terminal output feels “docker-like”
-* [ ] User can follow deployment in real time
-* [ ] Final status is clearly visible
+* [x] Terminal output feels “docker-like”
+* [x] User can follow deployment in real time
+* [x] Final status is clearly visible
 
 ---
 
