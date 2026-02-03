@@ -13,9 +13,6 @@ router = APIRouter(prefix="/roles", tags=["roles"])
 
 
 def _repo_roles_root() -> Path:
-    """
-    Uses INFINITO_REPO_PATH (mounted into the API container) and returns <repo>/roles.
-    """
     root = os.getenv("INFINITO_REPO_PATH", "/repo/infinito-nexus")
     return Path(root) / "roles"
 
@@ -29,6 +26,9 @@ def list_roles_metadata() -> List[RoleOut]:
         md = idx[name]
         out.append(
             RoleOut(
+                id=md.id,
+                display_name=md.display_name,
+                status=md.status,
                 role_name=md.role_name,
                 description=md.description,
                 author=md.author,
@@ -42,7 +42,6 @@ def list_roles_metadata() -> List[RoleOut]:
                 galaxy_tags=md.galaxy_tags,
                 dependencies=md.dependencies,
                 lifecycle=md.lifecycle,
-                status=md.status,
                 run_after=md.run_after,
                 platforms=md.platforms,
                 logo=(RoleLogoOut(css_class=md.logo.css_class) if md.logo else None),

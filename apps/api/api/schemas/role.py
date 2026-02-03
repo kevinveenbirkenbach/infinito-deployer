@@ -10,6 +10,12 @@ class RoleLogoOut(BaseModel):
 
 
 class RoleOut(BaseModel):
+    # Required by A/C
+    id: str
+    display_name: str
+    status: str  # always present (pre-alpha/alpha/beta/stable/deprecated)
+
+    # Existing
     role_name: str
     description: str
 
@@ -25,7 +31,6 @@ class RoleOut(BaseModel):
     galaxy_tags: List[str] = []
     dependencies: List[str] = []
     lifecycle: Optional[str] = None
-    status: Optional[str] = None
     run_after: List[str] = []
     platforms: List[Dict[str, Any]] = []
     logo: Optional[RoleLogoOut] = None

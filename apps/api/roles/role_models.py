@@ -31,7 +31,10 @@ class RoleGalaxyInfo:
     documentation: Optional[str] = None
     min_ansible_version: Optional[str] = None
     platforms: List[Dict[str, Any]] = field(default_factory=list)
+
+    # Raw lifecycle as found in meta/main.yml (may be None or arbitrary)
     lifecycle: Optional[str] = None
+
     run_after: List[str] = field(default_factory=list)
     logo: Optional[RoleLogo] = None
 
@@ -52,6 +55,13 @@ class RoleMetadata:
     Final extracted metadata (meta/main.yml + README fallback).
     """
 
+    # Canonical identifier (for API/UI)
+    id: str
+
+    # Human friendly name for UI tiles
+    display_name: str
+
+    # Directory name in repo (Infinito.Nexus role name)
     role_name: str
     role_path: Path
 
@@ -69,13 +79,16 @@ class RoleMetadata:
     min_ansible_version: Optional[str]
     galaxy_tags: List[str]
     dependencies: List[str]
+
+    # Raw lifecycle value from meta (kept for debugging/UI)
     lifecycle: Optional[str]
+
     run_after: List[str]
     platforms: List[Dict[str, Any]]
     logo: Optional[RoleLogo]
 
     # Derived
     deployment_targets: List[str]  # ["universal"|"server"|"workstation"]
-    status: Optional[
-        str
-    ]  # normalized lifecycle (pre-alpha/alpha/beta/stable/deprecated)
+
+    # Normalized status (always present)
+    status: str  # "pre-alpha"|"alpha"|"beta"|"stable"|"deprecated"

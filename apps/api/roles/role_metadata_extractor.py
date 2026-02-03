@@ -27,7 +27,6 @@ def _as_str(obj: Any) -> Optional[str]:
     if isinstance(obj, str):
         s = obj.strip()
         return s if s else None
-    # Sometimes YAML "company" is a multiline literal (already str) or weird types.
     return str(obj).strip() or None
 
 
@@ -45,14 +44,49 @@ def _stable_dedup_str(items: List[str]) -> List[str]:
 
 
 def _normalize_status(value: Optional[str]) -> Optional[str]:
+    """
+    Normalize common lifecycle values to the allowed status set.
+
+    Accepts common variants:
+      - prealpha / pre-alpha / pre_alpha
+      - alpha
+      - beta
+      - rc / release-candidate -> beta (pragmatic mapping)
+      - stable / production -> stable
+      - deprecated / obsolete -> deprecated
+    """
     if not value:
         return None
+
     v = value.strip().lower()
-    # allow "prealpha" etc.
     v = v.replace("_", "-").replace(" ", "-")
+
+    # common aliases
+    if v in {"prealpha", "pre-alpha"}:
+        return "pre-alpha"
+    if v in {"alpha"}:
+        return "alpha"
+    if v in {"beta"}:
+        return "beta"
+    if v in {"rc", "release-candidate", "releasecandidate"}:
+        return "beta"
+    if v in {"stable", "prod", "production"}:
+        return "stable"
+    if v in {"deprecated", "obsolete"}:
+        return "deprecated"
+
     if v in _ALLOWED_STATUSES:
         return v
-    return v  # keep unknown values visible, but you can clamp to None if you prefer
+    return None
+
+
+def _default_status(value: Optional[str]) -> str:
+    """
+    Ensures status is always present for Acceptance Criteria.
+    If lifecycle is missing/unknown -> default to pre-alpha.
+    """
+    norm = _normalize_status(value)
+    return norm if norm else "pre-alpha"
 
 
 def _read_yaml(path: Path) -> Dict[str, Any]:
@@ -108,7 +142,6 @@ def parse_meta_main(role_dir: Path) -> RoleMetaMain:
                 if s:
                     dependencies.append(s)
             elif isinstance(x, dict):
-                # Ansible meta deps can also be dicts (role + vars).
                 role_name = _as_str(x.get("role")) or _as_str(x.get("name"))
                 if role_name:
                     dependencies.append(role_name)
@@ -120,11 +153,6 @@ def parse_meta_main(role_dir: Path) -> RoleMetaMain:
 
 
 def _extract_description_from_readme(role_dir: Path) -> Optional[str]:
-    """
-    README fallback:
-    - Take the first non-empty paragraph after the first heading.
-    - If no headings found, take first non-empty paragraph.
-    """
     readme = role_dir / "README.md"
     if not readme.is_file():
         return None
@@ -132,7 +160,6 @@ def _extract_description_from_readme(role_dir: Path) -> Optional[str]:
     text = readme.read_text(encoding="utf-8", errors="replace")
     lines = [ln.rstrip() for ln in text.splitlines()]
 
-    # Identify first heading line like "# Title"
     heading_idx: Optional[int] = None
     for i, ln in enumerate(lines):
         if re.match(r"^\s*#\s+\S+", ln):
@@ -141,7 +168,6 @@ def _extract_description_from_readme(role_dir: Path) -> Optional[str]:
 
     start = (heading_idx + 1) if heading_idx is not None else 0
 
-    # Collect first paragraph (non-empty lines until blank)
     buf: List[str] = []
     in_para = False
     for ln in lines[start:]:
@@ -149,7 +175,6 @@ def _extract_description_from_readme(role_dir: Path) -> Optional[str]:
             if in_para and buf:
                 break
             continue
-        # skip badges and pure image lines at the top (common in READMEs)
         if not in_para and re.match(r"^\s*!\[.*\]\(.*\)\s*$", ln):
             continue
         if not in_para and re.match(r"^\s*\[!\[.*\]\(.*\)\]\(.*\)\s*$", ln):
@@ -164,18 +189,9 @@ def _extract_description_from_readme(role_dir: Path) -> Optional[str]:
 def _derive_deployment_targets(
     role_name: str, platforms: List[Dict[str, Any]]
 ) -> List[str]:
-    """
-    Heuristics:
-    - workstation: desk-*, util-desk-*, drv-*
-    - server: web-app-*, svc-*, sys-*, util-srv-*, persona-*
-    - universal: anything that clearly spans multiple OS families or does not match above,
-      or if both workstation+server triggers happen.
-    """
     name = role_name.strip()
-
     targets: Set[str] = set()
 
-    # Prefix-based hints
     workstation_prefixes = ("desk-", "util-desk-", "drv-")
     server_prefixes = (
         "web-app-",
@@ -191,7 +207,6 @@ def _derive_deployment_targets(
     if name.startswith(server_prefixes):
         targets.add("server")
 
-    # Platform-based hints
     platform_names = []
     for p in platforms:
         pm = p if isinstance(p, dict) else {}
@@ -202,7 +217,6 @@ def _derive_deployment_targets(
     if "docker" in platform_names:
         targets.add("server")
 
-    # If it spans many OS families, treat as universal (common for update-* / sys-* glue roles).
     os_families = {
         "archlinux",
         "debian",
@@ -217,23 +231,80 @@ def _derive_deployment_targets(
     if len(family_hits) >= 3:
         targets.add("universal")
 
-    # If none determined, default to universal.
     if not targets:
         targets.add("universal")
 
-    # If both server and workstation are present, prefer universal as additional target.
     if "server" in targets and "workstation" in targets:
         targets.add("universal")
 
-    # Stable ordering
     return [t for t in _TARGETS_ORDER if t in targets]
+
+
+def _derive_display_name(role_name: str) -> str:
+    """
+    Convert role ID to a human-friendly display name for UI tiles.
+
+    Examples:
+      web-app-nextcloud -> Nextcloud
+      persona-provider-iam -> IAM
+      sys-svc-webserver-core -> Webserver Core
+    """
+    s = role_name.strip()
+    if not s:
+        return "Unknown"
+
+    # Remove common prefixes
+    prefixes = [
+        "web-app-",
+        "web-svc-",
+        "svc-",
+        "sys-",
+        "util-srv-",
+        "util-desk-",
+        "desk-",
+        "drv-",
+        "persona-provider-",
+        "persona-",
+    ]
+    for p in prefixes:
+        if s.startswith(p):
+            s = s[len(p) :]
+            break
+
+    parts = [x for x in s.split("-") if x]
+    if not parts:
+        return role_name
+
+    # Preserve common acronyms
+    acronyms = {
+        "id",
+        "api",
+        "iam",
+        "oidc",
+        "ldap",
+        "sso",
+        "ssh",
+        "tls",
+        "dns",
+        "http",
+        "https",
+        "sql",
+    }
+    out_parts: List[str] = []
+    for p in parts:
+        lower = p.lower()
+        if lower in acronyms:
+            out_parts.append(lower.upper())
+        else:
+            out_parts.append(lower.capitalize())
+
+    return " ".join(out_parts)
 
 
 def extract_role_metadata(role_dir: Path) -> RoleMetadata:
     role_name = role_dir.name
     meta = parse_meta_main(role_dir)
 
-    # Description: meta first, README fallback
     description = (meta.galaxy_info.description or "").strip()
     if not description:
         description = (_extract_description_from_readme(role_dir) or "").strip()
@@ -243,9 +314,13 @@ def extract_role_metadata(role_dir: Path) -> RoleMetadata:
     deployment_targets = _derive_deployment_targets(
         role_name, meta.galaxy_info.platforms
     )
-    status = _normalize_status(meta.galaxy_info.lifecycle)
+
+    # Status (always present)
+    status = _default_status(meta.galaxy_info.lifecycle)
 
     return RoleMetadata(
+        id=role_name,
+        display_name=_derive_display_name(role_name),
         role_name=role_name,
         role_path=role_dir,
         description=description,

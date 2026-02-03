@@ -49,7 +49,7 @@ For each role:
   * [x] `galaxy_tags`
   * [x] `dependencies`
   * [x] `logo` / `icon` (if present)
-  * [ ] **status** (`pre-alpha`, `alpha`, `beta`, `stable`, `deprecated`)
+  * [x] **status** (`pre-alpha`, `alpha`, `beta`, `stable`, `deprecated`)
 * [x] Derive **deployment targets**
   k
 
@@ -62,11 +62,11 @@ For each role:
 
 **A/C**
 
-* [ ] Every role has:
+* [x] Every role has:
 
-  * [ ] ID
-  * [ ] Display name
-  * [ ] Status
+  * [x] ID
+  * [x] Display name
+  * [x] Status
   * [x] At least one deploy target
 * [x] Roles without optional metadata still render correctly
 
