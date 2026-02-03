@@ -108,22 +108,41 @@ For each role:
 
 ### 2.1 Roles API
 
-* [ ] `GET /api/roles`
+* [x] `GET /api/roles`
 
-  * [ ] Filters:
+  * [x] Filters:
 
-    * status
-    * deploy_target
-    * category
-    * tags
-    * text search
-* [ ] `GET /api/roles/{role_id}`
+    * [x] **status**
+      → CSV query parameter, validated against allowed lifecycle values
+    * [x] **deploy_target**
+      → CSV query parameter, validated against allowed deployment targets
+    * [x] **category**
+      → CSV query parameter, matched against `roles/categories.yml` (optional source)
+    * [x] **tags**
+      → CSV query parameter, matched against `galaxy_tags`
+    * [x] **text search**
+      → Implemented as `q`, case-insensitive substring search over
+      `id`, `display_name`, and `description`
 
-**A/C**
+* [x] `GET /api/roles/{role_id}`
+  → Returns full role metadata or `404` if the role does not exist
 
-* [ ] Filters are combinable
-* [ ] API response time < 200ms for cached index
-* [ ] Invalid filters return empty results, not errors
+---
+
+### Acceptance Criteria
+
+* [x] **Filters are combinable**
+  → Logical **AND** across filter groups, **OR** within each filter (CSV semantics)
+
+* [~] **API response time < 200ms for cached index**
+  → In-memory cache with TTL and mtime-based invalidation is implemented
+  → Response time is expected to be <200ms on a warm cache
+  → Not strictly guaranteed without runtime measurement or prewarming
+
+* [x] **Invalid filters return empty results, not errors**
+  → Invalid `status` or `deploy_target` values return `[]`
+  → Non-matching `category`, `tags`, or `q` return `[]`
+  → No 4xx/5xx errors for invalid filter values
 
 ---
 
