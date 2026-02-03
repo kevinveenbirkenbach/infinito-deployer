@@ -15,9 +15,7 @@ class LogHub:
 
     def publish(self, job_id: str, line: str) -> None:
         with self._lock:
-            buf = self._buffers.setdefault(
-                job_id, deque(maxlen=self._buffer_size)
-            )
+            buf = self._buffers.setdefault(job_id, deque(maxlen=self._buffer_size))
             buf.append(line)
             subscribers = list(self._subscribers.get(job_id, []))
 

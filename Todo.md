@@ -28,7 +28,7 @@
 * [x] Load role list from canonical source:
 
   * [x] `roles/list.json` (primary)
-  * [ ] `roles/categories.yml` (optional)
+  * [x] `roles/categories.yml` (optional)
 * [x] Validate uniqueness of role IDs
 * [x] Ignore disabled/hidden roles if marked
 
@@ -389,7 +389,7 @@ For each job:
 
 **A/C**
 
-* [ ] Deployment runs from UI
+* [x] Deployment runs from UI
 * [x] Logs stream live
 * [x] Cancel works
 

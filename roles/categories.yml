@@ -1,0 +1,11 @@
+# Optional role categories for UI filtering.
+#
+# Supported shapes:
+# 1) Mapping:
+#    Web:
+#      - role-id
+#      - another-role
+# 2) List of objects:
+#    - name: Web
+#      roles: [role-id, another-role]
+{}

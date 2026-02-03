@@ -5,9 +5,7 @@ from pathlib import Path
 
 def _load_deployments_module():
     repo_root = Path(__file__).resolve().parents[3]
-    deployments_py = (
-        repo_root / "apps" / "api" / "api" / "routes" / "deployments.py"
-    )
+    deployments_py = repo_root / "apps" / "api" / "api" / "routes" / "deployments.py"
 
     spec = importlib.util.spec_from_file_location(
         "deployments_sse_test", deployments_py

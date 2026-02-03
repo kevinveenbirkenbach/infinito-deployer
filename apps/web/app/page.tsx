@@ -1,5 +1,4 @@
-import LiveDeploymentView from "./components/LiveDeploymentView";
-import DeploymentWorkspace from "./components/DeploymentWorkspace";
+import DeploymentConsole from "./components/DeploymentConsole";
 
 async function getHealth(
   baseUrl: string
@@ -85,9 +84,7 @@ export default async function Page() {
         </div>
       </section>
 
-      <DeploymentWorkspace baseUrl={baseUrl} />
-
-      <LiveDeploymentView baseUrl={baseUrl} />
+      <DeploymentConsole baseUrl={baseUrl} />
     </main>
   );
 }

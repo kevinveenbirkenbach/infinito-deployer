@@ -205,9 +205,7 @@ class JobRunnerService:
         if req.auth.method == "private_key" and req.auth.private_key:
             atomic_write_text(paths.ssh_key_path, req.auth.private_key)
             paths.ssh_key_path.chmod(0o600)
-            merged_vars["ansible_ssh_private_key_file"] = str(
-                paths.ssh_key_path
-            )
+            merged_vars["ansible_ssh_private_key_file"] = str(paths.ssh_key_path)
         elif req.auth.method == "password":
             merged_vars["ansible_password"] = "<provided_at_runtime>"
 

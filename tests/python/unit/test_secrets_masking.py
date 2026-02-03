@@ -44,11 +44,7 @@ class TestSecretsMasking(unittest.TestCase):
         self.assertEqual(masked_inline, "password=********")
 
     def test_private_key_block_is_masked(self) -> None:
-        block = (
-            "-----BEGIN PRIVATE KEY-----\n"
-            "ABCDEF\n"
-            "-----END PRIVATE KEY-----"
-        )
+        block = "-----BEGIN PRIVATE KEY-----\nABCDEF\n-----END PRIVATE KEY-----"
         masked = mask_secrets(block, secrets=[])
         self.assertEqual(masked, MASK)
 

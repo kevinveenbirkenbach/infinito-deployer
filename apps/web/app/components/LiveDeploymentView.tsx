@@ -20,14 +20,19 @@ type StatusPayload = {
 
 export default function LiveDeploymentView({
   baseUrl,
+  jobId: externalJobId,
+  autoConnect = false,
 }: {
   baseUrl: string;
+  jobId?: string;
+  autoConnect?: boolean;
 }) {
-  const [jobId, setJobId] = useState("");
+  const [jobId, setJobId] = useState(externalJobId ?? "");
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [canceling, setCanceling] = useState(false);
+  const lastAutoJobRef = useRef<string | null>(null);
 
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -85,12 +90,18 @@ export default function LiveDeploymentView({
     });
   };
 
-  const connect = () => {
-    const trimmed = jobId.trim();
+  useEffect(() => {
+    if (typeof externalJobId !== "string") return;
+    setJobId((prev) => (prev === externalJobId ? prev : externalJobId));
+  }, [externalJobId]);
+
+  const connectTo = (rawId: string) => {
+    const trimmed = rawId.trim();
     if (!trimmed) return;
     setError(null);
     setStatus(null);
     setConnected(true);
+    setJobId(trimmed);
 
     if (esRef.current) {
       esRef.current.close();
@@ -135,6 +146,19 @@ export default function LiveDeploymentView({
       setConnected(false);
     };
   };
+
+  const connect = () => {
+    connectTo(jobId);
+  };
+
+  useEffect(() => {
+    if (!autoConnect) return;
+    const trimmed = String(externalJobId ?? "").trim();
+    if (!trimmed) return;
+    if (lastAutoJobRef.current === trimmed) return;
+    lastAutoJobRef.current = trimmed;
+    connectTo(trimmed);
+  }, [autoConnect, externalJobId]);
 
   const cancel = async () => {
     if (!jobId.trim()) return;

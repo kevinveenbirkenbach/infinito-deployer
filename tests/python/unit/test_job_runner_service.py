@@ -209,9 +209,7 @@ class TestJobRunnerService(unittest.TestCase):
 
         started = {"proc": None, "log_fh": None}
 
-        def _start_process(
-            *, run_path, cwd, log_path, secrets=None, on_line=None
-        ):
+        def _start_process(*, run_path, cwd, log_path, secrets=None, on_line=None):
             # Long enough that cancel has something to kill, short enough to finish fast.
             log_fh = open(log_path, "ab", buffering=0)
             proc = subprocess.Popen(
@@ -271,12 +269,8 @@ class TestJobRunnerService(unittest.TestCase):
         job = svc.create(req=self._secret_request())
 
         request_text = Path(job.request_path).read_text(encoding="utf-8")
-        vars_json = (Path(job.workspace_dir) / "vars.json").read_text(
-            encoding="utf-8"
-        )
-        vars_yaml = (Path(job.workspace_dir) / "vars.yml").read_text(
-            encoding="utf-8"
-        )
+        vars_json = (Path(job.workspace_dir) / "vars.json").read_text(encoding="utf-8")
+        vars_yaml = (Path(job.workspace_dir) / "vars.yml").read_text(encoding="utf-8")
 
         for secret in ("supersecret", "db-pass", "secret-123", "tok-"):
             self.assertNotIn(secret, request_text)

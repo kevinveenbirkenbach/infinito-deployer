@@ -14,9 +14,7 @@ class TestRunnerScript(unittest.TestCase):
             write_runner_script(run_path)
 
             env = dict(os.environ)
-            env["RUNNER_CMD"] = (
-                "printf 'out1\\n'; printf 'err1\\n' 1>&2; exit 7"
-            )
+            env["RUNNER_CMD"] = "printf 'out1\\n'; printf 'err1\\n' 1>&2; exit 7"
 
             proc = subprocess.run(
                 [str(run_path)],

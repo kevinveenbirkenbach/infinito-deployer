@@ -36,9 +36,7 @@ def _validate_origins(origins: List[str]) -> List[str]:
 def create_app() -> FastAPI:
     app = FastAPI(title="Infinito Deployer API", version="0.1.0")
 
-    origins = _validate_origins(
-        _parse_origins(os.getenv("CORS_ALLOW_ORIGINS", ""))
-    )
+    origins = _validate_origins(_parse_origins(os.getenv("CORS_ALLOW_ORIGINS", "")))
     if origins:
         app.add_middleware(
             CORSMiddleware,

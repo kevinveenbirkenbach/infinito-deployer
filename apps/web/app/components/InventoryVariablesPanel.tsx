@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { buildInventoryVars } from "../lib/inventory_vars";
 
 type KeyValue = { key: string; value: string; id: string };
@@ -18,6 +18,10 @@ type InventoryPanelProps = {
   baseUrl: string;
   selectedRoles: string[];
   credentials: CredentialsState;
+  onVarsChange?: (
+    vars: Record<string, any> | null,
+    error: string | null
+  ) => void;
 };
 
 function newRow() {
@@ -32,6 +36,7 @@ export default function InventoryVariablesPanel({
   baseUrl,
   selectedRoles,
   credentials,
+  onVarsChange,
 }: InventoryPanelProps) {
   const [jsonText, setJsonText] = useState("{\n  \n}");
   const [pairs, setPairs] = useState<KeyValue[]>([]);
@@ -46,6 +51,10 @@ export default function InventoryVariablesPanel({
   );
 
   const jsonError = parsed.error;
+
+  useEffect(() => {
+    onVarsChange?.(parsed.value, parsed.error);
+  }, [parsed.value, parsed.error, onVarsChange]);
 
   const canPreview =
     !jsonError &&

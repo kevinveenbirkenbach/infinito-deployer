@@ -146,7 +146,9 @@ async def stream_logs(job_id: str, request: Request) -> StreamingResponse:
                 if not new_data and log_fh is None and paths.log_path.exists():
                     # Fallback for older jobs created before the log hub.
                     log_fh = open(
-                        paths.log_path, "rb", buffering=0  # noqa: SIM115
+                        paths.log_path,
+                        "rb",
+                        buffering=0,  # noqa: SIM115
                     )
 
                 if log_fh is not None:
@@ -156,9 +158,7 @@ async def stream_logs(job_id: str, request: Request) -> StreamingResponse:
                         buffer += chunk.decode("utf-8", errors="replace")
                         lines, buffer = _split_log_lines(buffer)
                         for line in lines:
-                            yield _sse_event(
-                                "log", mask_secrets(line, secrets)
-                            )
+                            yield _sse_event("log", mask_secrets(line, secrets))
 
                 meta = load_json(paths.meta_path)
                 status = meta.get("status") or "queued"
@@ -185,9 +185,7 @@ async def stream_logs(job_id: str, request: Request) -> StreamingResponse:
 
                     if not new_data and (time.monotonic() - terminal_since) >= 0.5:
                         if buffer:
-                            yield _sse_event(
-                                "log", mask_secrets(buffer, secrets)
-                            )
+                            yield _sse_event("log", mask_secrets(buffer, secrets))
                             buffer = ""
                         yield _sse_event(
                             "done",
