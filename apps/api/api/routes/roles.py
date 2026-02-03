@@ -1,67 +1,115 @@
 from __future__ import annotations
 
-import os
-from pathlib import Path
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
-from api.schemas.role import RoleOut, RoleLogoOut
-from roles.roles_indexer import build_roles_index
-from services.logo_resolver import SimpleIconsResolver
+from api.schemas.role import RoleOut
+from services.role_index import RoleIndexService, RoleQuery
 
 router = APIRouter(prefix="/roles", tags=["roles"])
 
-_logo_resolver = SimpleIconsResolver()
+_index = RoleIndexService()
 
 
-def _repo_roles_root() -> Path:
-    root = os.getenv("INFINITO_REPO_PATH", "/repo/infinito-nexus")
-    return Path(root) / "roles"
+def _build_query(
+    *,
+    status: Optional[str],
+    deploy_target: Optional[str],
+    category: Optional[str],
+    tags: Optional[str],
+    q: Optional[str],
+) -> RoleQuery:
+    return RoleQuery.from_raw(
+        status=status,
+        deploy_target=deploy_target,
+        category=category,
+        tags=tags,
+        q=q,
+    )
+
+
+@router.get("", response_model=List[RoleOut])
+def list_roles(
+    status: Optional[str] = Query(
+        default=None,
+        description="Comma-separated statuses. Allowed: pre-alpha,alpha,beta,stable,deprecated",
+    ),
+    deploy_target: Optional[str] = Query(
+        default=None,
+        description="Comma-separated deployment targets. Allowed: universal,server,workstation",
+    ),
+    category: Optional[str] = Query(
+        default=None,
+        description="Comma-separated categories (from roles/categories.yml if available).",
+    ),
+    tags: Optional[str] = Query(
+        default=None,
+        description="Comma-separated galaxy tags (matches any).",
+    ),
+    q: Optional[str] = Query(
+        default=None,
+        description="Text search across id, display_name, description (case-insensitive).",
+    ),
+) -> List[RoleOut]:
+    """
+    Canonical roles endpoint with combinable filters.
+
+    Behavior:
+      - Filters are combinable (AND across filter groups, OR within each group).
+      - Invalid filter values yield empty results (no errors).
+      - Results are served from a cached index for performance.
+    """
+    query = _build_query(
+        status=status,
+        deploy_target=deploy_target,
+        category=category,
+        tags=tags,
+        q=q,
+    )
+    return _index.query(query)
 
 
 @router.get("/metadata", response_model=List[RoleOut])
-def list_roles_metadata() -> List[RoleOut]:
-    idx = build_roles_index(_repo_roles_root())
+def list_roles_metadata_alias(
+    status: Optional[str] = Query(
+        default=None,
+        description="Alias of GET /api/roles. Comma-separated statuses.",
+    ),
+    deploy_target: Optional[str] = Query(
+        default=None,
+        description="Alias of GET /api/roles. Comma-separated deployment targets.",
+    ),
+    category: Optional[str] = Query(
+        default=None,
+        description="Alias of GET /api/roles. Comma-separated categories.",
+    ),
+    tags: Optional[str] = Query(
+        default=None,
+        description="Alias of GET /api/roles. Comma-separated galaxy tags.",
+    ),
+    q: Optional[str] = Query(
+        default=None,
+        description="Alias of GET /api/roles. Text search.",
+    ),
+) -> List[RoleOut]:
+    """
+    Backwards-compatible alias for older clients that still call /api/roles/metadata.
+    """
+    query = _build_query(
+        status=status,
+        deploy_target=deploy_target,
+        category=category,
+        tags=tags,
+        q=q,
+    )
+    return _index.query(query)
 
-    out: List[RoleOut] = []
-    for name in sorted(idx.keys()):
-        md = idx[name]
 
-        # Primary: use meta/main.yml logo class (e.g. FontAwesome class)
-        if md.logo and md.logo.css_class:
-            logo = RoleLogoOut(source="meta", css_class=md.logo.css_class)
-        else:
-            # Fallback: SimpleIcons -> cached, validated; final fallback is data-url SVG
-            resolved = _logo_resolver.resolve_logo_url(
-                md.id,
-                display_hint=md.display_name,
-            )
-            logo = RoleLogoOut(source=resolved.source, url=resolved.url)
-
-        out.append(
-            RoleOut(
-                id=md.id,
-                display_name=md.display_name,
-                status=md.status,
-                role_name=md.role_name,
-                description=md.description,
-                author=md.author,
-                company=md.company,
-                license=md.license,
-                license_url=md.license_url,
-                repository=md.repository,
-                issue_tracker_url=md.issue_tracker_url,
-                documentation=md.documentation,
-                min_ansible_version=md.min_ansible_version,
-                galaxy_tags=md.galaxy_tags,
-                dependencies=md.dependencies,
-                lifecycle=md.lifecycle,
-                run_after=md.run_after,
-                platforms=md.platforms,
-                logo=logo,
-                deployment_targets=md.deployment_targets,
-            )
-        )
-
-    return out
+@router.get("/{role_id}", response_model=RoleOut)
+def get_role(role_id: str) -> RoleOut:
+    """
+    Single role endpoint. Returns 404 if role is not in the canonical catalog
+    or if the role directory is missing/invalid.
+    """
+    return _index.get(role_id)

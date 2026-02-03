@@ -41,3 +41,6 @@ class RoleOut(BaseModel):
     logo: Optional[RoleLogoOut] = None
 
     deployment_targets: List[str] = []
+
+    # Optional categories from roles/categories.yml (if available)
+    categories: List[str] = []
