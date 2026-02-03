@@ -315,14 +315,14 @@ For each job:
 
 ### 4.3 Inventory Variables
 
-* [ ] JSON editor for vars
-* [ ] Optional key/value UI
-* [ ] “Preview Inventory” button
+* [x] JSON editor for vars
+* [x] Optional key/value UI
+* [x] “Preview Inventory” button
 
 **A/C**
 
-* [ ] Invalid JSON is detected before submit
-* [ ] Preview matches deployment behavior exactly
+* [x] Invalid JSON is detected before submit
+* [x] Preview matches deployment behavior exactly
 
 ---
 
@@ -690,14 +690,14 @@ For each job:
 
 ### 4.3 Inventory Variables
 
-* [ ] JSON editor for vars
-* [ ] Optional key/value UI
-* [ ] “Preview Inventory” button
+* [x] JSON editor for vars
+* [x] Optional key/value UI
+* [x] “Preview Inventory” button
 
 **A/C**
 
-* [ ] Invalid JSON is detected before submit
-* [ ] Preview matches deployment behavior exactly
+* [x] Invalid JSON is detected before submit
+* [x] Preview matches deployment behavior exactly
 
 ---
 

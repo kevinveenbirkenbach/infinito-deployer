@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { filterRoles } from "../lib/role_filter";
 
 type RoleLogo = {
@@ -56,49 +56,26 @@ function initials(name: string) {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-export default function RoleDashboard({ baseUrl }: { baseUrl: string }) {
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+type RoleDashboardProps = {
+  roles: Role[];
+  loading: boolean;
+  error: string | null;
+  selected: Set<string>;
+  onToggleSelected: (id: string) => void;
+};
 
+export default function RoleDashboard({
+  roles,
+  loading,
+  error,
+  selected,
+  onToggleSelected,
+}: RoleDashboardProps) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<Set<string>>(
     new Set()
   );
   const [targetFilter, setTargetFilter] = useState("all");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    let alive = true;
-
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`${baseUrl}/api/roles`, {
-          cache: "no-store",
-        });
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-        const data = await res.json();
-        if (alive) {
-          setRoles(Array.isArray(data) ? data : []);
-        }
-      } catch (err: any) {
-        if (alive) {
-          setError(err?.message ?? "failed to load roles");
-        }
-      } finally {
-        if (alive) setLoading(false);
-      }
-    };
-
-    load();
-    return () => {
-      alive = false;
-    };
-  }, [baseUrl]);
 
   const statusOptions = useMemo(() => {
     const set = new Set<string>();
@@ -132,18 +109,6 @@ export default function RoleDashboard({ baseUrl }: { baseUrl: string }) {
         next.delete(status);
       } else {
         next.add(status);
-      }
-      return next;
-    });
-  };
-
-  const toggleSelected = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
       }
       return next;
     });
@@ -392,7 +357,7 @@ export default function RoleDashboard({ baseUrl }: { baseUrl: string }) {
                   )}
                 </div>
                 <button
-                  onClick={() => toggleSelected(role.id)}
+                  onClick={() => onToggleSelected(role.id)}
                   style={{
                     padding: "6px 10px",
                     borderRadius: 999,

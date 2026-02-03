@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   AUTH_METHODS,
   DEPLOY_TARGETS,
@@ -21,20 +21,18 @@ const FIELD_LABELS: Record<string, string> = {
 
 export default function DeploymentCredentialsForm({
   baseUrl,
+  value,
+  onChange,
 }: {
   baseUrl: string;
+  value: FormState;
+  onChange: (next: FormState) => void;
 }) {
-  const [state, setState] = useState<FormState>(createInitialState);
-
-  useEffect(() => {
-    setState(createInitialState());
-  }, []);
-
-  const errors = useMemo(() => validateForm(state), [state]);
+  const errors = useMemo(() => validateForm(value), [value]);
   const isValid = Object.keys(errors).length === 0;
 
   const update = (patch: Partial<FormState>) => {
-    setState((prev) => ({ ...prev, ...patch }));
+    onChange({ ...value, ...patch });
   };
 
   const onAuthChange = (next: string) => {
@@ -117,13 +115,13 @@ export default function DeploymentCredentialsForm({
                   padding: "6px 10px",
                   borderRadius: 999,
                   border:
-                    state.deployTarget === target
+                    value.deployTarget === target
                       ? "1px solid #0f172a"
                       : "1px solid #cbd5e1",
                   background:
-                    state.deployTarget === target ? "#0f172a" : "#fff",
+                    value.deployTarget === target ? "#0f172a" : "#fff",
                   color:
-                    state.deployTarget === target ? "#fff" : "#334155",
+                    value.deployTarget === target ? "#fff" : "#334155",
                   fontSize: 12,
                   cursor: "pointer",
                 }}
@@ -149,7 +147,7 @@ export default function DeploymentCredentialsForm({
         >
           <label style={{ fontSize: 12, color: "#64748b" }}>Host</label>
           <input
-            value={state.host}
+            value={value.host}
             onChange={(e) => update({ host: e.target.value })}
             placeholder="example.com or 192.168.0.2"
             style={{
@@ -177,7 +175,7 @@ export default function DeploymentCredentialsForm({
         >
           <label style={{ fontSize: 12, color: "#64748b" }}>User</label>
           <input
-            value={state.user}
+            value={value.user}
             onChange={(e) => update({ user: e.target.value })}
             placeholder="root"
             style={{
@@ -217,13 +215,13 @@ export default function DeploymentCredentialsForm({
                 padding: "6px 10px",
                 borderRadius: 999,
                 border:
-                  state.authMethod === method
+                  value.authMethod === method
                     ? "1px solid #0f172a"
                     : "1px solid #cbd5e1",
                 background:
-                  state.authMethod === method ? "#0f172a" : "#fff",
+                  value.authMethod === method ? "#0f172a" : "#fff",
                 color:
-                  state.authMethod === method ? "#fff" : "#334155",
+                  value.authMethod === method ? "#fff" : "#334155",
                 fontSize: 12,
                 cursor: "pointer",
               }}
@@ -252,11 +250,11 @@ export default function DeploymentCredentialsForm({
             </label>
             <input
               type="password"
-              value={state.password}
+              value={value.password}
               onChange={(e) => update({ password: e.target.value })}
-              disabled={state.authMethod !== "password"}
+              disabled={value.authMethod !== "password"}
               placeholder={
-                state.authMethod === "password"
+                value.authMethod === "password"
                   ? "Enter password"
                   : "Disabled for key auth"
               }
@@ -268,7 +266,7 @@ export default function DeploymentCredentialsForm({
                 borderRadius: 12,
                 border: "1px solid #cbd5e1",
                 background:
-                  state.authMethod === "password" ? "#fff" : "#f8fafc",
+                  value.authMethod === "password" ? "#fff" : "#f8fafc",
               }}
             />
             {errors.password ? (
@@ -283,11 +281,11 @@ export default function DeploymentCredentialsForm({
               Private key
             </label>
             <textarea
-              value={state.privateKey}
+              value={value.privateKey}
               onChange={(e) => update({ privateKey: e.target.value })}
-              disabled={state.authMethod !== "private_key"}
+              disabled={value.authMethod !== "private_key"}
               placeholder={
-                state.authMethod === "private_key"
+                value.authMethod === "private_key"
                   ? "Paste SSH private key"
                   : "Disabled for password auth"
               }
@@ -301,7 +299,7 @@ export default function DeploymentCredentialsForm({
                 borderRadius: 12,
                 border: "1px solid #cbd5e1",
                 background:
-                  state.authMethod === "private_key" ? "#fff" : "#f8fafc",
+                  value.authMethod === "private_key" ? "#fff" : "#f8fafc",
                 resize: "vertical",
                 fontFamily:
                   "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
