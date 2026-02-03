@@ -1,4 +1,17 @@
 import type { Metadata } from "next";
+import { Space_Grotesk, Work_Sans } from "next/font/google";
+
+const displayFont = Space_Grotesk({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-display",
+});
+
+const bodyFont = Work_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-body",
+});
 
 export const metadata: Metadata = {
   title: "Infinito Deployer",
@@ -8,7 +21,16 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body style={{ fontFamily: "system-ui, sans-serif", margin: 0 }}>
+      <body
+        className={`${displayFont.variable} ${bodyFont.variable}`}
+        style={{
+          fontFamily: "var(--font-body)",
+          margin: 0,
+          background:
+            "linear-gradient(140deg, rgba(248, 250, 252, 1), rgba(240, 253, 250, 0.7))",
+          color: "#0f172a",
+        }}
+      >
         {children}
       </body>
     </html>

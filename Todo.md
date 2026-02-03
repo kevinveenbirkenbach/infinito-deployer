@@ -273,14 +273,14 @@ For each job:
 
 ### 4.1 Dashboard – App Tiles
 
-* [ ] Grid layout (tiles)
-* [ ] Each tile shows:
+* [x] Grid layout (tiles)
+* [x] Each tile shows:
 
   * logo
   * app name
   * status badge
   * deploy targets
-* [ ] Filters:
+* [x] Filters:
 
   * status (multi-select)
   * deploy target
@@ -288,9 +288,9 @@ For each job:
 
 **A/C**
 
-* [ ] UI remains responsive with 100+ roles
-* [ ] Filtering is client-side fast
-* [ ] Selection state is preserved during filtering
+* [x] UI remains responsive with 100+ roles
+* [x] Filtering is client-side fast
+* [x] Selection state is preserved during filtering
 
 ---
 
@@ -648,14 +648,14 @@ For each job:
 
 ### 4.1 Dashboard – App Tiles
 
-* [ ] Grid layout (tiles)
-* [ ] Each tile shows:
+* [x] Grid layout (tiles)
+* [x] Each tile shows:
 
   * logo
   * app name
   * status badge
   * deploy targets
-* [ ] Filters:
+* [x] Filters:
 
   * status (multi-select)
   * deploy target
@@ -663,9 +663,9 @@ For each job:
 
 **A/C**
 
-* [ ] UI remains responsive with 100+ roles
-* [ ] Filtering is client-side fast
-* [ ] Selection state is preserved during filtering
+* [x] UI remains responsive with 100+ roles
+* [x] Filtering is client-side fast
+* [x] Selection state is preserved during filtering
 
 ---
 
