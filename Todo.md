@@ -176,20 +176,20 @@ For each role:
 
 ### 2.3 Deployment Jobs API
 
-* [ ] `POST /api/deployments`
+* [x] `POST /api/deployments`
 
-  * [ ] Create job ID
-  * [ ] Create job workspace
-  * [ ] Persist job metadata
-  * [ ] Start runner subprocess
-* [ ] `GET /api/deployments/{job_id}`
-* [ ] `POST /api/deployments/{job_id}/cancel`
+  * [x] Create job ID
+  * [x] Create job workspace
+  * [x] Persist job metadata
+  * [x] Start runner subprocess
+* [x] `GET /api/deployments/{job_id}`
+* [x] `POST /api/deployments/{job_id}/cancel`
 
 **A/C**
 
-* [ ] Each deployment has a unique, traceable job ID
-* [ ] Job state transitions are consistent
-* [ ] Cancel reliably stops the deployment
+* [x] Each deployment has a unique, traceable job ID
+* [x] Job state transitions are consistent
+* [x] Cancel reliably stops the deployment
 
 ---
 
