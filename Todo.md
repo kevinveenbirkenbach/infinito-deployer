@@ -195,19 +195,19 @@ For each role:
 
 ### 2.4 Live Logs (SSE)
 
-* [ ] `GET /api/deployments/{job_id}/logs`
-* [ ] Stream events:
+* [x] `GET /api/deployments/{job_id}/logs`
+* [x] Stream events:
 
   * `log`
   * `status`
   * `done`
-* [ ] Mask secrets before streaming
+* [x] Mask secrets before streaming
 
 **A/C**
 
-* [ ] Logs appear in the UI within < 1 second
-* [ ] ANSI output is readable
-* [ ] Secrets are never visible
+* [x] Logs appear in the UI within < 1 second
+* [x] ANSI output is readable
+* [x] Secrets are never visible
 
 ---
 
@@ -570,19 +570,19 @@ For each role:
 
 ### 2.4 Live Logs (SSE)
 
-* [ ] `GET /api/deployments/{job_id}/logs`
-* [ ] Stream events:
+* [x] `GET /api/deployments/{job_id}/logs`
+* [x] Stream events:
 
   * `log`
   * `status`
   * `done`
-* [ ] Mask secrets before streaming
+* [x] Mask secrets before streaming
 
 **A/C**
 
-* [ ] Logs appear in the UI within < 1 second
-* [ ] ANSI output is readable
-* [ ] Secrets are never visible
+* [x] Logs appear in the UI within < 1 second
+* [x] ANSI output is readable
+* [x] Secrets are never visible
 
 ---
 

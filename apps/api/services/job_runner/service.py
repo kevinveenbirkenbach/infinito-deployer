@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 import uuid
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import HTTPException
 
@@ -13,6 +13,7 @@ from services.inventory_preview import build_inventory_preview
 from .paths import job_paths, jobs_root
 from .persistence import load_json, mask_request_for_persistence, write_meta
 from .runner import start_process, terminate_process_group, write_runner_script
+from .secrets import collect_secrets
 from .util import atomic_write_json, atomic_write_text, safe_mkdir, utc_iso
 
 
@@ -31,6 +32,8 @@ class JobRunnerService:
 
     def __init__(self) -> None:
         safe_mkdir(jobs_root())
+        self._secret_lock = threading.Lock()
+        self._secret_store: Dict[str, List[str]] = {}
 
     def create(self, req: DeploymentRequest) -> DeploymentJobOut:
         job_id = uuid.uuid4().hex[:12]
@@ -44,6 +47,7 @@ class JobRunnerService:
         atomic_write_text(p.inventory_path, inv_yaml)
 
         write_runner_script(p.run_path)
+        self._remember_secrets(job_id, req)
 
         meta: Dict[str, Any] = {
             "job_id": job_id,
@@ -153,3 +157,14 @@ class JobRunnerService:
         meta["exit_code"] = int(rc)
         meta["status"] = "succeeded" if rc == 0 else "failed"
         write_meta(p.meta_path, meta)
+
+    def _remember_secrets(self, job_id: str, req: DeploymentRequest) -> None:
+        secrets = collect_secrets(req)
+        if not secrets:
+            return
+        with self._secret_lock:
+            self._secret_store[job_id] = secrets
+
+    def get_secrets(self, job_id: str) -> List[str]:
+        with self._secret_lock:
+            return list(self._secret_store.get(job_id, []))

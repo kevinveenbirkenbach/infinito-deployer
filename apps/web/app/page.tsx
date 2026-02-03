@@ -1,4 +1,8 @@
-async function getHealth(baseUrl: string): Promise<{ status: string } | { error: string }> {
+import DeploymentLogs from "./components/DeploymentLogs";
+
+async function getHealth(
+  baseUrl: string
+): Promise<{ status: string } | { error: string }> {
   try {
     const res = await fetch(`${baseUrl}/health`, { cache: "no-store" });
     if (!res.ok) return { error: `HTTP ${res.status}` };
@@ -34,6 +38,8 @@ export default async function Page() {
           </p>
         )}
       </section>
+
+      <DeploymentLogs baseUrl={baseUrl} />
     </main>
   );
 }
