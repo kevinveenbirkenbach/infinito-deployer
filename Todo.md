@@ -344,14 +344,14 @@ For each job:
 
 ### 5.1 Performance
 
-* [ ] Role index cached
-* [ ] Logo resolution cached
-* [ ] SSE scalable to multiple viewers
+* [x] Role index cached
+* [x] Logo resolution cached
+* [x] SSE scalable to multiple viewers
 
 **A/C**
 
-* [ ] Dashboard loads < 1s on warm cache
-* [ ] Multiple concurrent viewers do not crash API
+* [~] Dashboard loads < 1s on warm cache
+* [~] Multiple concurrent viewers do not crash API
 
 ---
 
@@ -719,14 +719,14 @@ For each job:
 
 ### 5.1 Performance
 
-* [ ] Role index cached
-* [ ] Logo resolution cached
-* [ ] SSE scalable to multiple viewers
+* [x] Role index cached
+* [x] Logo resolution cached
+* [x] SSE scalable to multiple viewers
 
 **A/C**
 
-* [ ] Dashboard loads < 1s on warm cache
-* [ ] Multiple concurrent viewers do not crash API
+* [~] Dashboard loads < 1s on warm cache
+* [~] Multiple concurrent viewers do not crash API
 
 ---
 

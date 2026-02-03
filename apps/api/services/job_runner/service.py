@@ -17,6 +17,7 @@ from .persistence import load_json, mask_request_for_persistence, write_meta
 from .runner import start_process, terminate_process_group, write_runner_script
 from .secrets import collect_secrets, mask_mapping
 from .util import atomic_write_json, atomic_write_text, safe_mkdir, utc_iso
+from .log_hub import LogHub
 
 
 class JobRunnerService:
@@ -36,6 +37,7 @@ class JobRunnerService:
         safe_mkdir(jobs_root())
         self._secret_lock = threading.Lock()
         self._secret_store: Dict[str, List[str]] = {}
+        self._log_hub = LogHub()
 
     def create(self, req: DeploymentRequest) -> DeploymentJobOut:
         job_id = uuid.uuid4().hex[:12]
@@ -80,6 +82,7 @@ class JobRunnerService:
                 cwd=p.job_dir,
                 log_path=p.log_path,
                 secrets=secrets,
+                on_line=lambda line: self._log_hub.publish(job_id, line),
             )
         except Exception as exc:
             meta["status"] = "failed"
@@ -212,3 +215,9 @@ class JobRunnerService:
     def get_secrets(self, job_id: str) -> List[str]:
         with self._secret_lock:
             return list(self._secret_store.get(job_id, []))
+
+    def subscribe_logs(self, job_id: str):
+        return self._log_hub.subscribe(job_id)
+
+    def unsubscribe_logs(self, job_id: str, q) -> None:
+        self._log_hub.unsubscribe(job_id, q)

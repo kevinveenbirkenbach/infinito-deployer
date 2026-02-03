@@ -99,6 +99,7 @@ async def stream_logs(job_id: str, request: Request) -> StreamingResponse:
     _jobs().get(job_id)  # validate job exists
     paths = job_paths(job_id)
     secrets = _jobs().get_secrets(job_id)
+    queue, buffered_lines = _jobs().subscribe_logs(job_id)
 
     async def event_stream():
         last_status = None
@@ -126,16 +127,28 @@ async def stream_logs(job_id: str, request: Request) -> StreamingResponse:
         )
 
         try:
+            for line in buffered_lines:
+                yield _sse_event("log", mask_secrets(line, secrets))
+
             while True:
                 if await request.is_disconnected():
                     break
 
-                if log_fh is None and paths.log_path.exists():
+                new_data = False
+                while True:
+                    try:
+                        line = queue.get_nowait()
+                    except Exception:
+                        break
+                    new_data = True
+                    yield _sse_event("log", mask_secrets(line, secrets))
+
+                if not new_data and log_fh is None and paths.log_path.exists():
+                    # Fallback for older jobs created before the log hub.
                     log_fh = open(
                         paths.log_path, "rb", buffering=0  # noqa: SIM115
                     )
 
-                new_data = False
                 if log_fh is not None:
                     chunk = log_fh.read()
                     if chunk:
@@ -204,6 +217,7 @@ async def stream_logs(job_id: str, request: Request) -> StreamingResponse:
                     log_fh.close()
                 except Exception:
                     pass
+            _jobs().unsubscribe_logs(job_id, queue)
 
     headers = {
         "Cache-Control": "no-cache",

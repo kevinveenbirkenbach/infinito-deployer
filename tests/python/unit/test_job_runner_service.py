@@ -184,7 +184,9 @@ class TestJobRunnerService(unittest.TestCase):
 
         started = {"proc": None, "log_fh": None}
 
-        def _start_process(*, run_path, cwd, log_path, secrets=None):
+        def _start_process(
+            *, run_path, cwd, log_path, secrets=None, on_line=None
+        ):
             # Long enough that cancel has something to kill, short enough to finish fast.
             log_fh = open(log_path, "ab", buffering=0)
             proc = subprocess.Popen(

@@ -75,6 +75,7 @@ def start_process(
     cwd: Path,
     log_path: Path,
     secrets: Iterable[str] | None = None,
+    on_line=None,
 ) -> tuple[subprocess.Popen, object, threading.Thread]:
     """
     Start the runner in its own process group so cancellation can kill the group.
@@ -101,6 +102,11 @@ def start_process(
                 for part in parts:
                     masked = mask_secrets(part, secrets or [])
                     log_fh.write(masked + "\n")
+                    if on_line is not None:
+                        try:
+                            on_line(masked)
+                        except Exception:
+                            pass
         finally:
             try:
                 proc.stdout.close()
