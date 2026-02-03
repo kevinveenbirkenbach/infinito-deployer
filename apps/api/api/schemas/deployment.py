@@ -1,0 +1,93 @@
+from __future__ import annotations
+
+from typing import Any, Dict, List, Literal, Optional
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+DeployTarget = Literal["universal", "server", "workstation"]
+AuthMethod = Literal["password", "private_key"]
+
+
+class DeploymentAuth(BaseModel):
+    """
+    Exactly one authentication method must be provided.
+    If method=password    -> password must be present, private_key must be absent
+    If method=private_key -> private_key must be present, password must be absent
+    """
+
+    method: AuthMethod
+
+    # Secrets (never echoed back in responses)
+    password: Optional[str] = Field(default=None, min_length=1)
+    private_key: Optional[str] = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def _validate_auth(self) -> "DeploymentAuth":
+        if self.method == "password":
+            if not self.password:
+                raise ValueError("auth.password is required when auth.method=password")
+            if self.private_key:
+                raise ValueError(
+                    "auth.private_key must not be set when auth.method=password"
+                )
+
+        if self.method == "private_key":
+            if not self.private_key:
+                raise ValueError(
+                    "auth.private_key is required when auth.method=private_key"
+                )
+            if self.password:
+                raise ValueError(
+                    "auth.password must not be set when auth.method=private_key"
+                )
+
+        return self
+
+
+class DeploymentRequest(BaseModel):
+    deploy_target: DeployTarget
+    host: str = Field(..., min_length=1, description="localhost / IP / domain")
+    user: str = Field(..., min_length=1, description="SSH user")
+    auth: DeploymentAuth
+
+    selected_roles: List[str] = Field(
+        default_factory=list, description="List of role IDs (must not be empty)"
+    )
+    inventory_vars: Dict[str, Any] = Field(
+        default_factory=dict, description="Arbitrary vars (JSON object)"
+    )
+
+    @field_validator("host", "user")
+    @classmethod
+    def _strip_required(cls, v: str) -> str:
+        s = (v or "").strip()
+        if not s:
+            raise ValueError("must not be empty")
+        return s
+
+    @field_validator("selected_roles")
+    @classmethod
+    def _clean_and_require_roles(cls, v: List[str]) -> List[str]:
+        out: List[str] = []
+        seen: set[str] = set()
+
+        for x in v or []:
+            if not isinstance(x, str):
+                continue
+            s = x.strip()
+            if not s:
+                continue
+            if s not in seen:
+                out.append(s)
+                seen.add(s)
+
+        if not out:
+            raise ValueError("must not be empty")
+
+        return out
+
+
+class InventoryPreviewOut(BaseModel):
+    inventory_yaml: str
+    warnings: List[str] = Field(default_factory=list)

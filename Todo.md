@@ -148,29 +148,29 @@ For each role:
 
 ### 2.2 Inventory & Configuration API
 
-* [ ] Define `DeploymentRequest` schema:
+* [x] Define `DeploymentRequest` schema:
 
-  * deploy_target
-  * host (localhost / IP / domain)
-  * ssh user
-  * authentication:
+  * [x] deploy_target
+  * [x] host (localhost / IP / domain)
+  * [x] ssh user
+  * [x] authentication:
 
-    * password OR
-    * private key
-  * selected_roles[]
-  * inventory_vars (JSON)
+    * [x] password OR
+    * [x] private key
+  * [x] selected_roles[]
+  * [x] inventory_vars (JSON)
 
-* [ ] `POST /api/inventories/preview`
+* [x] `POST /api/inventories/preview`
 
-  * [ ] Generate inventory YAML
-  * [ ] Validate required fields
-  * [ ] Return warnings (missing vars, unsafe defaults)
+  * [x] Generate inventory YAML
+  * [x] Validate required fields
+  * [x] Return warnings (missing vars, unsafe defaults)
 
 **A/C**
 
-* [ ] Preview matches the inventory used during deployment
-* [ ] No secrets are logged or returned unmasked
-* [ ] Invalid input returns clear validation errors
+* [x] Preview matches the inventory used during deployment
+* [x] No secrets are logged or returned unmasked
+* [x] Invalid input returns clear validation errors
 
 ---
 

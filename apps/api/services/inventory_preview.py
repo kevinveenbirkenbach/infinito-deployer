@@ -1,0 +1,78 @@
+from __future__ import annotations
+
+from typing import Any, Dict, List, Tuple
+
+import yaml
+
+from api.schemas.deployment import DeploymentRequest
+
+
+def _mask_secret(_: str) -> str:
+    # Never return secrets; keep it explicit that it was provided.
+    return "********"
+
+
+def build_inventory_preview(req: DeploymentRequest) -> Tuple[str, List[str]]:
+    """
+    Build an Ansible-style inventory YAML preview.
+
+    Important:
+      - Secrets are NOT included (password/private_key are masked).
+      - The output should match what deployment will use conceptually.
+        (In later steps, your runner will write the private key to a file
+         and replace placeholders with real values at runtime.)
+    """
+    warnings: List[str] = []
+
+    # Heuristic warnings / unsafe defaults
+    if req.host.lower() in {"localhost", "127.0.0.1"} and req.deploy_target in {
+        "server",
+        "workstation",
+    }:
+        warnings.append(
+            "Host is localhost/127.0.0.1. Ensure the deployment is intended to run locally."
+        )
+
+    if req.auth.method == "private_key":
+        warnings.append(
+            "Private key is not shown in preview. During deployment it must be written to a temporary file (chmod 600) and referenced via ansible_ssh_private_key_file."
+        )
+
+    # Build vars (merge user vars + system vars)
+    merged_vars: Dict[str, Any] = dict(req.inventory_vars or {})
+
+    # Selected roles are part of the request and should be visible in preview
+    # (This is the "contract" between UI and runner.)
+    merged_vars["selected_roles"] = list(req.selected_roles)
+
+    # Auth placeholders (do not leak secrets)
+    if req.auth.method == "password":
+        merged_vars["ansible_password"] = _mask_secret(req.auth.password or "")
+    else:
+        # The actual deployment runner should write the provided key into a file and set:
+        #   ansible_ssh_private_key_file: /state/jobs/<job_id>/id_rsa
+        merged_vars["ansible_ssh_private_key_file"] = "<provided_at_runtime>"
+
+    inventory: Dict[str, Any] = {
+        "all": {
+            "hosts": {
+                "target": {
+                    "ansible_host": req.host,
+                    "ansible_user": req.user,
+                }
+            },
+            "vars": merged_vars,
+        }
+    }
+
+    # Encode deploy_target also as group (useful for playbook/group_vars later)
+    inventory["all"]["children"] = {req.deploy_target: {"hosts": {"target": {}}}}
+
+    inv_yaml = yaml.safe_dump(
+        inventory,
+        sort_keys=False,
+        default_flow_style=False,
+        allow_unicode=True,
+    )
+
+    return inv_yaml, warnings
