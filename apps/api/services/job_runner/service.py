@@ -15,7 +15,7 @@ from services.inventory_preview import build_inventory_preview
 from .paths import job_paths, jobs_root
 from .persistence import load_json, mask_request_for_persistence, write_meta
 from .runner import start_process, terminate_process_group, write_runner_script
-from .secrets import collect_secrets
+from .secrets import collect_secrets, mask_mapping
 from .util import atomic_write_json, atomic_write_text, safe_mkdir, utc_iso
 
 
@@ -43,7 +43,8 @@ class JobRunnerService:
         safe_mkdir(p.job_dir)
 
         inv_yaml, _warnings = build_inventory_preview(req)
-        vars_data = self._build_vars(req, p)
+        secrets = collect_secrets(req)
+        vars_data = self._build_vars(req, p, secrets)
 
         # Persist masked request + inventory (no secrets on disk)
         atomic_write_json(p.request_path, mask_request_for_persistence(req))
@@ -60,7 +61,7 @@ class JobRunnerService:
         )
 
         write_runner_script(p.run_path)
-        self._remember_secrets(job_id, req)
+        self._remember_secrets(job_id, secrets)
 
         meta: Dict[str, Any] = {
             "job_id": job_id,
@@ -74,8 +75,11 @@ class JobRunnerService:
         write_meta(p.meta_path, meta)
 
         try:
-            proc, log_fh = start_process(
-                run_path=p.run_path, cwd=p.job_dir, log_path=p.log_path
+            proc, log_fh, reader = start_process(
+                run_path=p.run_path,
+                cwd=p.job_dir,
+                log_path=p.log_path,
+                secrets=secrets,
             )
         except Exception as exc:
             meta["status"] = "failed"
@@ -93,7 +97,7 @@ class JobRunnerService:
 
         t = threading.Thread(
             target=self._wait_and_finalize,
-            args=(job_id, proc, log_fh),
+            args=(job_id, proc, log_fh, reader),
             daemon=True,
         )
         t.start()
@@ -147,15 +151,24 @@ class JobRunnerService:
         write_meta(p.meta_path, meta)
         return True
 
-    def _wait_and_finalize(self, job_id: str, proc, log_fh) -> None:
+    def _wait_and_finalize(self, job_id: str, proc, log_fh, reader) -> None:
         p = job_paths(job_id)
         try:
             rc = proc.wait()
+            if reader is not None:
+                reader.join(timeout=2)
         finally:
             try:
                 log_fh.close()
             except Exception:
                 pass
+            try:
+                if p.ssh_key_path.exists():
+                    p.ssh_key_path.unlink()
+            except Exception:
+                pass
+            with self._secret_lock:
+                self._secret_store.pop(job_id, None)
 
         meta: Dict[str, Any] = load_json(p.meta_path)
         status = meta.get("status")
@@ -171,8 +184,12 @@ class JobRunnerService:
         meta["status"] = "succeeded" if rc == 0 else "failed"
         write_meta(p.meta_path, meta)
 
-    def _build_vars(self, req: DeploymentRequest, paths) -> Dict[str, Any]:
-        merged_vars: Dict[str, Any] = dict(req.inventory_vars or {})
+    def _build_vars(
+        self, req: DeploymentRequest, paths, secrets: List[str]
+    ) -> Dict[str, Any]:
+        merged_vars: Dict[str, Any] = mask_mapping(
+            req.inventory_vars or {}, secrets=secrets
+        )
         merged_vars["selected_roles"] = list(req.selected_roles)
 
         if req.auth.method == "private_key" and req.auth.private_key:
@@ -186,8 +203,7 @@ class JobRunnerService:
 
         return merged_vars
 
-    def _remember_secrets(self, job_id: str, req: DeploymentRequest) -> None:
-        secrets = collect_secrets(req)
+    def _remember_secrets(self, job_id: str, secrets: List[str]) -> None:
         if not secrets:
             return
         with self._secret_lock:

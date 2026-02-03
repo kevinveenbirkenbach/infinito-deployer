@@ -28,6 +28,11 @@ _INLINE_VALUE_PATTERNS = [
     re.compile(r"(?i)((?:--token\s+))([^\s]+)"),
 ]
 
+_TOKEN_VALUE = re.compile(
+    r"(?i)(?<![A-Za-z0-9_-])(?=[A-Za-z0-9_-]*[A-Za-z])(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])"
+)
+_JWT_VALUE = re.compile(r"^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
+
 _PRIVATE_KEY_BLOCK = re.compile(
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
     re.DOTALL,
@@ -37,6 +42,17 @@ _PRIVATE_KEY_BLOCK = re.compile(
 def _is_secret_key(key: str) -> bool:
     lowered = (key or "").lower()
     return any(k in lowered for k in _SECRET_KEYWORDS)
+
+
+def _looks_like_token(value: str) -> bool:
+    s = value.strip()
+    if not s:
+        return False
+    if _JWT_VALUE.match(s):
+        return True
+    if len(s) >= 20 and _TOKEN_VALUE.search(s):
+        return True
+    return False
 
 
 def _collect_from_vars(value: Any, *, key_hint: bool, out: List[str]) -> None:
@@ -103,4 +119,33 @@ def mask_secrets(text: str, secrets: Iterable[str]) -> str:
     for pattern in _INLINE_VALUE_PATTERNS:
         redacted = pattern.sub(lambda m: f"{m.group(1)}{MASK}", redacted)
 
+    if _JWT_VALUE.match(redacted):
+        return MASK
+
+    redacted = _TOKEN_VALUE.sub(lambda m: MASK, redacted)
+
     return redacted
+
+
+def mask_mapping(value: Any, secrets: Iterable[str] | None = None) -> Any:
+    secret_set = {s for s in (secrets or []) if isinstance(s, str) and s}
+
+    if isinstance(value, dict):
+        out: dict = {}
+        for k, v in value.items():
+            key_str = str(k)
+            if _is_secret_key(key_str):
+                out[k] = MASK
+            else:
+                out[k] = mask_mapping(v, secrets=secret_set)
+        return out
+
+    if isinstance(value, list):
+        return [mask_mapping(item, secrets=secret_set) for item in value]
+
+    if isinstance(value, str):
+        if value in secret_set or _looks_like_token(value):
+            return MASK
+        return mask_secrets(value, secret_set)
+
+    return value

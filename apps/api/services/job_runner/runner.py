@@ -3,10 +3,12 @@ from __future__ import annotations
 import os
 import signal
 import subprocess
+import threading
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Iterable, Optional
 
 from .util import atomic_write_text
+from .secrets import mask_secrets
 
 
 def write_runner_script(path: Path) -> None:
@@ -68,21 +70,47 @@ def runner_env() -> Dict[str, str]:
 
 
 def start_process(
-    *, run_path: Path, cwd: Path, log_path: Path
-) -> tuple[subprocess.Popen, object]:
+    *,
+    run_path: Path,
+    cwd: Path,
+    log_path: Path,
+    secrets: Iterable[str] | None = None,
+) -> tuple[subprocess.Popen, object, threading.Thread]:
     """
     Start the runner in its own process group so cancellation can kill the group.
     """
-    log_fh = open(log_path, "ab", buffering=0)  # binary, unbuffered
+    log_fh = open(log_path, "a", encoding="utf-8", buffering=1)
     proc = subprocess.Popen(
         ["/bin/bash", str(run_path)],
         cwd=str(cwd),
-        stdout=log_fh,
+        stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
         env=runner_env(),
         start_new_session=True,  # new process group/session
     )
-    return proc, log_fh
+
+    def _reader() -> None:
+        if proc.stdout is None:
+            return
+        try:
+            for line in proc.stdout:
+                line = line.rstrip("\n")
+                parts = line.split("\r")
+                for part in parts:
+                    masked = mask_secrets(part, secrets or [])
+                    log_fh.write(masked + "\n")
+        finally:
+            try:
+                proc.stdout.close()
+            except Exception:
+                pass
+
+    reader = threading.Thread(target=_reader, daemon=True)
+    reader.start()
+
+    return proc, log_fh, reader
 
 
 def terminate_process_group(pid: Optional[int]) -> None:

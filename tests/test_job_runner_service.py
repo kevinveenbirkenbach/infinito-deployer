@@ -2,6 +2,7 @@ import os
 import time
 import unittest
 from tempfile import TemporaryDirectory
+from pathlib import Path
 from unittest.mock import patch
 
 
@@ -30,6 +31,22 @@ class TestJobRunnerService(unittest.TestCase):
             auth={"method": "password", "password": "x"},
             selected_roles=["example-role"],
             inventory_vars={},
+        )
+
+    def _secret_request(self):
+        from api.schemas.deployment import DeploymentRequest  # noqa: WPS433
+
+        return DeploymentRequest(
+            deploy_target="server",
+            host="localhost",
+            user="tester",
+            auth={"method": "password", "password": "supersecret"},
+            selected_roles=["example-role"],
+            inventory_vars={
+                "DB_PASSWORD": "db-pass",
+                "api_secret": "secret-123",
+                "token": "tok-abcdefghijklmnopqrstuvwxyz1234",
+            },
         )
 
     def _key_request(self):
@@ -86,6 +103,14 @@ class TestJobRunnerService(unittest.TestCase):
         )
 
         from services.job_runner import JobRunnerService  # noqa: WPS433
+
+        old_runner_cmd = os.environ.get("RUNNER_CMD")
+        os.environ["RUNNER_CMD"] = "sleep 0.2"
+        self.addCleanup(
+            lambda: os.environ.pop("RUNNER_CMD", None)
+            if old_runner_cmd is None
+            else os.environ.__setitem__("RUNNER_CMD", old_runner_cmd)
+        )
 
         svc = JobRunnerService()
         job = svc.create(req=self._key_request())
@@ -159,7 +184,7 @@ class TestJobRunnerService(unittest.TestCase):
 
         started = {"proc": None, "log_fh": None}
 
-        def _start_process(*, run_path, cwd, log_path):
+        def _start_process(*, run_path, cwd, log_path, secrets=None):
             # Long enough that cancel has something to kill, short enough to finish fast.
             log_fh = open(log_path, "ab", buffering=0)
             proc = subprocess.Popen(
@@ -172,7 +197,7 @@ class TestJobRunnerService(unittest.TestCase):
             )
             started["proc"] = proc
             started["log_fh"] = log_fh
-            return proc, log_fh
+            return proc, log_fh, None
 
         m_start_process.side_effect = _start_process
 
@@ -205,3 +230,34 @@ class TestJobRunnerService(unittest.TestCase):
 
         # Give background thread time to write final metadata before tempdir cleanup.
         time.sleep(0.05)
+
+    @patch("services.job_runner.service.build_inventory_preview")
+    def test_persisted_files_mask_secrets(self, m_preview) -> None:
+        m_preview.return_value = (
+            "all:\n  hosts:\n    localhost:\n      vars: {}\n",
+            [],
+        )
+
+        from services.job_runner import JobRunnerService  # noqa: WPS433
+
+        svc = JobRunnerService()
+        job = svc.create(req=self._secret_request())
+
+        request_text = Path(job.request_path).read_text(encoding="utf-8")
+        vars_json = (Path(job.workspace_dir) / "vars.json").read_text(
+            encoding="utf-8"
+        )
+        vars_yaml = (Path(job.workspace_dir) / "vars.yml").read_text(
+            encoding="utf-8"
+        )
+
+        for secret in ("supersecret", "db-pass", "secret-123", "tok-"):
+            self.assertNotIn(secret, request_text)
+            self.assertNotIn(secret, vars_json)
+            self.assertNotIn(secret, vars_yaml)
+
+        self.assertIn("********", request_text)
+        self.assertIn("********", vars_json)
+        self.assertIn("********", vars_yaml)
+
+        self._wait_for_terminal(svc, job.job_id)

@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Tuple
 import yaml
 
 from api.schemas.deployment import DeploymentRequest
+from services.job_runner.secrets import collect_secrets, mask_mapping
 
 
 def _mask_secret(_: str) -> str:
@@ -39,7 +40,10 @@ def build_inventory_preview(req: DeploymentRequest) -> Tuple[str, List[str]]:
         )
 
     # Build vars (merge user vars + system vars)
-    merged_vars: Dict[str, Any] = dict(req.inventory_vars or {})
+    secrets = collect_secrets(req)
+    merged_vars: Dict[str, Any] = mask_mapping(
+        req.inventory_vars or {}, secrets=secrets
+    )
 
     # Selected roles are part of the request and should be visible in preview
     # (This is the "contract" between UI and runner.)

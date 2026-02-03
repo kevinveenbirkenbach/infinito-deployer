@@ -251,12 +251,12 @@ For each job:
 
 ### 3.3 Security & Masking
 
-* [ ] Regex-based masking:
+* [x] Regex-based masking:
 
   * `*_PASSWORD`
   * `*_SECRET`
   * tokens
-* [ ] Masking applies to:
+* [x] Masking applies to:
 
   * logs
   * SSE stream
@@ -264,8 +264,8 @@ For each job:
 
 **A/C**
 
-* [ ] No secret value is ever retrievable after submission
-* [ ] Masking does not break readability
+* [x] No secret value is ever retrievable after submission
+* [x] Masking does not break readability
 
 ---
 
@@ -626,12 +626,12 @@ For each job:
 
 ### 3.3 Security & Masking
 
-* [ ] Regex-based masking:
+* [x] Regex-based masking:
 
   * `*_PASSWORD`
   * `*_SECRET`
   * tokens
-* [ ] Masking applies to:
+* [x] Masking applies to:
 
   * logs
   * SSE stream
@@ -639,8 +639,8 @@ For each job:
 
 **A/C**
 
-* [ ] No secret value is ever retrievable after submission
-* [ ] Masking does not break readability
+* [x] No secret value is ever retrievable after submission
+* [x] Masking does not break readability
 
 ---
 

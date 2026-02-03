@@ -1,7 +1,12 @@
 import unittest
 
 from api.schemas.deployment import DeploymentRequest
-from services.job_runner.secrets import MASK, collect_secrets, mask_secrets
+from services.job_runner.secrets import (
+    MASK,
+    collect_secrets,
+    mask_mapping,
+    mask_secrets,
+)
 
 
 class TestSecretsMasking(unittest.TestCase):
@@ -46,3 +51,17 @@ class TestSecretsMasking(unittest.TestCase):
         )
         masked = mask_secrets(block, secrets=[])
         self.assertEqual(masked, MASK)
+
+    def test_mask_mapping_uses_key_regex_and_tokens(self) -> None:
+        data = {
+            "DB_PASSWORD": "db-pass",
+            "API_SECRET": "secret-123",
+            "token": "tok-abcdefghijklmnopqrstuvwxyz1234",
+            "nested": {"safe": "hello"},
+        }
+        masked = mask_mapping(data, secrets=[])
+
+        self.assertEqual(masked["DB_PASSWORD"], MASK)
+        self.assertEqual(masked["API_SECRET"], MASK)
+        self.assertEqual(masked["token"], MASK)
+        self.assertEqual(masked["nested"]["safe"], "hello")
