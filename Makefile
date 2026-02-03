@@ -52,8 +52,14 @@ install: venv
 	@$(PIP) install -r requirements.txt
 
 test: dirs install
-	@echo "→ Running unit tests (unittest)"
-	@$(PYTHON) -m unittest discover -s tests -p "test_*.py" -v
+	@echo "→ Running Python unit tests"
+	@$(PYTHON) -m unittest discover -s tests/python -p "test_*.py" -t . -v
+	@echo "→ Running Python integration tests"
+	@if ls tests/python/integration/test_*.py >/dev/null 2>&1; then $(PYTHON) -m unittest discover -s tests/python/integration -p "test_*.py" -t . -v; else echo "→ (no python integration tests)"; fi
+	@echo "→ Running Node unit tests"
+	@node --test tests/node/unit/*.mjs
+	@echo "→ Running Node integration tests"
+	@if ls tests/node/integration/*.mjs >/dev/null 2>&1; then node --test tests/node/integration/*.mjs; else echo "→ (no node integration tests)"; fi
 
 clean:
 	@rm -rf "$(VENV_DIR)" state

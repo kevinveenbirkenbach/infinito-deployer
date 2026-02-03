@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { filterRoles } from "../apps/web/app/lib/role_filter.js";
+import { filterRoles } from "../../../apps/web/app/lib/role_filter.js";
 
 const roles = [
   {

@@ -296,20 +296,20 @@ For each job:
 
 ### 4.2 Deployment Target & Credentials
 
-* [ ] Form fields:
+* [x] Form fields:
 
   * deploy target
   * host
   * user
   * auth method selector
-* [ ] Private key textarea (never echoed back)
-* [ ] Password field
+* [x] Private key textarea (never echoed back)
+* [x] Password field
 
 **A/C**
 
-* [ ] Form prevents invalid combinations
-* [ ] Secrets are cleared on page reload
-* [ ] UI explains where credentials are used
+* [x] Form prevents invalid combinations
+* [x] Secrets are cleared on page reload
+* [x] UI explains where credentials are used
 
 ---
 
@@ -671,20 +671,20 @@ For each job:
 
 ### 4.2 Deployment Target & Credentials
 
-* [ ] Form fields:
+* [x] Form fields:
 
   * deploy target
   * host
   * user
   * auth method selector
-* [ ] Private key textarea (never echoed back)
-* [ ] Password field
+* [x] Private key textarea (never echoed back)
+* [x] Password field
 
 **A/C**
 
-* [ ] Form prevents invalid combinations
-* [ ] Secrets are cleared on page reload
-* [ ] UI explains where credentials are used
+* [x] Form prevents invalid combinations
+* [x] Secrets are cleared on page reload
+* [x] UI explains where credentials are used
 
 ---
 

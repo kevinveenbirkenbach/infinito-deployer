@@ -7,7 +7,7 @@ class TestDeploymentsRouter(unittest.TestCase):
     def test_router_prefix(self) -> None:
         # Load the module directly from file to avoid importing api.routes.__init__
         # (which pulls in roles/inventories and may require extra deps like httpx).
-        repo_root = Path(__file__).resolve().parents[1]
+        repo_root = Path(__file__).resolve().parents[3]
         deployments_py = (
             repo_root / "apps" / "api" / "api" / "routes" / "deployments.py"
         )

@@ -1,5 +1,6 @@
 import DeploymentLogs from "./components/DeploymentLogs";
 import RoleDashboard from "./components/RoleDashboard";
+import DeploymentCredentialsForm from "./components/DeploymentCredentialsForm";
 
 async function getHealth(
   baseUrl: string
@@ -86,6 +87,8 @@ export default async function Page() {
       </section>
 
       <RoleDashboard baseUrl={baseUrl} />
+
+      <DeploymentCredentialsForm baseUrl={baseUrl} />
 
       <DeploymentLogs baseUrl={baseUrl} />
     </main>
