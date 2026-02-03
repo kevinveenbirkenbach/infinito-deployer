@@ -4,6 +4,8 @@ import threading
 import uuid
 from typing import Any, Dict, List
 
+import yaml
+
 from fastapi import HTTPException
 
 from api.schemas.deployment import DeploymentRequest
@@ -41,10 +43,21 @@ class JobRunnerService:
         safe_mkdir(p.job_dir)
 
         inv_yaml, _warnings = build_inventory_preview(req)
+        vars_data = self._build_vars(req, p)
 
         # Persist masked request + inventory (no secrets on disk)
         atomic_write_json(p.request_path, mask_request_for_persistence(req))
         atomic_write_text(p.inventory_path, inv_yaml)
+        atomic_write_json(p.vars_json_path, vars_data)
+        atomic_write_text(
+            p.vars_yaml_path,
+            yaml.safe_dump(
+                vars_data,
+                sort_keys=False,
+                default_flow_style=False,
+                allow_unicode=True,
+            ),
+        )
 
         write_runner_script(p.run_path)
         self._remember_secrets(job_id, req)
@@ -157,6 +170,21 @@ class JobRunnerService:
         meta["exit_code"] = int(rc)
         meta["status"] = "succeeded" if rc == 0 else "failed"
         write_meta(p.meta_path, meta)
+
+    def _build_vars(self, req: DeploymentRequest, paths) -> Dict[str, Any]:
+        merged_vars: Dict[str, Any] = dict(req.inventory_vars or {})
+        merged_vars["selected_roles"] = list(req.selected_roles)
+
+        if req.auth.method == "private_key" and req.auth.private_key:
+            atomic_write_text(paths.ssh_key_path, req.auth.private_key)
+            paths.ssh_key_path.chmod(0o600)
+            merged_vars["ansible_ssh_private_key_file"] = str(
+                paths.ssh_key_path
+            )
+        elif req.auth.method == "password":
+            merged_vars["ansible_password"] = "<provided_at_runtime>"
+
+        return merged_vars
 
     def _remember_secrets(self, job_id: str, req: DeploymentRequest) -> None:
         secrets = collect_secrets(req)

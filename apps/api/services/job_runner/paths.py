@@ -22,6 +22,9 @@ def job_paths(job_id: str) -> JobPaths:
         meta_path=job_dir / "job.json",
         request_path=job_dir / "request.json",
         inventory_path=job_dir / "inventory.yml",
+        vars_json_path=job_dir / "vars.json",
+        vars_yaml_path=job_dir / "vars.yml",
+        ssh_key_path=job_dir / "id_rsa",
         log_path=job_dir / "job.log",
         run_path=job_dir / "run.sh",
     )

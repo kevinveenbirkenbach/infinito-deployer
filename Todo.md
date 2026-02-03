@@ -217,8 +217,8 @@ For each role:
 
 For each job:
 
-* [ ] Create directory: `state/jobs/{job_id}/`
-* [ ] Store:
+* [x] Create directory: `state/jobs/{job_id}/`
+* [x] Store:
 
   * inventory.yml
   * vars.json / vars.yml
@@ -227,8 +227,8 @@ For each job:
 
 **A/C**
 
-* [ ] Jobs are isolated from each other
-* [ ] Restarting the API does not corrupt jobs
+* [x] Jobs are isolated from each other
+* [x] Restarting the API does not corrupt jobs
 
 ---
 
@@ -592,8 +592,8 @@ For each role:
 
 For each job:
 
-* [ ] Create directory: `state/jobs/{job_id}/`
-* [ ] Store:
+* [x] Create directory: `state/jobs/{job_id}/`
+* [x] Store:
 
   * inventory.yml
   * vars.json / vars.yml
@@ -602,8 +602,8 @@ For each job:
 
 **A/C**
 
-* [ ] Jobs are isolated from each other
-* [ ] Restarting the API does not corrupt jobs
+* [x] Jobs are isolated from each other
+* [x] Restarting the API does not corrupt jobs
 
 ---
 

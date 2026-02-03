@@ -27,11 +27,31 @@ class TestJobRunnerService(unittest.TestCase):
             deploy_target="server",
             host="localhost",
             user="tester",
-            ssh_user="root",
             auth={"method": "password", "password": "x"},
             selected_roles=["example-role"],
             inventory_vars={},
         )
+
+    def _key_request(self):
+        from api.schemas.deployment import DeploymentRequest  # noqa: WPS433
+
+        return DeploymentRequest(
+            deploy_target="server",
+            host="localhost",
+            user="tester",
+            auth={"method": "private_key", "private_key": "KEYDATA"},
+            selected_roles=["example-role"],
+            inventory_vars={},
+        )
+
+    def _wait_for_terminal(self, svc, job_id: str) -> None:
+        for _ in range(200):
+            cur = svc.get(job_id)
+            if cur.status in {"succeeded", "failed", "canceled"}:
+                return
+            time.sleep(0.01)
+
+        time.sleep(0.05)
 
     @patch("services.job_runner.service.build_inventory_preview")
     def test_create_job_creates_files_and_finishes(self, m_preview) -> None:
@@ -45,21 +65,87 @@ class TestJobRunnerService(unittest.TestCase):
         svc = JobRunnerService()
         job = svc.create(req=self._minimal_request())
 
-        # Wait for completion
-        for _ in range(200):
-            cur = svc.get(job.job_id)
-            if cur.status in {"succeeded", "failed", "canceled"}:
-                break
-            time.sleep(0.01)
+        self._wait_for_terminal(svc, job.job_id)
 
         cur = svc.get(job.job_id)
         self.assertIn(cur.status, {"succeeded", "failed"})
         self.assertTrue(os.path.isfile(cur.log_path))
         self.assertTrue(os.path.isfile(cur.inventory_path))
         self.assertTrue(os.path.isfile(cur.request_path))
+        self.assertTrue(os.path.isfile(os.path.join(cur.workspace_dir, "vars.json")))
+        self.assertTrue(os.path.isfile(os.path.join(cur.workspace_dir, "vars.yml")))
 
         # Give background thread a tiny window to flush metadata safely
         time.sleep(0.05)
+
+    @patch("services.job_runner.service.build_inventory_preview")
+    def test_private_key_writes_key_file(self, m_preview) -> None:
+        m_preview.return_value = (
+            "all:\n  hosts:\n    localhost:\n      vars: {}\n",
+            [],
+        )
+
+        from services.job_runner import JobRunnerService  # noqa: WPS433
+
+        svc = JobRunnerService()
+        job = svc.create(req=self._key_request())
+
+        key_path = os.path.join(job.workspace_dir, "id_rsa")
+        self.assertTrue(os.path.isfile(key_path))
+
+        mode = os.stat(key_path).st_mode & 0o777
+        self.assertEqual(mode, 0o600)
+
+        self._wait_for_terminal(svc, job.job_id)
+
+    @patch("services.job_runner.service.build_inventory_preview")
+    def test_jobs_are_isolated(self, m_preview) -> None:
+        m_preview.return_value = (
+            "all:\n  hosts:\n    localhost:\n      vars: {}\n",
+            [],
+        )
+
+        from services.job_runner import JobRunnerService  # noqa: WPS433
+
+        svc = JobRunnerService()
+        job_a = svc.create(req=self._minimal_request())
+        job_b = svc.create(req=self._minimal_request())
+
+        self.assertNotEqual(job_a.job_id, job_b.job_id)
+        self.assertNotEqual(job_a.workspace_dir, job_b.workspace_dir)
+        self.assertTrue(os.path.isdir(job_a.workspace_dir))
+        self.assertTrue(os.path.isdir(job_b.workspace_dir))
+        self.assertNotEqual(
+            os.path.realpath(job_a.workspace_dir),
+            os.path.realpath(job_b.workspace_dir),
+        )
+
+        self._wait_for_terminal(svc, job_a.job_id)
+        self._wait_for_terminal(svc, job_b.job_id)
+
+    @patch("services.job_runner.service.build_inventory_preview")
+    def test_restart_does_not_corrupt_jobs(self, m_preview) -> None:
+        m_preview.return_value = (
+            "all:\n  hosts:\n    localhost:\n      vars: {}\n",
+            [],
+        )
+
+        from services.job_runner import JobRunnerService  # noqa: WPS433
+
+        svc = JobRunnerService()
+        job = svc.create(req=self._minimal_request())
+
+        # Simulate API restart by creating a fresh service instance.
+        svc_restart = JobRunnerService()
+        loaded = svc_restart.get(job.job_id)
+
+        self.assertEqual(loaded.job_id, job.job_id)
+        self.assertTrue(os.path.isfile(loaded.request_path))
+        self.assertTrue(os.path.isfile(loaded.inventory_path))
+        self.assertTrue(os.path.isfile(os.path.join(loaded.workspace_dir, "vars.json")))
+        self.assertTrue(os.path.isfile(os.path.join(loaded.workspace_dir, "vars.yml")))
+
+        self._wait_for_terminal(svc, job.job_id)
 
     @patch("services.job_runner.service.build_inventory_preview")
     @patch("services.job_runner.service.start_process")

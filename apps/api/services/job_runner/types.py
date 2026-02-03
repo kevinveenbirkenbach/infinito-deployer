@@ -11,6 +11,9 @@ class JobPaths:
     meta_path: Path
     request_path: Path
     inventory_path: Path
+    vars_json_path: Path
+    vars_yaml_path: Path
+    ssh_key_path: Path
     log_path: Path
     run_path: Path
 
