@@ -26,6 +26,8 @@ try:  # pragma: no cover - fastapi is optional in unit tests
 except Exception:  # pragma: no cover
     fastapi_stub = types.ModuleType("fastapi")
     responses_stub = types.ModuleType("fastapi.responses")
+    middleware_stub = types.ModuleType("fastapi.middleware")
+    cors_stub = types.ModuleType("fastapi.middleware.cors")
 
     def _route_decorator(*_args, **_kwargs):
         def _wrap(fn):
@@ -44,9 +46,31 @@ except Exception:  # pragma: no cover
         def post(self, *_args, **_kwargs):
             return _route_decorator()
 
+        def include_router(self, *_args, **_kwargs):
+            return None
+
     class Request:
         async def is_disconnected(self) -> bool:  # pragma: no cover
             return False
+
+    class FastAPI:
+        def __init__(self, *_, **__) -> None:
+            self.title = ""
+            self.version = ""
+
+        def add_middleware(self, *_args, **_kwargs):
+            return None
+
+        def include_router(self, *_args, **_kwargs):
+            return None
+
+        def get(self, *_args, **_kwargs):
+            return _route_decorator()
+
+    def Query(*_args, **_kwargs):
+        if _args:
+            return _args[0]
+        return _kwargs.get("default")
 
     class HTTPException(Exception):
         def __init__(self, status_code: int = 500, detail: str | None = None):
@@ -61,11 +85,17 @@ except Exception:  # pragma: no cover
     fastapi_stub.APIRouter = APIRouter
     fastapi_stub.Request = Request
     fastapi_stub.HTTPException = HTTPException
+    fastapi_stub.FastAPI = FastAPI
+    fastapi_stub.Query = Query
     responses_stub.StreamingResponse = StreamingResponse
+    cors_stub.CORSMiddleware = object
+    middleware_stub.cors = cors_stub
     fastapi_stub.responses = responses_stub
 
     sys.modules.setdefault("fastapi", fastapi_stub)
     sys.modules.setdefault("fastapi.responses", responses_stub)
+    sys.modules.setdefault("fastapi.middleware", middleware_stub)
+    sys.modules.setdefault("fastapi.middleware.cors", cors_stub)
 
 # Provide minimal Pydantic stubs when the dependency is not installed.
 try:  # pragma: no cover - pydantic is optional in unit tests
@@ -145,3 +175,30 @@ except Exception:  # pragma: no cover
     pydantic_stub.model_validator = model_validator
 
     sys.modules.setdefault("pydantic", pydantic_stub)
+
+# Provide minimal httpx stub for modules that import it during tests.
+try:  # pragma: no cover
+    import httpx as _httpx  # noqa: F401
+except Exception:  # pragma: no cover
+    httpx_stub = types.ModuleType("httpx")
+
+    class Response:
+        def __init__(self, status_code=404):
+            self.status_code = status_code
+            self.headers = {}
+
+    def get(*_args, **_kwargs):
+        return Response()
+
+    class Client:
+        def __init__(self, *_, **__):
+            pass
+
+        def get(self, *_args, **_kwargs):
+            return Response()
+
+    httpx_stub.get = get
+    httpx_stub.Response = Response
+    httpx_stub.Client = Client
+
+    sys.modules.setdefault("httpx", httpx_stub)

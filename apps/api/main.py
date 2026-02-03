@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from typing import List
 
+from urllib.parse import urlparse
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,10 +16,29 @@ def _parse_origins(raw: str) -> List[str]:
     return [o.strip() for o in (raw or "").split(",") if o.strip()]
 
 
+def _validate_origins(origins: List[str]) -> List[str]:
+    if not origins:
+        return origins
+
+    for origin in origins:
+        if origin == "*":
+            raise ValueError("CORS_ALLOW_ORIGINS must not contain '*'")
+
+        parsed = urlparse(origin)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError(
+                f"Invalid CORS origin: {origin}. Expected http(s)://host[:port]"
+            )
+
+    return origins
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Infinito Deployer API", version="0.1.0")
 
-    origins = _parse_origins(os.getenv("CORS_ALLOW_ORIGINS", ""))
+    origins = _validate_origins(
+        _parse_origins(os.getenv("CORS_ALLOW_ORIGINS", ""))
+    )
     if origins:
         app.add_middleware(
             CORSMiddleware,

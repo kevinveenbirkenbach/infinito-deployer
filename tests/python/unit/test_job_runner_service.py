@@ -124,6 +124,31 @@ class TestJobRunnerService(unittest.TestCase):
         self._wait_for_terminal(svc, job.job_id)
 
     @patch("services.job_runner.service.build_inventory_preview")
+    def test_private_key_removed_after_completion(self, m_preview) -> None:
+        m_preview.return_value = (
+            "all:\n  hosts:\n    localhost:\n      vars: {}\n",
+            [],
+        )
+
+        from services.job_runner import JobRunnerService  # noqa: WPS433
+
+        old_runner_cmd = os.environ.get("RUNNER_CMD")
+        os.environ["RUNNER_CMD"] = "true"
+        self.addCleanup(
+            lambda: os.environ.pop("RUNNER_CMD", None)
+            if old_runner_cmd is None
+            else os.environ.__setitem__("RUNNER_CMD", old_runner_cmd)
+        )
+
+        svc = JobRunnerService()
+        job = svc.create(req=self._key_request())
+
+        self._wait_for_terminal(svc, job.job_id)
+
+        key_path = os.path.join(job.workspace_dir, "id_rsa")
+        self.assertFalse(os.path.exists(key_path))
+
+    @patch("services.job_runner.service.build_inventory_preview")
     def test_jobs_are_isolated(self, m_preview) -> None:
         m_preview.return_value = (
             "all:\n  hosts:\n    localhost:\n      vars: {}\n",

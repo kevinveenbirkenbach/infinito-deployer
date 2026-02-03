@@ -357,14 +357,14 @@ For each job:
 
 ### 5.2 Security
 
-* [ ] No secrets stored long-term
-* [ ] CORS restricted to UI origin
-* [ ] Input validation everywhere
+* [x] No secrets stored long-term
+* [x] CORS restricted to UI origin
+* [x] Input validation everywhere
 
 **A/C**
 
-* [ ] Secrets never appear in logs or browser devtools
-* [ ] API rejects malformed or malicious input
+* [~] Secrets never appear in logs or browser devtools
+* [x] API rejects malformed or malicious input
 
 ---
 
@@ -732,14 +732,14 @@ For each job:
 
 ### 5.2 Security
 
-* [ ] No secrets stored long-term
-* [ ] CORS restricted to UI origin
-* [ ] Input validation everywhere
+* [x] No secrets stored long-term
+* [x] CORS restricted to UI origin
+* [x] Input validation everywhere
 
 **A/C**
 
-* [ ] Secrets never appear in logs or browser devtools
-* [ ] API rejects malformed or malicious input
+* [~] Secrets never appear in logs or browser devtools
+* [x] API rejects malformed or malicious input
 
 ---
 

@@ -152,6 +152,13 @@ class JobRunnerService:
         meta["status"] = "canceled"
         meta["finished_at"] = utc_iso()
         write_meta(p.meta_path, meta)
+        try:
+            if p.ssh_key_path.exists():
+                p.ssh_key_path.unlink()
+        except Exception:
+            pass
+        with self._secret_lock:
+            self._secret_store.pop(rid, None)
         return True
 
     def _wait_and_finalize(self, job_id: str, proc, log_fh, reader) -> None:
