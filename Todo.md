@@ -74,18 +74,33 @@ For each role:
 
 ### 1.3 Role Logo Resolution
 
-* [ ] Primary: use logo/icon defined in `meta/main.yml`
-* [ ] Fallback: resolve icon via **simpleicons**
+* [x] **Primary:** use logo/icon defined in `meta/main.yml`
+  → `md.logo.css_class` wird bevorzugt genutzt (`source="meta"`)
 
-  * [ ] Normalize role ID → entity name
-  * [ ] Apply manual overrides for known mismatches
-* [ ] Final fallback: generic placeholder icon
+* [x] **Fallback:** resolve icon via **simpleicons**
 
-**A/C**
+  * [x] Normalize role ID → entity name
+    → `_normalize_role_to_candidates()` mit Prefix-Stripping & Heuristiken
+  * [x] Apply manual overrides for known mismatches
+    → `self._overrides` Mapping vorhanden
 
-* [ ] Every role tile has a visible icon
-* [ ] No broken image URLs
-* [ ] simpleicons lookup is cached
+* [x] **Final fallback:** generic placeholder icon
+  → Inline SVG als `data:image/svg+xml` (niemals broken)
+
+---
+
+### Acceptance Criteria
+
+* [x] **Every role tile has a visible icon**
+  → `meta` → `simpleicons` → `placeholder` (garantiert)
+
+* [x] **No broken image URLs**
+  → Simpleicons URLs werden vor Nutzung validiert, sonst Placeholder
+
+* [x] **simpleicons lookup is cached**
+  → Persistenter Cache unter `${STATE_DIR}/cache/simpleicons.json`
+  → inkl. **negative caching** (404 wird gemerkt)
+
 
 ---
 

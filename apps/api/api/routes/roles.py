@@ -8,8 +8,11 @@ from fastapi import APIRouter
 
 from api.schemas.role import RoleOut, RoleLogoOut
 from roles.roles_indexer import build_roles_index
+from services.logo_resolver import SimpleIconsResolver
 
 router = APIRouter(prefix="/roles", tags=["roles"])
+
+_logo_resolver = SimpleIconsResolver()
 
 
 def _repo_roles_root() -> Path:
@@ -24,6 +27,18 @@ def list_roles_metadata() -> List[RoleOut]:
     out: List[RoleOut] = []
     for name in sorted(idx.keys()):
         md = idx[name]
+
+        # Primary: use meta/main.yml logo class (e.g. FontAwesome class)
+        if md.logo and md.logo.css_class:
+            logo = RoleLogoOut(source="meta", css_class=md.logo.css_class)
+        else:
+            # Fallback: SimpleIcons -> cached, validated; final fallback is data-url SVG
+            resolved = _logo_resolver.resolve_logo_url(
+                md.id,
+                display_hint=md.display_name,
+            )
+            logo = RoleLogoOut(source=resolved.source, url=resolved.url)
+
         out.append(
             RoleOut(
                 id=md.id,
@@ -44,8 +59,9 @@ def list_roles_metadata() -> List[RoleOut]:
                 lifecycle=md.lifecycle,
                 run_after=md.run_after,
                 platforms=md.platforms,
-                logo=(RoleLogoOut(css_class=md.logo.css_class) if md.logo else None),
+                logo=logo,
                 deployment_targets=md.deployment_targets,
             )
         )
+
     return out
