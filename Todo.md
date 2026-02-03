@@ -234,18 +234,18 @@ For each job:
 
 ### 3.2 CLI / Ansible Integration
 
-* [ ] Introduce wrapper script: `run.sh`
-* [ ] Wrapper:
+* [x] Introduce wrapper script: `run.sh`
+* [x] Wrapper:
 
   * echoes executed commands (docker-like)
   * calls existing CLI / ansible-playbook
-* [ ] Capture stdout + stderr line-by-line
+* [x] Capture stdout + stderr line-by-line
 
 **A/C**
 
-* [ ] Output matches CLI behavior when run manually
-* [ ] Exit codes propagate correctly
-* [ ] Wrapper can be reused outside the web UI
+* [x] Output matches CLI behavior when run manually
+* [x] Exit codes propagate correctly
+* [x] Wrapper can be reused outside the web UI
 
 ---
 
@@ -609,18 +609,18 @@ For each job:
 
 ### 3.2 CLI / Ansible Integration
 
-* [ ] Introduce wrapper script: `run.sh`
-* [ ] Wrapper:
+* [x] Introduce wrapper script: `run.sh`
+* [x] Wrapper:
 
   * echoes executed commands (docker-like)
   * calls existing CLI / ansible-playbook
-* [ ] Capture stdout + stderr line-by-line
+* [x] Capture stdout + stderr line-by-line
 
 **A/C**
 
-* [ ] Output matches CLI behavior when run manually
-* [ ] Exit codes propagate correctly
-* [ ] Wrapper can be reused outside the web UI
+* [x] Output matches CLI behavior when run manually
+* [x] Exit codes propagate correctly
+* [x] Wrapper can be reused outside the web UI
 
 ---
 

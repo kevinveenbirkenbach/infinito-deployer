@@ -11,17 +11,27 @@ from .util import atomic_write_text
 
 def write_runner_script(path: Path) -> None:
     """
-    Minimal runner placeholder.
-
-    Replace this later with:
-      - infinito deploy ...
-      - ansible-playbook ...
+    Generate a reusable CLI wrapper script.
     """
     script = """#!/usr/bin/env bash
 set -euo pipefail
 
-# Runner placeholder for Infinito Deployer
-# Replace with the real deployment pipeline later.
+log_cmd() {
+  printf '+'
+  for arg in "$@"; do
+    printf ' %q' "$arg"
+  done
+  printf '\\n'
+}
+
+run_cmd() {
+  log_cmd "$@"
+  if command -v stdbuf >/dev/null 2>&1; then
+    stdbuf -oL -eL "$@"
+  else
+    "$@"
+  fi
+}
 
 echo "+ pwd"
 pwd
@@ -29,10 +39,23 @@ pwd
 echo "+ ls -la"
 ls -la
 
-echo "+ echo 'TODO: run deployment'"
-echo "TODO: run deployment"
+if [ "$#" -gt 0 ]; then
+  run_cmd "$@"
+  exit $?
+fi
 
-echo "DONE"
+if [ -n "${RUNNER_CMD:-}" ]; then
+  run_cmd /bin/bash -lc "${RUNNER_CMD}"
+  exit $?
+fi
+
+if command -v ansible-playbook >/dev/null 2>&1 && [ -f "./playbook.yml" ]; then
+  run_cmd ansible-playbook -i inventory.yml playbook.yml
+  exit $?
+fi
+
+echo "No command provided. Set RUNNER_CMD or pass a command to this script."
+exit 1
 """
     atomic_write_text(path, script)
     path.chmod(0o700)
