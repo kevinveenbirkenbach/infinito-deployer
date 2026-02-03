@@ -44,30 +44,31 @@
 
 For each role:
 
-* [ ] Parse `meta/main.yml`
+* [x] Parse `meta/main.yml`
 
-  * [ ] `galaxy_tags`
-  * [ ] `dependencies`
-  * [ ] `logo` / `icon` (if present)
+  * [x] `galaxy_tags`
+  * [x] `dependencies`
+  * [x] `logo` / `icon` (if present)
   * [ ] **status** (`pre-alpha`, `alpha`, `beta`, `stable`, `deprecated`)
-* [ ] Derive **deployment targets**
+* [x] Derive **deployment targets**
+  k
 
-  * [ ] `universal`
-  * [ ] `server`
-  * [ ] `workstation`
-* [ ] Extract description
+  * [x] `universal`
+  * [x] `server`
+  * [x] `workstation`
+* [x] Extract description
 
-  * [ ] From `meta/main.yml` or README fallback
+  * [x] From `meta/main.yml` or README fallbac
 
 **A/C**
 
 * [ ] Every role has:
 
-  * ID
-  * Display name
-  * Status
-  * At least one deploy target
-* [ ] Roles without optional metadata still render correctly
+  * [ ] ID
+  * [ ] Display name
+  * [ ] Status
+  * [x] At least one deploy target
+* [x] Roles without optional metadata still render correctly
 
 ---
 

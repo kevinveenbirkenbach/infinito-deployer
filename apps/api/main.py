@@ -6,7 +6,9 @@ from typing import List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from infinito_deployer.services.role_catalog import RoleCatalogError, RoleCatalogService
+
+from api.routes import router as api_router
+from services.role_catalog import RoleCatalogError, RoleCatalogService
 
 
 def _parse_origins(raw: str) -> List[str]:
@@ -28,6 +30,8 @@ def create_app() -> FastAPI:
         )
 
     catalog = RoleCatalogService()
+
+    app.include_router(api_router, prefix="/api")
 
     @app.get("/health")
     def health() -> dict:

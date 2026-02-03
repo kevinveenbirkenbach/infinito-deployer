@@ -14,8 +14,5 @@ urls = { Homepage = "https://github.com/kevinveenbirkenbach/infinito-deployer" }
 
 dependencies = []
 
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
+# Intentionally no setuptools package discovery:
+# This repo is a monorepo; apps are containerized and not meant to be installed via pip.
