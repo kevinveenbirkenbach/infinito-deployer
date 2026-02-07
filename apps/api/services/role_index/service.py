@@ -119,6 +119,8 @@ class RoleIndexService:
             out.append(ro)
             by_id[ro.id] = ro
 
+        out.sort(key=lambda r: (safe_lower(r.display_name), safe_lower(r.id)))
+
         self._roles = out
         self._by_id = by_id
         self._cached_at = time.time()
