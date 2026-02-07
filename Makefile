@@ -14,7 +14,7 @@ PIP            := $(VENV_DIR)/bin/pip
 export PYTHONPATH := $(PWD)/apps/api
 
 # Keep state in repo-local directory for tests (no /state permission issues)
-export STATE_DIR := $(PWD)/state
+TEST_STATE_DIR := $(PWD)/state
 
 setup: env dirs up
 	@echo "✔ Setup completed and stack is up."
@@ -41,6 +41,8 @@ down:
 logs:
 	@$(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" logs -f --tail=200
 
+restart: down up
+
 ps:
 	@$(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" ps
 
@@ -53,13 +55,13 @@ install: venv
 
 test: dirs install
 	@echo "→ Running Python unit tests"
-	@$(PYTHON) -m unittest discover -s tests/python -p "test_*.py" -t . -v
+	@STATE_DIR="$(TEST_STATE_DIR)" $(PYTHON) -m unittest discover -s tests/python -p "test_*.py" -t . -v
 	@echo "→ Running Python integration tests"
-	@if ls tests/python/integration/test_*.py >/dev/null 2>&1; then $(PYTHON) -m unittest discover -s tests/python/integration -p "test_*.py" -t . -v; else echo "→ (no python integration tests)"; fi
+	@if ls tests/python/integration/test_*.py >/dev/null 2>&1; then STATE_DIR="$(TEST_STATE_DIR)" $(PYTHON) -m unittest discover -s tests/python/integration -p "test_*.py" -t . -v; else echo "→ (no python integration tests)"; fi
 	@echo "→ Running Node unit tests"
-	@node --test tests/node/unit/*.mjs
+	@STATE_DIR="$(TEST_STATE_DIR)" node --test tests/node/unit/*.mjs
 	@echo "→ Running Node integration tests"
-	@if ls tests/node/integration/*.mjs >/dev/null 2>&1; then node --test tests/node/integration/*.mjs; else echo "→ (no node integration tests)"; fi
+	@if ls tests/node/integration/*.mjs >/dev/null 2>&1; then STATE_DIR="$(TEST_STATE_DIR)" node --test tests/node/integration/*.mjs; else echo "→ (no node integration tests)"; fi
 
 clean:
 	@rm -rf "$(VENV_DIR)" state
