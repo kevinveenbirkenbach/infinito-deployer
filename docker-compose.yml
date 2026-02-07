@@ -17,19 +17,27 @@ services:
       CATALOG_DIR: ${CATALOG_DIR}
 
     volumes:
-      - ${INFINITO_REPO_HOST_PATH}:${INFINITO_REPO_PATH}:ro
+      - infinito_repo:${INFINITO_REPO_PATH}
       - ${STATE_HOST_PATH}:${STATE_DIR}
 
     entrypoint: ["sh", "-lc"]
-    command: |
-      set -euo pipefail
-      mkdir -p "${CATALOG_DIR}/roles"
-      echo "→ Generating roles list into ${CATALOG_DIR}/roles/list.json"
-      infinito build roles_list \
-        --roles-dir "${INFINITO_REPO_PATH}/roles" \
-        --output "${CATALOG_DIR}/roles/list.json"
-      echo "✔ Catalog generated."
-      tail -f /dev/null
+    command:
+      - |
+        set -euo pipefail
+        mkdir -p "${CATALOG_DIR}/roles"
+        repo_src="${INFINITO_SRC_DIR:-/opt/src/infinito}"
+        repo_dst="${INFINITO_REPO_PATH}"
+        if [ ! -d "$${repo_dst}/roles" ] || [ -z "$$(find "$${repo_dst}/roles" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+          echo "→ Seeding repo from $${repo_src} into $${repo_dst}"
+          mkdir -p "$${repo_dst}"
+          cp -a "$${repo_src}/." "$${repo_dst}/"
+        fi
+        echo "→ Generating roles list into ${CATALOG_DIR}/roles/list.json"
+        infinito build roles_list \
+          --roles-dir "${INFINITO_REPO_PATH}/roles" \
+          --output "${CATALOG_DIR}/roles/list.json"
+        echo "✔ Catalog generated."
+        tail -f /dev/null
 
     restart: ${RESTART_POLICY}
 
@@ -60,7 +68,7 @@ services:
       ROLE_CATALOG_CATEGORIES_YML: ${ROLE_CATALOG_CATEGORIES_YML}
 
     volumes:
-      - ${INFINITO_REPO_HOST_PATH}:${INFINITO_REPO_PATH}:ro
+      - infinito_repo:${INFINITO_REPO_PATH}:ro
       - ${STATE_HOST_PATH}:${STATE_DIR}
 
       # Optional: enable only if you really need Docker access
@@ -120,3 +128,6 @@ services:
 networks:
   default:
     name: ${DOCKER_NETWORK_NAME}
+
+volumes:
+  infinito_repo:
