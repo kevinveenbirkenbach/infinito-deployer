@@ -44,6 +44,11 @@ Show logs:
 make logs
 ```
 
+Refresh catalog (invokable apps only) and restart API:
+```bash
+make refresh-catalog
+```
+
 Stop stack:
 ```bash
 make down

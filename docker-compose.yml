@@ -32,10 +32,11 @@ services:
           mkdir -p "$${repo_dst}"
           cp -a "$${repo_src}/." "$${repo_dst}/"
         fi
-        echo "→ Generating roles list into ${CATALOG_DIR}/roles/list.json"
-        infinito build roles_list \
-          --roles-dir "${INFINITO_REPO_PATH}/roles" \
-          --output "${CATALOG_DIR}/roles/list.json"
+        cd "$${repo_dst}"
+        echo "→ Generating invokable roles list into ${CATALOG_DIR}/roles/list.json"
+        infinito meta applications invokable \
+          | python -c 'import sys, json; data=[l.strip() for l in sys.stdin if l.strip()]; print(json.dumps(data))' \
+          > "${CATALOG_DIR}/roles/list.json"
         echo "✔ Catalog generated."
         tail -f /dev/null
 
