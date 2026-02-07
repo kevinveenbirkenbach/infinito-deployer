@@ -126,6 +126,22 @@ services:
 
     restart: ${RESTART_POLICY}
 
+  # ---------------------------------------------------------
+  # Test target (Arch Linux via SSH)
+  # ---------------------------------------------------------
+  test-arch:
+    profiles: ["test"]
+    build:
+      context: ./apps/test/arch-ssh
+      dockerfile: Dockerfile
+
+    container_name: infinito-deployer-test-arch
+
+    ports:
+      - "${TEST_ARCH_SSH_PORT:-2222}:22"
+
+    restart: ${RESTART_POLICY}
+
 networks:
   default:
     name: ${DOCKER_NETWORK_NAME}

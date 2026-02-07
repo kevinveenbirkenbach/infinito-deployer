@@ -1,4 +1,4 @@
-.PHONY: setup env dirs up down logs ps refresh-catalog venv install test clean
+.PHONY: setup env dirs up down logs ps refresh-catalog test-arch venv install test clean
 
 # Use docker compose v2 by default; override via env if needed:
 #   make setup DOCKER_COMPOSE="docker-compose"
@@ -49,6 +49,9 @@ ps:
 refresh-catalog:
 	@$(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" up -d --force-recreate catalog
 	@$(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" restart api
+
+test-arch:
+	@COMPOSE_PROFILES=test $(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" up -d --build test-arch
 
 venv:
 	@test -d "$(VENV_DIR)" || python -m venv "$(VENV_DIR)"
