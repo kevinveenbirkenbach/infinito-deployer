@@ -1,6 +1,7 @@
 import "@xterm/xterm/css/xterm.css";
 import type { Metadata } from "next";
 import { Space_Grotesk, Work_Sans } from "next/font/google";
+import type { ReactNode } from "react";
 
 const displayFont = Space_Grotesk({
   subsets: ["latin"],
@@ -19,7 +20,7 @@ export const metadata: Metadata = {
   description: "Deployment dashboard for Infinito.Nexus (WIP)",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body

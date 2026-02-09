@@ -18,6 +18,7 @@ type InventoryPanelProps = {
   baseUrl: string;
   selectedRoles: string[];
   credentials: CredentialsState;
+  inventoryReady?: boolean;
   onVarsChange?: (
     vars: Record<string, any> | null,
     error: string | null
@@ -36,6 +37,7 @@ export default function InventoryVariablesPanel({
   baseUrl,
   selectedRoles,
   credentials,
+  inventoryReady = true,
   onVarsChange,
 }: InventoryPanelProps) {
   const [jsonText, setJsonText] = useState("{\n  \n}");
@@ -57,6 +59,7 @@ export default function InventoryVariablesPanel({
   }, [parsed.value, parsed.error, onVarsChange]);
 
   const canPreview =
+    inventoryReady &&
     !jsonError &&
     selectedRoles.length > 0 &&
     credentials.host &&
@@ -330,7 +333,11 @@ export default function InventoryVariablesPanel({
         >
           {previewLoading ? "Previewing..." : "Preview Inventory"}
         </button>
-        {!canPreview ? (
+        {!inventoryReady ? (
+          <span style={{ marginLeft: 12, color: "#b91c1c", fontSize: 12 }}>
+            Generate inventory first to enable preview.
+          </span>
+        ) : !canPreview ? (
           <span style={{ marginLeft: 12, color: "#b91c1c", fontSize: 12 }}>
             Fill credentials, select roles, and fix JSON before previewing.
           </span>

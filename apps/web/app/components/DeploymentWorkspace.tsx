@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import RoleDashboard from "./RoleDashboard";
 import DeploymentCredentialsForm from "./DeploymentCredentialsForm";
 import InventoryVariablesPanel from "./InventoryVariablesPanel";
+import WorkspacePanel from "./WorkspacePanel";
 import { createInitialState, validateForm } from "../lib/deploy_form";
 import { buildDeploymentPayload } from "../lib/deployment_payload";
 
@@ -34,6 +35,7 @@ export default function DeploymentWorkspace({
     null
   );
   const [inventoryError, setInventoryError] = useState<string | null>(null);
+  const [inventoryReady, setInventoryReady] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -163,10 +165,19 @@ export default function DeploymentWorkspace({
         onChange={setCredentials}
       />
 
+      <WorkspacePanel
+        baseUrl={baseUrl}
+        selectedRoles={selectedRoles}
+        credentials={credentials}
+        inventoryVars={inventoryVars}
+        onInventoryReadyChange={setInventoryReady}
+      />
+
       <InventoryVariablesPanel
         baseUrl={baseUrl}
         selectedRoles={selectedRoles}
         credentials={credentials}
+        inventoryReady={inventoryReady}
         onVarsChange={(vars, error) => {
           setInventoryVars(vars);
           setInventoryError(error);
