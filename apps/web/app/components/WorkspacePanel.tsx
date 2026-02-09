@@ -887,6 +887,7 @@ export default function WorkspacePanel({
       "auto",
       rolesKey(targetRoles),
       allowEmptyPlain ? "1" : "0",
+      forceOverwrite ? "1" : "0",
       setValues.join(","),
     ].join("|");
     await postCredentials(targetRoles, forceOverwrite, setValues);
@@ -999,13 +1000,14 @@ export default function WorkspacePanel({
       "auto",
       rolesKey(targetRoles),
       allowEmptyPlain ? "1" : "0",
+      forceOverwrite ? "1" : "0",
       setValues.join(","),
     ].join("|");
 
     if (autoCredentialsKeyRef.current === key) return;
     autoCredentialsKeyRef.current = key;
 
-    void postCredentials(targetRoles, false, setValues);
+    void postCredentials(targetRoles, forceOverwrite, setValues);
   }, [
     inventoryReady,
     workspaceId,
@@ -1015,6 +1017,7 @@ export default function WorkspacePanel({
     credentialsScope,
     credentialsRole,
     allowEmptyPlain,
+    forceOverwrite,
     setValuesText,
   ]);
 
