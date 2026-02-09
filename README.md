@@ -72,6 +72,24 @@ make up
 make logs
 ```
 
+Refresh catalog (invokable apps only) and restart API:
+```bash
+make refresh-catalog
+```
+
+Run an Arch Linux test target (SSH) via compose profile:
+```bash
+COMPOSE_PROFILES=test make up
+```
+Use these credentials in the UI:
+- Host: `test-arch` (from the API container)
+- User: `deploy`
+- Auth: password `deploy`
+
+From the host, SSH is available on `localhost:2222` (override with `TEST_ARCH_SSH_PORT`).
+
+Stop stack:
+
 ```bash
 make down
 ```

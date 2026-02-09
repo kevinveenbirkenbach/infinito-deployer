@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Terminal } from "xterm";
-import { FitAddon } from "xterm-addon-fit";
+import type { Terminal as XTermTerminal } from "@xterm/xterm";
+import type { FitAddon as XTermFitAddon } from "@xterm/addon-fit";
 import {
   isTerminalStatus,
   statusColors,
@@ -34,41 +34,60 @@ export default function LiveDeploymentView({
   const [canceling, setCanceling] = useState(false);
   const lastAutoJobRef = useRef<string | null>(null);
 
-  const termRef = useRef<Terminal | null>(null);
-  const fitRef = useRef<FitAddon | null>(null);
+  const termRef = useRef<XTermTerminal | null>(null);
+  const fitRef = useRef<XTermFitAddon | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
-    const term = new Terminal({
-      fontFamily:
-        "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-      fontSize: 12,
-      theme: {
-        background: "#0b0f19",
-        foreground: "#e2e8f0",
-        cursor: "#38bdf8",
-      },
-      convertEol: true,
-      cursorBlink: true,
-      scrollback: 2000,
+    let disposed = false;
+    let onResize: (() => void) | null = null;
+
+    const setupTerminal = async () => {
+      if (!containerRef.current) return;
+      const [{ Terminal }, { FitAddon }] = await Promise.all([
+        import("@xterm/xterm"),
+        import("@xterm/addon-fit"),
+      ]);
+      if (disposed || !containerRef.current) return;
+
+      const term = new Terminal({
+        fontFamily:
+          "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+        fontSize: 12,
+        theme: {
+          background: "#0b0f19",
+          foreground: "#e2e8f0",
+          cursor: "#38bdf8",
+        },
+        convertEol: true,
+        cursorBlink: true,
+        scrollback: 2000,
+      });
+      const fit = new FitAddon();
+      term.loadAddon(fit);
+      term.open(containerRef.current);
+      fit.fit();
+      term.writeln("\u001b[1mLive deployment logs\u001b[0m");
+      term.writeln("Attach to a job ID to stream output.");
+
+      termRef.current = term;
+      fitRef.current = fit;
+
+      onResize = () => fit.fit();
+      window.addEventListener("resize", onResize);
+    };
+
+    setupTerminal().catch((err) => {
+      console.error("Failed to initialize xterm", err);
     });
-    const fit = new FitAddon();
-    term.loadAddon(fit);
-    term.open(containerRef.current);
-    fit.fit();
-    term.writeln("\u001b[1mLive deployment logs\u001b[0m");
-    term.writeln("Attach to a job ID to stream output.");
 
-    termRef.current = term;
-    fitRef.current = fit;
-
-    const onResize = () => fit.fit();
-    window.addEventListener("resize", onResize);
     return () => {
-      window.removeEventListener("resize", onResize);
-      term.dispose();
+      disposed = true;
+      if (onResize) window.removeEventListener("resize", onResize);
+      termRef.current?.dispose();
+      termRef.current = null;
+      fitRef.current = null;
     };
   }, []);
 

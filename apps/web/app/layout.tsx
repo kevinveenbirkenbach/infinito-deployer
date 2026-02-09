@@ -1,4 +1,4 @@
-import "xterm/css/xterm.css";
+import "@xterm/xterm/css/xterm.css";
 import type { Metadata } from "next";
 import { Space_Grotesk, Work_Sans } from "next/font/google";
 

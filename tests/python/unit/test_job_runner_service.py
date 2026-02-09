@@ -107,9 +107,11 @@ class TestJobRunnerService(unittest.TestCase):
         old_runner_cmd = os.environ.get("RUNNER_CMD")
         os.environ["RUNNER_CMD"] = "sleep 0.2"
         self.addCleanup(
-            lambda: os.environ.pop("RUNNER_CMD", None)
-            if old_runner_cmd is None
-            else os.environ.__setitem__("RUNNER_CMD", old_runner_cmd)
+            lambda: (
+                os.environ.pop("RUNNER_CMD", None)
+                if old_runner_cmd is None
+                else os.environ.__setitem__("RUNNER_CMD", old_runner_cmd)
+            )
         )
 
         svc = JobRunnerService()
@@ -135,9 +137,11 @@ class TestJobRunnerService(unittest.TestCase):
         old_runner_cmd = os.environ.get("RUNNER_CMD")
         os.environ["RUNNER_CMD"] = "true"
         self.addCleanup(
-            lambda: os.environ.pop("RUNNER_CMD", None)
-            if old_runner_cmd is None
-            else os.environ.__setitem__("RUNNER_CMD", old_runner_cmd)
+            lambda: (
+                os.environ.pop("RUNNER_CMD", None)
+                if old_runner_cmd is None
+                else os.environ.__setitem__("RUNNER_CMD", old_runner_cmd)
+            )
         )
 
         svc = JobRunnerService()

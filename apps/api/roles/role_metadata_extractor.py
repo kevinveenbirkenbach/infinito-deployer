@@ -186,6 +186,22 @@ def _extract_description_from_readme(role_dir: Path) -> Optional[str]:
     return desc if desc else None
 
 
+def _extract_headline_from_readme(role_dir: Path) -> Optional[str]:
+    readme = role_dir / "README.md"
+    if not readme.is_file():
+        return None
+
+    text = readme.read_text(encoding="utf-8", errors="replace")
+    for ln in text.splitlines():
+        m = re.match(r"^\s*#{1,3}\s+(.+?)\s*$", ln)
+        if not m:
+            continue
+        headline = m.group(1).strip().strip("#").strip()
+        if headline:
+            return headline
+    return None
+
+
 def _derive_deployment_targets(
     role_name: str, platforms: List[Dict[str, Any]]
 ) -> List[str]:
@@ -317,10 +333,13 @@ def extract_role_metadata(role_dir: Path) -> RoleMetadata:
 
     # Status (always present)
     status = _default_status(meta.galaxy_info.lifecycle)
+    display_name = _extract_headline_from_readme(role_dir) or _derive_display_name(
+        role_name
+    )
 
     return RoleMetadata(
         id=role_name,
-        display_name=_derive_display_name(role_name),
+        display_name=display_name,
         role_name=role_name,
         role_path=role_dir,
         description=description,

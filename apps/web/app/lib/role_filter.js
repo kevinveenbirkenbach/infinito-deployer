@@ -1,10 +1,18 @@
 /**
+ * @typedef {Object} RoleLogo
+ * @property {string} source
+ * @property {string | null | undefined} [css_class]
+ * @property {string | null | undefined} [url]
+ */
+
+/**
  * @typedef {Object} Role
  * @property {string} id
  * @property {string} display_name
  * @property {string} status
  * @property {string} description
  * @property {string[]} deployment_targets
+ * @property {RoleLogo | null | undefined} [logo]
  */
 
 /**
