@@ -186,9 +186,6 @@ export default function WorkspacePanel({
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [inventoryReady, setInventoryReady] = useState(false);
-  const [inventoryMode, setInventoryMode] = useState<"manual" | "auto">(
-    "manual"
-  );
 
   const [activePath, setActivePath] = useState<string | null>(null);
   const [editorValue, setEditorValue] = useState("");
@@ -221,9 +218,12 @@ export default function WorkspacePanel({
   const autoSyncRef = useRef(false);
   const autoCredentialsKeyRef = useRef("");
   const hostVarsSyncRef = useRef(false);
+  const inventorySeededRef = useRef(false);
 
   const [generateBusy, setGenerateBusy] = useState(false);
-  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [inventorySyncError, setInventorySyncError] = useState<string | null>(
+    null
+  );
 
   const [fileOpError, setFileOpError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{
@@ -307,6 +307,23 @@ export default function WorkspacePanel({
       selectedRoles.includes(prev) ? prev : selectedRoles[0] ?? ""
     );
   }, [selectedRoles, credentialsScope]);
+
+  useEffect(() => {
+    inventorySeededRef.current = false;
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!inventoryReady) {
+      inventorySeededRef.current = false;
+    }
+  }, [inventoryReady]);
+
+  useEffect(() => {
+    if (!workspaceId || !inventoryReady) return;
+    if (!onSelectedRolesChange) {
+      inventorySeededRef.current = true;
+    }
+  }, [workspaceId, inventoryReady, onSelectedRolesChange]);
 
   const syncInventoryReady = (nextFiles: FileEntry[]) => {
     const ready = nextFiles.some((f) => f.path === "inventory.yml");
@@ -510,14 +527,13 @@ export default function WorkspacePanel({
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
+      if (activePath === "inventory.yml") {
+        inventorySeededRef.current = false;
+      }
       setEditorDirty(false);
       setEditorStatus("Saved.");
       await refreshFiles(workspaceId);
-      if (
-        inventoryMode === "auto" &&
-        activePath === "inventory.yml" &&
-        onSelectedRolesChange
-      ) {
+      if (activePath === "inventory.yml" && onSelectedRolesChange) {
         const roles = extractRolesFromInventory(editorValue);
         if (rolesKey(roles) !== rolesKey(selectedRoles)) {
           onSelectedRolesChange(roles);
@@ -541,7 +557,7 @@ export default function WorkspacePanel({
   const generateInventory = async () => {
     if (!workspaceId || !canGenerate) return;
     setGenerateBusy(true);
-    setGenerateError(null);
+    setInventorySyncError(null);
     try {
       const payload = {
         deploy_target: credentials.deployTarget,
@@ -570,7 +586,11 @@ export default function WorkspacePanel({
       }
       await refreshFiles(workspaceId);
     } catch (err: any) {
-      setGenerateError(err?.message ?? "failed to generate inventory");
+      setInventorySyncError(
+        err?.message
+          ? `Inventory creation failed: ${err.message}`
+          : "Inventory creation failed."
+      );
     } finally {
       setGenerateBusy(false);
     }
@@ -588,6 +608,9 @@ export default function WorkspacePanel({
     if (activePath === "inventory.yml" && editorDirty) return;
 
     try {
+      if (inventorySyncError) {
+        setInventorySyncError(null);
+      }
       const content = await readWorkspaceFile("inventory.yml");
       const data = (YAML.parse(content) ?? {}) as Record<string, any>;
       const allNode =
@@ -656,8 +679,10 @@ export default function WorkspacePanel({
       }
       await refreshFiles(workspaceId);
     } catch (err: any) {
-      setGenerateError(
-        err?.message ? `Auto sync failed: ${err.message}` : "Auto sync failed"
+      setInventorySyncError(
+        err?.message
+          ? `Inventory sync failed: ${err.message}`
+          : "Inventory sync failed."
       );
     }
   };
@@ -810,19 +835,17 @@ export default function WorkspacePanel({
             .map((value) => value.trim())
             .filter(Boolean)
         : [];
-    if (inventoryMode === "auto") {
-      autoCredentialsKeyRef.current = [
-        "auto",
-        rolesKey(targetRoles),
-        allowEmptyPlain ? "1" : "0",
-        setValues.join(","),
-      ].join("|");
-    }
+    autoCredentialsKeyRef.current = [
+      "auto",
+      rolesKey(targetRoles),
+      allowEmptyPlain ? "1" : "0",
+      setValues.join(","),
+    ].join("|");
     await postCredentials(targetRoles, forceOverwrite, setValues);
   };
 
   useEffect(() => {
-    if (inventoryMode !== "auto" || !workspaceId) return;
+    if (!workspaceId) return;
     if (autoSyncRef.current) return;
     if (activePath === "inventory.yml" && editorDirty) return;
 
@@ -835,6 +858,9 @@ export default function WorkspacePanel({
           }
           return;
         }
+        if (!inventorySeededRef.current) {
+          return;
+        }
         await syncInventoryWithSelection();
       } finally {
         autoSyncRef.current = false;
@@ -843,7 +869,6 @@ export default function WorkspacePanel({
 
     run();
   }, [
-    inventoryMode,
     workspaceId,
     inventoryReady,
     canGenerate,
@@ -856,18 +881,23 @@ export default function WorkspacePanel({
   ]);
 
   useEffect(() => {
-    if (
-      inventoryMode !== "auto" ||
-      !workspaceId ||
-      !inventoryReady ||
-      !onSelectedRolesChange
-    )
-      return;
+    if (!workspaceId || !inventoryReady) return;
+    if (!onSelectedRolesChange) return;
+    if (autoSyncRef.current) return;
     if (activePath === "inventory.yml" && editorDirty) return;
 
-    void syncSelectionFromInventory();
+    const run = async () => {
+      autoSyncRef.current = true;
+      try {
+        await syncSelectionFromInventory();
+      } finally {
+        autoSyncRef.current = false;
+        inventorySeededRef.current = true;
+      }
+    };
+
+    void run();
   }, [
-    inventoryMode,
     workspaceId,
     inventoryReady,
     inventoryModifiedAt,
@@ -903,7 +933,6 @@ export default function WorkspacePanel({
   ]);
 
   useEffect(() => {
-    if (inventoryMode !== "auto") return;
     if (!inventoryReady || !workspaceId || credentialsBusy) return;
     if (!vaultPassword) return;
 
@@ -930,7 +959,6 @@ export default function WorkspacePanel({
 
     void postCredentials(targetRoles, false, setValues);
   }, [
-    inventoryMode,
     inventoryReady,
     workspaceId,
     vaultPassword,
@@ -1225,8 +1253,8 @@ export default function WorkspacePanel({
             Workspace & Files
           </h2>
           <p style={{ margin: "8px 0 0", color: "#475569" }}>
-            Step-by-step: select roles → generate inventory → edit files →
-            generate credentials → export ZIP or deploy.
+            Step-by-step: select roles → edit files → generate credentials →
+            export ZIP or deploy.
           </p>
         </div>
         <div
@@ -1251,6 +1279,11 @@ export default function WorkspacePanel({
           {workspaceError}
         </div>
       ) : null}
+      {inventorySyncError ? (
+        <div style={{ marginTop: 8, color: "#b91c1c", fontSize: 12 }}>
+          {inventorySyncError}
+        </div>
+      ) : null}
 
       <div
         style={{
@@ -1260,128 +1293,6 @@ export default function WorkspacePanel({
           gap: 16,
         }}
       >
-        <div
-          style={{
-            padding: 16,
-            borderRadius: 18,
-            background: "#fff",
-            border: "1px solid rgba(15, 23, 42, 0.1)",
-          }}
-        >
-          <label style={{ fontSize: 12, color: "#64748b" }}>
-            Inventory generation
-          </label>
-          <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
-            <span style={{ fontSize: 12, color: "#64748b" }}>
-              Inventory mode
-            </span>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                fontSize: 12,
-                color: "#475569",
-              }}
-            >
-              <input
-                type="radio"
-                name="inventory-mode"
-                checked={inventoryMode === "manual"}
-                onChange={() => setInventoryMode("manual")}
-              />
-              Manual
-            </label>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                fontSize: 12,
-                color: "#475569",
-              }}
-            >
-              <input
-                type="radio"
-                name="inventory-mode"
-                checked={inventoryMode === "auto"}
-                onChange={() => setInventoryMode("auto")}
-              />
-              Automatic (sync with selected roles)
-            </label>
-            {inventoryMode === "auto" ? (
-              <p style={{ margin: 0, color: "#64748b", fontSize: 12 }}>
-                Auto mode creates/updates inventory and triggers credentials
-                when a vault password is present. Overwrite is never forced.
-              </p>
-            ) : null}
-          </div>
-          <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-            <button
-              onClick={generateInventory}
-              disabled={
-                inventoryMode === "auto" ||
-                !canGenerate ||
-                generateBusy ||
-                workspaceLoading
-              }
-              style={{
-                padding: "8px 14px",
-                borderRadius: 999,
-                border: "1px solid #0f172a",
-                background:
-                  inventoryMode === "manual" && canGenerate
-                    ? "#0f172a"
-                    : "#e2e8f0",
-                color:
-                  inventoryMode === "manual" && canGenerate
-                    ? "#fff"
-                    : "#64748b",
-                cursor:
-                  inventoryMode === "manual" && canGenerate
-                    ? "pointer"
-                    : "not-allowed",
-                fontSize: 12,
-              }}
-            >
-              {generateBusy ? "Generating..." : "Generate inventory"}
-            </button>
-            <button
-              onClick={() => workspaceId && refreshFiles(workspaceId)}
-              disabled={!workspaceId}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 999,
-                border: "1px solid #cbd5e1",
-                background: "#fff",
-                color: "#334155",
-                cursor: workspaceId ? "pointer" : "not-allowed",
-                fontSize: 12,
-              }}
-            >
-              Refresh files
-            </button>
-          </div>
-          {inventoryReady && inventoryMode === "manual" ? (
-            <p style={{ margin: "8px 0 0", color: "#b91c1c", fontSize: 12 }}>
-              Inventory already exists. Delete inventory.yml to regenerate.
-            </p>
-          ) : !inventoryReady && !canGenerate ? (
-            <p style={{ margin: "8px 0 0", color: "#b91c1c", fontSize: 12 }}>
-              Select roles and fill host/user to enable inventory generation.
-            </p>
-          ) : inventoryReady && inventoryMode === "auto" ? (
-            <p style={{ margin: "8px 0 0", color: "#0f766e", fontSize: 12 }}>
-              Auto mode is keeping inventory.yml in sync.
-            </p>
-          ) : null}
-          {generateError ? (
-            <p style={{ margin: "8px 0 0", color: "#b91c1c", fontSize: 12 }}>
-              {generateError}
-            </p>
-          ) : null}
-        </div>
-
         <div
           style={{
             padding: 16,
@@ -1532,11 +1443,9 @@ export default function WorkspacePanel({
               />
               Overwrite existing credentials
             </label>
-            {inventoryMode === "auto" ? (
-              <span style={{ fontSize: 11, color: "#64748b" }}>
-                Auto mode never forces overwrite. Manual clicks can use it.
-              </span>
-            ) : null}
+            <span style={{ fontSize: 11, color: "#64748b" }}>
+              Auto sync never forces overwrite. Manual clicks can use it.
+            </span>
           </div>
           {credentialsError ? (
             <p style={{ margin: "8px 0 0", color: "#b91c1c", fontSize: 12 }}>
@@ -1645,7 +1554,8 @@ export default function WorkspacePanel({
           >
             {treeItems.length === 0 ? (
               <p style={{ color: "#64748b", fontSize: 12 }}>
-                No files yet. Generate inventory to create workspace files.
+                No files yet. Inventory will appear once roles and host/user
+                are set.
               </p>
             ) : (
               treeItems.map((item) => (
