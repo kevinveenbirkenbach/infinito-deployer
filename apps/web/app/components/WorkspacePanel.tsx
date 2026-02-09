@@ -28,6 +28,7 @@ type WorkspacePanelProps = {
   baseUrl: string;
   selectedRoles: string[];
   credentials: CredentialsState;
+  onCredentialsPatch?: (patch: Partial<CredentialsState>) => void;
   onInventoryReadyChange?: (ready: boolean) => void;
   onSelectedRolesChange?: (roles: string[]) => void;
   onWorkspaceIdChange?: (id: string | null) => void;
@@ -137,6 +138,29 @@ function rolesKey(roles: string[]) {
   return normalizeRoles(roles).sort().join("|");
 }
 
+function sanitizeHostFilename(host: string) {
+  const cleaned = host.trim().replace(/[^A-Za-z0-9._-]/g, "_");
+  return cleaned || "host";
+}
+
+function pickHostVarsPath(entries: FileEntry[], host: string) {
+  const hostVars = entries.filter(
+    (entry) =>
+      entry.path.startsWith("host_vars/") &&
+      (entry.path.endsWith(".yml") || entry.path.endsWith(".yaml"))
+  );
+  if (host) {
+    const candidate = `host_vars/${sanitizeHostFilename(host)}.yml`;
+    if (hostVars.some((entry) => entry.path === candidate)) {
+      return candidate;
+    }
+  }
+  const sorted = hostVars
+    .map((entry) => entry.path)
+    .sort((a, b) => a.localeCompare(b));
+  return sorted[0] ?? null;
+}
+
 function extractRolesFromInventory(content: string): string[] {
   try {
     const data = YAML.parse(content) ?? {};
@@ -152,6 +176,7 @@ export default function WorkspacePanel({
   baseUrl,
   selectedRoles,
   credentials,
+  onCredentialsPatch,
   onInventoryReadyChange,
   onSelectedRolesChange,
   onWorkspaceIdChange,
@@ -195,6 +220,7 @@ export default function WorkspacePanel({
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const autoSyncRef = useRef(false);
   const autoCredentialsKeyRef = useRef("");
+  const hostVarsSyncRef = useRef(false);
 
   const [generateBusy, setGenerateBusy] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -212,6 +238,18 @@ export default function WorkspacePanel({
     [files]
   );
   const inventoryModifiedAt = inventoryEntry?.modified_at ?? null;
+  const hostVarsPath = useMemo(
+    () => pickHostVarsPath(files, credentials.host),
+    [files, credentials.host]
+  );
+  const hostVarsEntry = useMemo(
+    () =>
+      hostVarsPath
+        ? files.find((entry) => entry.path === hostVarsPath) ?? null
+        : null,
+    [files, hostVarsPath]
+  );
+  const hostVarsModifiedAt = hostVarsEntry?.modified_at ?? null;
 
   const tree = useMemo(() => buildTree(files), [files]);
   const treeItems = useMemo(
@@ -644,6 +682,77 @@ export default function WorkspacePanel({
     }
   };
 
+  const syncHostVarsFromCredentials = async () => {
+    if (!workspaceId) return;
+    if (hostVarsSyncRef.current) return;
+    const host = credentials.host?.trim() || "";
+    const user = credentials.user?.trim() || "";
+    const targetPath =
+      hostVarsPath || (host ? `host_vars/${sanitizeHostFilename(host)}.yml` : null);
+    if (!targetPath) return;
+    if (activePath === targetPath && editorDirty) return;
+    if (!host && !user) return;
+
+    try {
+      let data: Record<string, any> = {};
+      try {
+        const content = await readWorkspaceFile(targetPath);
+        data = (YAML.parse(content) ?? {}) as Record<string, any>;
+      } catch {
+        data = {};
+      }
+      let changed = false;
+      if (host && data.ansible_host !== host) {
+        data.ansible_host = host;
+        changed = true;
+      }
+      if (user && data.ansible_user !== user) {
+        data.ansible_user = user;
+        changed = true;
+      }
+      if (!changed) return;
+      const nextYaml = YAML.stringify(data);
+      hostVarsSyncRef.current = true;
+      await writeWorkspaceFile(targetPath, nextYaml);
+      if (activePath === targetPath) {
+        setEditorValue(nextYaml);
+        setEditorDirty(false);
+      }
+      await refreshFiles(workspaceId);
+    } catch {
+      // ignore
+    } finally {
+      hostVarsSyncRef.current = false;
+    }
+  };
+
+  const syncCredentialsFromHostVars = async () => {
+    if (!workspaceId || !hostVarsPath) return;
+    if (!onCredentialsPatch) return;
+    if (hostVarsSyncRef.current) return;
+    if (activePath === hostVarsPath && editorDirty) return;
+    try {
+      const content = await readWorkspaceFile(hostVarsPath);
+      const data = (YAML.parse(content) ?? {}) as Record<string, any>;
+      const nextHost =
+        typeof data.ansible_host === "string" ? data.ansible_host : "";
+      const nextUser =
+        typeof data.ansible_user === "string" ? data.ansible_user : "";
+      const patch: Partial<CredentialsState> = {};
+      if (nextHost && nextHost !== credentials.host) {
+        patch.host = nextHost;
+      }
+      if (nextUser && nextUser !== credentials.user) {
+        patch.user = nextUser;
+      }
+      if (Object.keys(patch).length > 0) {
+        onCredentialsPatch(patch);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   const postCredentials = async (
     targetRoles: string[],
     force: boolean,
@@ -764,6 +873,31 @@ export default function WorkspacePanel({
     inventoryModifiedAt,
     onSelectedRolesChange,
     selectedRoles,
+    activePath,
+    editorDirty,
+  ]);
+
+  useEffect(() => {
+    if (!workspaceId || !inventoryReady) return;
+    void syncHostVarsFromCredentials();
+  }, [
+    workspaceId,
+    inventoryReady,
+    credentials.host,
+    credentials.user,
+    hostVarsPath,
+    activePath,
+    editorDirty,
+  ]);
+
+  useEffect(() => {
+    if (!workspaceId || !inventoryReady) return;
+    void syncCredentialsFromHostVars();
+  }, [
+    workspaceId,
+    inventoryReady,
+    hostVarsPath,
+    hostVarsModifiedAt,
     activePath,
     editorDirty,
   ]);

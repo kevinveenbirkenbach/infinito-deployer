@@ -172,6 +172,9 @@ export default function DeploymentWorkspace({
         baseUrl={baseUrl}
         selectedRoles={selectedRoles}
         credentials={credentials}
+        onCredentialsPatch={(patch) =>
+          setCredentials((prev) => ({ ...prev, ...patch }))
+        }
         onInventoryReadyChange={setInventoryReady}
         onSelectedRolesChange={applySelectedRoles}
         onWorkspaceIdChange={setWorkspaceId}
