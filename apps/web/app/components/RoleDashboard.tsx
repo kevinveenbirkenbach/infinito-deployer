@@ -212,7 +212,7 @@ export default function RoleDashboard({
         >
           <label style={{ fontSize: 12, color: "#64748b" }}>Deploy target</label>
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            {["all", "universal", "server", "workstation"].map((target) => (
+            {["all", "server", "workstation"].map((target) => (
               <button
                 key={target}
                 onClick={() => setTargetFilter(target)}

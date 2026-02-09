@@ -210,12 +210,8 @@ def _derive_deployment_targets(
 
     workstation_prefixes = ("desk-", "util-desk-", "drv-")
     server_prefixes = (
-        "web-app-",
-        "svc-",
-        "sys-",
+        "web-",
         "util-srv-",
-        "persona-",
-        "persona-provider-",
     )
 
     if name.startswith(workstation_prefixes):
@@ -232,20 +228,6 @@ def _derive_deployment_targets(
 
     if "docker" in platform_names:
         targets.add("server")
-
-    os_families = {
-        "archlinux",
-        "debian",
-        "ubuntu",
-        "fedora",
-        "el",
-        "genericlinux",
-        "linux",
-        "any",
-    }
-    family_hits = {x for x in platform_names if x in os_families}
-    if len(family_hits) >= 3:
-        targets.add("universal")
 
     if not targets:
         targets.add("universal")
