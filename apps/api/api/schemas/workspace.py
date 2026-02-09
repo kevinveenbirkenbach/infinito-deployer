@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -18,7 +18,6 @@ class WorkspaceGenerateIn(BaseModel):
     user: str = Field(..., min_length=1, description="SSH user")
     auth_method: Optional[AuthMethod] = None
     selected_roles: List[str] = Field(default_factory=list)
-    inventory_vars: Dict[str, Any] = Field(default_factory=dict)
 
 
 class WorkspaceFileEntry(BaseModel):

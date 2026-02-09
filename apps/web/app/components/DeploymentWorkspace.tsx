@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import RoleDashboard from "./RoleDashboard";
 import DeploymentCredentialsForm from "./DeploymentCredentialsForm";
-import InventoryVariablesPanel from "./InventoryVariablesPanel";
 import WorkspacePanel from "./WorkspacePanel";
-import { createInitialState, validateForm } from "../lib/deploy_form";
+import { createInitialState } from "../lib/deploy_form";
 import { buildDeploymentPayload } from "../lib/deployment_payload";
 
 type Role = {
@@ -31,10 +30,7 @@ export default function DeploymentWorkspace({
   const [rolesError, setRolesError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [credentials, setCredentials] = useState(createInitialState());
-  const [inventoryVars, setInventoryVars] = useState<Record<string, any> | null>(
-    null
-  );
-  const [inventoryError, setInventoryError] = useState<string | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [inventoryReady, setInventoryReady] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
@@ -101,20 +97,15 @@ export default function DeploymentWorkspace({
     });
   };
 
-  const credentialErrors = useMemo(
-    () => validateForm(credentials),
-    [credentials]
-  );
-
   const deploymentPlan = useMemo(
     () =>
       buildDeploymentPayload({
         credentials,
         selectedRoles,
-        inventoryVars,
-        inventoryError,
+        workspaceId,
+        inventoryReady,
       }),
-    [credentials, selectedRoles, inventoryVars, inventoryError]
+    [credentials, selectedRoles, workspaceId, inventoryReady]
   );
 
   const deploymentErrors = deploymentPlan.errors;
@@ -181,36 +172,10 @@ export default function DeploymentWorkspace({
         baseUrl={baseUrl}
         selectedRoles={selectedRoles}
         credentials={credentials}
-        inventoryVars={inventoryVars}
         onInventoryReadyChange={setInventoryReady}
         onSelectedRolesChange={applySelectedRoles}
+        onWorkspaceIdChange={setWorkspaceId}
       />
-
-      <InventoryVariablesPanel
-        baseUrl={baseUrl}
-        selectedRoles={selectedRoles}
-        credentials={credentials}
-        inventoryReady={inventoryReady}
-        onVarsChange={(vars, error) => {
-          setInventoryVars(vars);
-          setInventoryError(error);
-        }}
-      />
-
-      {Object.keys(credentialErrors).length > 0 ? (
-        <div
-          style={{
-            marginTop: 12,
-            padding: 12,
-            borderRadius: 12,
-            background: "#fef2f2",
-            color: "#991b1b",
-            fontSize: 12,
-          }}
-        >
-          Complete the credentials form to enable inventory preview.
-        </div>
-      ) : null}
 
       <section
         style={{
@@ -239,7 +204,7 @@ export default function DeploymentWorkspace({
             </h2>
             <p style={{ margin: "8px 0 0", color: "#cbd5f5" }}>
               Kick off a real run using the selected roles, credentials, and
-              inventory vars. The job ID streams live logs below.
+              the workspace inventory. The job ID streams live logs below.
             </p>
           </div>
           <div

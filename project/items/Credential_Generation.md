@@ -10,13 +10,14 @@ Interactive creation, editing, and export of a complete inventory including cred
 - [x] Detect when **no inventory exists** (session / workspace / job)
 - [x] After app/role selection, **show a “Generate Inventory” button**
 - [x] Allow inventory generation **only if inventory.yml does not exist**
-- [x] Disable or de-prioritize “Preview Inventory” until an inventory exists
+- [x] Disable deployment until an inventory exists
 - [x] Display a clear UI hint that an inventory must be generated first
 
 **Acceptance Criteria**
 - [x] Without an existing inventory, “Generate Inventory” is visible
 - [x] Clicking it creates a valid initial inventory structure
 - [x] If inventory.yml exists, generation is disabled and API rejects regeneration
+- [x] Deployment is blocked until an inventory exists
 
 ---
 

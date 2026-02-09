@@ -28,9 +28,9 @@ type WorkspacePanelProps = {
   baseUrl: string;
   selectedRoles: string[];
   credentials: CredentialsState;
-  inventoryVars: Record<string, any> | null;
   onInventoryReadyChange?: (ready: boolean) => void;
   onSelectedRolesChange?: (roles: string[]) => void;
+  onWorkspaceIdChange?: (id: string | null) => void;
 };
 
 type TreeNode = {
@@ -152,9 +152,9 @@ export default function WorkspacePanel({
   baseUrl,
   selectedRoles,
   credentials,
-  inventoryVars,
   onInventoryReadyChange,
   onSelectedRolesChange,
+  onWorkspaceIdChange,
 }: WorkspacePanelProps) {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
@@ -349,6 +349,7 @@ export default function WorkspacePanel({
         window.localStorage.setItem(WORKSPACE_STORAGE_KEY, id);
       }
       setWorkspaceId(id);
+      onWorkspaceIdChange?.(id);
       await refreshFiles(id);
     } catch (err: any) {
       setWorkspaceError(err?.message ?? "failed to create workspace");
@@ -370,7 +371,10 @@ export default function WorkspacePanel({
         if (id) {
           try {
             await refreshFiles(id);
-            if (alive) setWorkspaceId(id);
+            if (alive) {
+              setWorkspaceId(id);
+              onWorkspaceIdChange?.(id);
+            }
             return;
           } catch {
             if (typeof window !== "undefined") {
@@ -391,7 +395,7 @@ export default function WorkspacePanel({
     return () => {
       alive = false;
     };
-  }, [baseUrl]);
+  }, [baseUrl, onWorkspaceIdChange]);
 
   const toggleDir = (path: string) => {
     setOpenDirs((prev) => {
@@ -507,7 +511,6 @@ export default function WorkspacePanel({
         user: credentials.user,
         auth_method: credentials.authMethod || null,
         selected_roles: selectedRoles,
-        inventory_vars: inventoryVars ?? {},
       };
       const res = await fetch(
         `${baseUrl}/api/workspaces/${workspaceId}/generate-inventory`,

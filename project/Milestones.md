@@ -6,12 +6,12 @@
 * [x] Filtering works
 * [x] Logos render correctly
 
-### Milestone 2 – Inventory Preview
+### Milestone 2 – Workspace Inventory (SPOT)
 
 **A/C**
 
-* [x] User can configure target + vars
-* [x] Inventory preview is accurate
+* [x] User can configure target + inventory files in Workspace & Files
+* [x] Deployment uses the workspace inventory state
 
 ### Milestone 3 – Live Deployment
 

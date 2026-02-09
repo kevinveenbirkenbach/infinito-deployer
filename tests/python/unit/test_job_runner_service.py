@@ -13,6 +13,13 @@ class TestJobRunnerService(unittest.TestCase):
 
         self._old_state_dir = os.environ.get("STATE_DIR")
         os.environ["STATE_DIR"] = self._tmp.name
+        self.workspace_id = "abc123"
+        workspace_root = Path(self._tmp.name) / "workspaces" / self.workspace_id
+        workspace_root.mkdir(parents=True, exist_ok=True)
+        (workspace_root / "inventory.yml").write_text(
+            "all:\n  children:\n    example-role:\n      hosts:\n        localhost: {}\n",
+            encoding="utf-8",
+        )
 
     def tearDown(self) -> None:
         if self._old_state_dir is None:
@@ -25,40 +32,36 @@ class TestJobRunnerService(unittest.TestCase):
 
         # Adjust fields if your schema differs, but keep it valid.
         return DeploymentRequest(
+            workspace_id=self.workspace_id,
             deploy_target="server",
             host="localhost",
             user="tester",
             auth={"method": "password", "password": "x"},
             selected_roles=["example-role"],
-            inventory_vars={},
         )
 
     def _secret_request(self):
         from api.schemas.deployment import DeploymentRequest  # noqa: WPS433
 
         return DeploymentRequest(
+            workspace_id=self.workspace_id,
             deploy_target="server",
             host="localhost",
             user="tester",
             auth={"method": "password", "password": "supersecret"},
             selected_roles=["example-role"],
-            inventory_vars={
-                "DB_PASSWORD": "db-pass",
-                "api_secret": "secret-123",
-                "token": "tok-abcdefghijklmnopqrstuvwxyz1234",
-            },
         )
 
     def _key_request(self):
         from api.schemas.deployment import DeploymentRequest  # noqa: WPS433
 
         return DeploymentRequest(
+            workspace_id=self.workspace_id,
             deploy_target="server",
             host="localhost",
             user="tester",
             auth={"method": "private_key", "private_key": "KEYDATA"},
             selected_roles=["example-role"],
-            inventory_vars={},
         )
 
     def _wait_for_terminal(self, svc, job_id: str) -> None:
@@ -276,13 +279,9 @@ class TestJobRunnerService(unittest.TestCase):
         vars_json = (Path(job.workspace_dir) / "vars.json").read_text(encoding="utf-8")
         vars_yaml = (Path(job.workspace_dir) / "vars.yml").read_text(encoding="utf-8")
 
-        for secret in ("supersecret", "db-pass", "secret-123", "tok-"):
+        for secret in ("supersecret",):
             self.assertNotIn(secret, request_text)
             self.assertNotIn(secret, vars_json)
             self.assertNotIn(secret, vars_yaml)
-
-        self.assertIn("********", request_text)
-        self.assertIn("********", vars_json)
-        self.assertIn("********", vars_yaml)
 
         self._wait_for_terminal(svc, job.job_id)

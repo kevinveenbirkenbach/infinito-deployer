@@ -157,7 +157,7 @@ For each role:
     * [x] password OR
     * [x] key
   * [x] selected_roles[]
-  * [x] inventory_vars (JSON)
+  * [x] workspace_id (inventory source)
 
 * [x] `POST /api/inventories/preview`
 
@@ -329,16 +329,15 @@ For each job:
 
 ---
 
-### 4.3 Inventory Variables
+### 4.3 Workspace Inventory (SPOT)
 
-* [x] JSON editor for vars
-* [x] Optional key/value UI
-* [x] “Preview Inventory” button
+* [x] Inventory is edited in Workspace & Files (inventory.yml, host_vars, group_vars)
+* [x] Deployment uses the workspace inventory directly
 
 **A/C**
 
-* [x] Invalid JSON is detected before submit
-* [x] Preview matches deployment behavior exactly
+* [x] Workspace inventory is the single source of truth
+* [x] Deployment matches the workspace inventory state
 
 ---
 

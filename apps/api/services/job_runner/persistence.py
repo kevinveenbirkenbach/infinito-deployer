@@ -7,7 +7,6 @@ from typing import Any, Dict, Mapping
 from api.schemas.deployment import DeploymentRequest
 
 from .util import atomic_write_json
-from .secrets import collect_secrets, mask_mapping
 
 
 def load_json(path: Path) -> Dict[str, Any]:
@@ -32,8 +31,4 @@ def mask_request_for_persistence(req: DeploymentRequest) -> Dict[str, Any]:
     auth = dict(data.get("auth") or {})
     method = auth.get("method")
     data["auth"] = {"method": method}  # drop password/private_key
-    secrets = collect_secrets(req)
-    data["inventory_vars"] = mask_mapping(
-        data.get("inventory_vars") or {}, secrets=secrets
-    )
     return data

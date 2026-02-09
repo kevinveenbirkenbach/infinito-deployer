@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
+import shutil
 import threading
 import uuid
+from pathlib import Path
 from typing import Any, Dict, List
 
 import yaml
@@ -11,13 +14,16 @@ from fastapi import HTTPException
 from api.schemas.deployment import DeploymentRequest
 from api.schemas.deployment_job import DeploymentJobOut, JobStatus
 from services.inventory_preview import build_inventory_preview
+from services.workspaces import WorkspaceService
 
 from .paths import job_paths, jobs_root
 from .persistence import load_json, mask_request_for_persistence, write_meta
 from .runner import start_process, terminate_process_group, write_runner_script
-from .secrets import collect_secrets, mask_mapping
+from .secrets import collect_secrets
 from .util import atomic_write_json, atomic_write_text, safe_mkdir, utc_iso
 from .log_hub import LogHub
+
+_WORKSPACE_SKIP_FILES = {"workspace.json", ".vault_pass"}
 
 
 class JobRunnerService:
@@ -28,7 +34,7 @@ class JobRunnerService:
       ${STATE_DIR}/jobs/<job_id>/
         job.json        (status, pid, timestamps)
         request.json    (masked request - no secrets)
-        inventory.yml   (placeholders for secrets)
+        inventory.yml   (copied from workspace)
         job.log         (stdout/stderr of runner)
         run.sh          (runner script)
     """
@@ -39,18 +45,61 @@ class JobRunnerService:
         self._secret_store: Dict[str, List[str]] = {}
         self._log_hub = LogHub()
 
+    def _copy_workspace_files(self, workspace_id: str, dest_root: Path) -> None:
+        svc = WorkspaceService()
+        src_root = svc.ensure(workspace_id)
+        inventory_path = src_root / "inventory.yml"
+        if not inventory_path.is_file():
+            raise HTTPException(
+                status_code=400, detail="workspace inventory.yml not found"
+            )
+
+        for dirpath, dirnames, filenames in os.walk(src_root):
+            rel = Path(dirpath).relative_to(src_root)
+            target_dir = dest_root / rel
+            safe_mkdir(target_dir)
+
+            # Skip hidden/system folders if they show up in the workspace root
+            dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+
+            for fname in filenames:
+                if fname in _WORKSPACE_SKIP_FILES:
+                    continue
+                src = Path(dirpath) / fname
+                dst = target_dir / fname
+                shutil.copy2(src, dst)
+
+    def _roles_from_inventory(self, inventory_path: Path) -> List[str]:
+        try:
+            raw = inventory_path.read_text(encoding="utf-8", errors="replace")
+            data = yaml.safe_load(raw) or {}
+            children = (data or {}).get("all", {}).get("children", {})
+            if isinstance(children, dict):
+                return [str(k).strip() for k in children.keys() if str(k).strip()]
+        except Exception:
+            return []
+        return []
+
     def create(self, req: DeploymentRequest) -> DeploymentJobOut:
         job_id = uuid.uuid4().hex[:12]
         p = job_paths(job_id)
         safe_mkdir(p.job_dir)
 
-        inv_yaml, _warnings = build_inventory_preview(req)
+        if req.workspace_id:
+            self._copy_workspace_files(req.workspace_id, p.job_dir)
+        else:
+            inv_yaml, _warnings = build_inventory_preview(req)
+            atomic_write_text(p.inventory_path, inv_yaml)
+
         secrets = collect_secrets(req)
         vars_data = self._build_vars(req, p, secrets)
+        if req.workspace_id and p.inventory_path.is_file():
+            roles = self._roles_from_inventory(p.inventory_path)
+            if roles:
+                vars_data["selected_roles"] = roles
 
         # Persist masked request + inventory (no secrets on disk)
         atomic_write_json(p.request_path, mask_request_for_persistence(req))
-        atomic_write_text(p.inventory_path, inv_yaml)
         atomic_write_json(p.vars_json_path, vars_data)
         atomic_write_text(
             p.vars_yaml_path,
@@ -197,10 +246,9 @@ class JobRunnerService:
     def _build_vars(
         self, req: DeploymentRequest, paths, secrets: List[str]
     ) -> Dict[str, Any]:
-        merged_vars: Dict[str, Any] = mask_mapping(
-            req.inventory_vars or {}, secrets=secrets
-        )
-        merged_vars["selected_roles"] = list(req.selected_roles)
+        merged_vars: Dict[str, Any] = {
+            "selected_roles": list(req.selected_roles),
+        }
 
         if req.auth.method == "private_key" and req.auth.private_key:
             atomic_write_text(paths.ssh_key_path, req.auth.private_key)

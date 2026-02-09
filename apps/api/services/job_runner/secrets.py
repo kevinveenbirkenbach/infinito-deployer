@@ -55,24 +55,6 @@ def _looks_like_token(value: str) -> bool:
     return False
 
 
-def _collect_from_vars(value: Any, *, key_hint: bool, out: List[str]) -> None:
-    if isinstance(value, dict):
-        for k, v in value.items():
-            hint = key_hint or _is_secret_key(str(k))
-            _collect_from_vars(v, key_hint=hint, out=out)
-        return
-
-    if isinstance(value, list):
-        for item in value:
-            _collect_from_vars(item, key_hint=key_hint, out=out)
-        return
-
-    if key_hint and isinstance(value, str):
-        s = value.strip()
-        if s:
-            out.append(s)
-
-
 def collect_secrets(req: DeploymentRequest) -> List[str]:
     secrets: List[str] = []
 
@@ -84,8 +66,6 @@ def collect_secrets(req: DeploymentRequest) -> List[str]:
             s = line.strip()
             if s:
                 secrets.append(s)
-
-    _collect_from_vars(req.inventory_vars or {}, key_hint=False, out=secrets)
 
     return _dedupe(secrets)
 

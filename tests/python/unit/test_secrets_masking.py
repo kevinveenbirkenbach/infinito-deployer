@@ -12,24 +12,19 @@ from services.job_runner.secrets import (
 class TestSecretsMasking(unittest.TestCase):
     def _password_request(self) -> DeploymentRequest:
         return DeploymentRequest(
+            workspace_id="abc123",
             deploy_target="server",
             host="localhost",
             user="root",
             auth={"method": "password", "password": "hunter2"},
             selected_roles=["base-role"],
-            inventory_vars={
-                "db_password": "db-pass",
-                "nested": {"api_token": "tok-123"},
-            },
         )
 
-    def test_collect_secrets_from_auth_and_inventory(self) -> None:
+    def test_collect_secrets_from_auth(self) -> None:
         req = self._password_request()
         secrets = collect_secrets(req)
 
         self.assertIn("hunter2", secrets)
-        self.assertIn("db-pass", secrets)
-        self.assertIn("tok-123", secrets)
 
     def test_mask_secrets_replaces_values_and_patterns(self) -> None:
         text = "password=hunter2 token=tok-123 sshpass -p secret"

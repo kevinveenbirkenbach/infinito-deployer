@@ -39,7 +39,7 @@ def create_deployment(req: DeploymentRequest) -> DeploymentCreateOut:
 
     Security:
       - Secrets (password/private_key) are never persisted.
-      - Inventory is written with placeholders for secrets.
+      - Inventory is copied from the workspace.
     """
     job = _jobs().create(req)
     return DeploymentCreateOut(job_id=job.job_id)

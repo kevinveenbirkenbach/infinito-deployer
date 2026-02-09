@@ -4,14 +4,14 @@ import { validateForm } from "./deploy_form.js";
  * @param {object} args
  * @param {object} args.credentials
  * @param {string[]} args.selectedRoles
- * @param {Record<string, any> | null} args.inventoryVars
- * @param {string | null} args.inventoryError
+ * @param {string | null} args.workspaceId
+ * @param {boolean} args.inventoryReady
  */
 export function buildDeploymentPayload({
   credentials,
   selectedRoles,
-  inventoryVars,
-  inventoryError,
+  workspaceId,
+  inventoryReady,
 }) {
   const errors = { ...validateForm(credentials) };
 
@@ -23,8 +23,12 @@ export function buildDeploymentPayload({
     errors.selectedRoles = "Select at least one role.";
   }
 
-  if (inventoryError) {
-    errors.inventoryVars = inventoryError;
+  if (!workspaceId) {
+    errors.workspace = "Workspace is not ready yet.";
+  }
+
+  if (!inventoryReady) {
+    errors.inventory = "Generate inventory in Workspace & Files first.";
   }
 
   const hasErrors = Object.keys(errors).length > 0;
@@ -40,19 +44,14 @@ export function buildDeploymentPayload({
     auth.private_key = String(credentials.privateKey ?? "");
   }
 
-  const vars =
-    inventoryVars && typeof inventoryVars === "object" && !Array.isArray(inventoryVars)
-      ? inventoryVars
-      : {};
-
   return {
     payload: {
+      workspace_id: workspaceId,
       deploy_target: credentials.deployTarget,
       host: String(credentials.host ?? "").trim(),
       user: String(credentials.user ?? "").trim(),
       auth,
       selected_roles: roles,
-      inventory_vars: vars,
     },
     errors: {},
   };

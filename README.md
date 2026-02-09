@@ -8,9 +8,9 @@ From this catalog, users can **filter, search, and select applications** without
 
 * target host (localhost, IP address, or domain),
 * user and authentication method (password or SSH key),
-* and role-specific inventory variables.
+* and the workspace inventory files (inventory.yml, host_vars, group_vars).
 
-Before execution, the system **generates and previews the exact inventory** that will be used. This makes the process transparent and auditable rather than implicit or opaque.
+Before execution, the system **uses the workspace inventory** that is visible and editable in the UI. This makes the process transparent and auditable rather than implicit or opaque.
 
 When deployment starts, the platform executes **the same CLI and Ansible commands** used by experienced operators, but exposes them through a **live, Docker-like web terminal**. Users can observe each step in real time, cancel safely, and trust that secrets are masked and never leaked.
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -46,6 +46,9 @@ class DeploymentAuth(BaseModel):
 
 
 class DeploymentRequest(BaseModel):
+    workspace_id: str = Field(
+        ..., min_length=1, description="Workspace ID (inventory source)"
+    )
     deploy_target: DeployTarget
     host: str = Field(..., min_length=1, description="localhost / IP / domain")
     user: str = Field(..., min_length=1, description="SSH user")
@@ -54,11 +57,7 @@ class DeploymentRequest(BaseModel):
     selected_roles: List[str] = Field(
         default_factory=list, description="List of role IDs (must not be empty)"
     )
-    inventory_vars: Dict[str, Any] = Field(
-        default_factory=dict, description="Arbitrary vars (JSON object)"
-    )
-
-    @field_validator("host", "user")
+    @field_validator("workspace_id", "host", "user")
     @classmethod
     def _strip_required(cls, v: str) -> str:
         s = (v or "").strip()
