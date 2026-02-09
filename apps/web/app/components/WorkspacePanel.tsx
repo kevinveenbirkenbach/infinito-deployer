@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, MouseEvent } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { json as jsonLang } from "@codemirror/lang-json";
 import { yaml as yamlLang } from "@codemirror/lang-yaml";
@@ -30,6 +30,7 @@ type WorkspacePanelProps = {
   credentials: CredentialsState;
   inventoryVars: Record<string, any> | null;
   onInventoryReadyChange?: (ready: boolean) => void;
+  onSelectedRolesChange?: (roles: string[]) => void;
 };
 
 type TreeNode = {
@@ -128,18 +129,41 @@ function encodePath(path: string) {
     .join("/");
 }
 
+function normalizeRoles(roles: string[]) {
+  return roles.map((role) => role.trim()).filter(Boolean);
+}
+
+function rolesKey(roles: string[]) {
+  return normalizeRoles(roles).sort().join("|");
+}
+
+function extractRolesFromInventory(content: string): string[] {
+  try {
+    const data = YAML.parse(content) ?? {};
+    const children = (data as any)?.all?.children;
+    if (!children || typeof children !== "object") return [];
+    return Object.keys(children).filter((key) => key && key.trim());
+  } catch {
+    return [];
+  }
+}
+
 export default function WorkspacePanel({
   baseUrl,
   selectedRoles,
   credentials,
   inventoryVars,
   onInventoryReadyChange,
+  onSelectedRolesChange,
 }: WorkspacePanelProps) {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [inventoryReady, setInventoryReady] = useState(false);
+  const [inventoryMode, setInventoryMode] = useState<"manual" | "auto">(
+    "manual"
+  );
 
   const [activePath, setActivePath] = useState<string | null>(null);
   const [editorValue, setEditorValue] = useState("");
@@ -155,12 +179,22 @@ export default function WorkspacePanel({
   const [allowEmptyPlain, setAllowEmptyPlain] = useState(false);
   const [forceOverwrite, setForceOverwrite] = useState(false);
   const [setValuesText, setSetValuesText] = useState("");
+  const [credentialsScope, setCredentialsScope] = useState<"all" | "single">(
+    "all"
+  );
+  const [credentialsRole, setCredentialsRole] = useState<string>("");
   const [credentialsBusy, setCredentialsBusy] = useState(false);
   const [credentialsError, setCredentialsError] = useState<string | null>(null);
   const [credentialsStatus, setCredentialsStatus] = useState<string | null>(null);
 
   const [zipBusy, setZipBusy] = useState(false);
   const [zipError, setZipError] = useState<string | null>(null);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const autoSyncRef = useRef(false);
+  const autoCredentialsKeyRef = useRef("");
 
   const [generateBusy, setGenerateBusy] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -172,6 +206,12 @@ export default function WorkspacePanel({
     path?: string;
     isDir: boolean;
   } | null>(null);
+
+  const inventoryEntry = useMemo(
+    () => files.find((entry) => entry.path === "inventory.yml") ?? null,
+    [files]
+  );
+  const inventoryModifiedAt = inventoryEntry?.modified_at ?? null;
 
   const tree = useMemo(() => buildTree(files), [files]);
   const treeItems = useMemo(
@@ -223,6 +263,13 @@ export default function WorkspacePanel({
     };
   }, [contextMenu]);
 
+  useEffect(() => {
+    if (credentialsScope !== "single") return;
+    setCredentialsRole((prev) =>
+      selectedRoles.includes(prev) ? prev : selectedRoles[0] ?? ""
+    );
+  }, [selectedRoles, credentialsScope]);
+
   const syncInventoryReady = (nextFiles: FileEntry[]) => {
     const ready = nextFiles.some((f) => f.path === "inventory.yml");
     setInventoryReady(ready);
@@ -247,6 +294,38 @@ export default function WorkspacePanel({
           .map((f: FileEntry) => f.path)
       );
       setOpenDirs(dirs);
+    }
+  };
+
+  const readWorkspaceFile = async (path: string) => {
+    if (!workspaceId) {
+      throw new Error("workspace not ready");
+    }
+    const res = await fetch(
+      `${baseUrl}/api/workspaces/${workspaceId}/files/${encodePath(path)}`,
+      { cache: "no-store" }
+    );
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    return String(data?.content ?? "");
+  };
+
+  const writeWorkspaceFile = async (path: string, content: string) => {
+    if (!workspaceId) {
+      throw new Error("workspace not ready");
+    }
+    const res = await fetch(
+      `${baseUrl}/api/workspaces/${workspaceId}/files/${encodePath(path)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      }
+    );
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
     }
   };
 
@@ -392,6 +471,16 @@ export default function WorkspacePanel({
       setEditorDirty(false);
       setEditorStatus("Saved.");
       await refreshFiles(workspaceId);
+      if (
+        inventoryMode === "auto" &&
+        activePath === "inventory.yml" &&
+        onSelectedRolesChange
+      ) {
+        const roles = extractRolesFromInventory(editorValue);
+        if (rolesKey(roles) !== rolesKey(selectedRoles)) {
+          onSelectedRolesChange(roles);
+        }
+      }
     } catch (err: any) {
       setEditorError(err?.message ?? "failed to save");
     } finally {
@@ -401,6 +490,7 @@ export default function WorkspacePanel({
 
   const canGenerate =
     !!workspaceId &&
+    !inventoryReady &&
     selectedRoles.length > 0 &&
     credentials.deployTarget &&
     credentials.host &&
@@ -445,16 +535,122 @@ export default function WorkspacePanel({
     }
   };
 
-  const generateCredentials = async () => {
+  const resolveTargetRoles = () => {
+    if (credentialsScope === "single") {
+      return credentialsRole ? [credentialsRole] : [];
+    }
+    return selectedRoles;
+  };
+
+  const syncInventoryWithSelection = async () => {
+    if (!workspaceId || !inventoryReady) return;
+    if (activePath === "inventory.yml" && editorDirty) return;
+
+    try {
+      const content = await readWorkspaceFile("inventory.yml");
+      const data = (YAML.parse(content) ?? {}) as Record<string, any>;
+      const allNode =
+        data.all && typeof data.all === "object" ? data.all : {};
+      const childrenNode =
+        allNode.children && typeof allNode.children === "object"
+          ? allNode.children
+          : {};
+
+      const desiredRoles = normalizeRoles(selectedRoles);
+      const desiredKey = rolesKey(desiredRoles);
+      const currentRoles = Object.keys(childrenNode).filter(
+        (key) => key && key.trim()
+      );
+      const currentKey = rolesKey(currentRoles);
+
+      let host = credentials.host?.trim() || "";
+      if (!host) {
+        for (const roleId of Object.keys(childrenNode)) {
+          const hosts = childrenNode?.[roleId]?.hosts;
+          if (hosts && typeof hosts === "object") {
+            const names = Object.keys(hosts);
+            if (names.length > 0) {
+              host = names[0];
+              break;
+            }
+          }
+        }
+      }
+
+      let changed = desiredKey !== currentKey;
+      const nextChildren: Record<string, any> = {};
+
+      desiredRoles.forEach((roleId) => {
+        const existing = childrenNode?.[roleId];
+        if (existing && typeof existing === "object") {
+          const nextEntry = { ...existing };
+          if (host) {
+            const hosts = nextEntry.hosts;
+            if (
+              !hosts ||
+              typeof hosts !== "object" ||
+              Object.keys(hosts).length === 0
+            ) {
+              nextEntry.hosts = { [host]: {} };
+              changed = true;
+            }
+          }
+          nextChildren[roleId] = nextEntry;
+        } else {
+          changed = true;
+          nextChildren[roleId] = host ? { hosts: { [host]: {} } } : { hosts: {} };
+        }
+      });
+
+      if (!changed) return;
+
+      const nextAll = { ...allNode, children: nextChildren };
+      const nextData = { ...data, all: nextAll };
+      const nextYaml = YAML.stringify(nextData);
+
+      await writeWorkspaceFile("inventory.yml", nextYaml);
+      if (activePath === "inventory.yml") {
+        setEditorValue(nextYaml);
+        setEditorDirty(false);
+      }
+      await refreshFiles(workspaceId);
+    } catch (err: any) {
+      setGenerateError(
+        err?.message ? `Auto sync failed: ${err.message}` : "Auto sync failed"
+      );
+    }
+  };
+
+  const syncSelectionFromInventory = async () => {
+    if (
+      !workspaceId ||
+      !inventoryReady ||
+      !onSelectedRolesChange ||
+      (activePath === "inventory.yml" && editorDirty)
+    )
+      return;
+
+    try {
+      const content = await readWorkspaceFile("inventory.yml");
+      const roles = extractRolesFromInventory(content);
+      if (rolesKey(roles) !== rolesKey(selectedRoles)) {
+        onSelectedRolesChange(roles);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const postCredentials = async (
+    targetRoles: string[],
+    force: boolean,
+    setValues: string[]
+  ) => {
     if (!workspaceId || !vaultPassword || credentialsBusy) return;
     setCredentialsBusy(true);
     setCredentialsError(null);
     setCredentialsStatus(null);
     try {
-      const setValues = setValuesText
-        .split(/[\n,]+/)
-        .map((value) => value.trim())
-        .filter(Boolean);
       const res = await fetch(
         `${baseUrl}/api/workspaces/${workspaceId}/credentials`,
         {
@@ -462,10 +658,10 @@ export default function WorkspacePanel({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             vault_password: vaultPassword,
-            selected_roles: selectedRoles,
+            selected_roles: targetRoles,
             allow_empty_plain: allowEmptyPlain,
             set_values: setValues.length > 0 ? setValues : undefined,
-            force: forceOverwrite,
+            force,
           }),
         }
       );
@@ -480,7 +676,6 @@ export default function WorkspacePanel({
         throw new Error(message);
       }
       setCredentialsStatus("Credentials generated.");
-      setVaultPassword("");
       await refreshFiles(workspaceId);
     } catch (err: any) {
       setCredentialsError(err?.message ?? "credential generation failed");
@@ -488,6 +683,135 @@ export default function WorkspacePanel({
       setCredentialsBusy(false);
     }
   };
+
+  const generateCredentials = async () => {
+    if (!workspaceId || !vaultPassword || credentialsBusy) return;
+    const targetRoles = resolveTargetRoles();
+    if (targetRoles.length === 0) {
+      setCredentialsError("Select a role to generate credentials.");
+      return;
+    }
+    const setValues =
+      credentialsScope === "single"
+        ? setValuesText
+            .split(/[\n,]+/)
+            .map((value) => value.trim())
+            .filter(Boolean)
+        : [];
+    if (inventoryMode === "auto") {
+      autoCredentialsKeyRef.current = [
+        "auto",
+        rolesKey(targetRoles),
+        allowEmptyPlain ? "1" : "0",
+        setValues.join(","),
+      ].join("|");
+    }
+    await postCredentials(targetRoles, forceOverwrite, setValues);
+  };
+
+  useEffect(() => {
+    if (inventoryMode !== "auto" || !workspaceId) return;
+    if (autoSyncRef.current) return;
+    if (activePath === "inventory.yml" && editorDirty) return;
+
+    const run = async () => {
+      autoSyncRef.current = true;
+      try {
+        if (!inventoryReady) {
+          if (canGenerate && !generateBusy && !workspaceLoading) {
+            await generateInventory();
+          }
+          return;
+        }
+        await syncInventoryWithSelection();
+      } finally {
+        autoSyncRef.current = false;
+      }
+    };
+
+    run();
+  }, [
+    inventoryMode,
+    workspaceId,
+    inventoryReady,
+    canGenerate,
+    generateBusy,
+    workspaceLoading,
+    selectedRoles,
+    credentials.host,
+    activePath,
+    editorDirty,
+  ]);
+
+  useEffect(() => {
+    if (
+      inventoryMode !== "auto" ||
+      !workspaceId ||
+      !inventoryReady ||
+      !onSelectedRolesChange
+    )
+      return;
+    if (activePath === "inventory.yml" && editorDirty) return;
+
+    void syncSelectionFromInventory();
+  }, [
+    inventoryMode,
+    workspaceId,
+    inventoryReady,
+    inventoryModifiedAt,
+    onSelectedRolesChange,
+    selectedRoles,
+    activePath,
+    editorDirty,
+  ]);
+
+  useEffect(() => {
+    if (inventoryMode !== "auto") return;
+    if (!inventoryReady || !workspaceId || credentialsBusy) return;
+    if (!vaultPassword) return;
+
+    const targetRoles = resolveTargetRoles();
+    if (targetRoles.length === 0) return;
+
+    const setValues =
+      credentialsScope === "single"
+        ? setValuesText
+            .split(/[\n,]+/)
+            .map((value) => value.trim())
+            .filter(Boolean)
+        : [];
+
+    const key = [
+      "auto",
+      rolesKey(targetRoles),
+      allowEmptyPlain ? "1" : "0",
+      setValues.join(","),
+    ].join("|");
+
+    if (autoCredentialsKeyRef.current === key) return;
+    autoCredentialsKeyRef.current = key;
+
+    void postCredentials(targetRoles, false, setValues);
+  }, [
+    inventoryMode,
+    inventoryReady,
+    workspaceId,
+    vaultPassword,
+    credentialsBusy,
+    selectedRoles,
+    credentialsScope,
+    credentialsRole,
+    allowEmptyPlain,
+    setValuesText,
+  ]);
+
+  const canGenerateCredentials =
+    inventoryReady &&
+    !!vaultPassword &&
+    !credentialsBusy &&
+    (credentialsScope === "all"
+      ? selectedRoles.length > 0
+      : !!credentialsRole);
 
   const downloadZip = async () => {
     if (!workspaceId) return;
@@ -514,6 +838,57 @@ export default function WorkspacePanel({
     } finally {
       setZipBusy(false);
     }
+  };
+
+  const uploadZip = async (file: File) => {
+    if (!workspaceId || uploadBusy) return;
+    const name = file?.name || "";
+    if (!name.toLowerCase().endsWith(".zip")) {
+      setUploadError("Please select a .zip file.");
+      return;
+    }
+    setUploadBusy(true);
+    setUploadError(null);
+    setUploadStatus(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(
+        `${baseUrl}/api/workspaces/${workspaceId}/upload.zip`,
+        {
+          method: "POST",
+          body: form,
+        }
+      );
+      if (!res.ok) {
+        let message = `HTTP ${res.status}`;
+        try {
+          const data = await res.json();
+          if (data?.detail) message = data.detail;
+        } catch {
+          // ignore
+        }
+        throw new Error(message);
+      }
+      setUploadStatus("Workspace loaded.");
+      await refreshFiles(workspaceId);
+    } catch (err: any) {
+      setUploadError(err?.message ?? "failed to upload zip");
+    } finally {
+      setUploadBusy(false);
+    }
+  };
+
+  const onUploadSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      void uploadZip(file);
+    }
+    event.target.value = "";
+  };
+
+  const openUploadPicker = () => {
+    uploadInputRef.current?.click();
   };
 
   const createFile = async (baseDir?: string) => {
@@ -759,17 +1134,76 @@ export default function WorkspacePanel({
           <label style={{ fontSize: 12, color: "#64748b" }}>
             Inventory generation
           </label>
+          <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 12, color: "#64748b" }}>
+              Inventory mode
+            </span>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 12,
+                color: "#475569",
+              }}
+            >
+              <input
+                type="radio"
+                name="inventory-mode"
+                checked={inventoryMode === "manual"}
+                onChange={() => setInventoryMode("manual")}
+              />
+              Manual
+            </label>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 12,
+                color: "#475569",
+              }}
+            >
+              <input
+                type="radio"
+                name="inventory-mode"
+                checked={inventoryMode === "auto"}
+                onChange={() => setInventoryMode("auto")}
+              />
+              Automatic (sync with selected roles)
+            </label>
+            {inventoryMode === "auto" ? (
+              <p style={{ margin: 0, color: "#64748b", fontSize: 12 }}>
+                Auto mode creates/updates inventory and triggers credentials
+                when a vault password is present. Overwrite is never forced.
+              </p>
+            ) : null}
+          </div>
           <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
             <button
               onClick={generateInventory}
-              disabled={!canGenerate || generateBusy || workspaceLoading}
+              disabled={
+                inventoryMode === "auto" ||
+                !canGenerate ||
+                generateBusy ||
+                workspaceLoading
+              }
               style={{
                 padding: "8px 14px",
                 borderRadius: 999,
                 border: "1px solid #0f172a",
-                background: canGenerate ? "#0f172a" : "#e2e8f0",
-                color: canGenerate ? "#fff" : "#64748b",
-                cursor: canGenerate ? "pointer" : "not-allowed",
+                background:
+                  inventoryMode === "manual" && canGenerate
+                    ? "#0f172a"
+                    : "#e2e8f0",
+                color:
+                  inventoryMode === "manual" && canGenerate
+                    ? "#fff"
+                    : "#64748b",
+                cursor:
+                  inventoryMode === "manual" && canGenerate
+                    ? "pointer"
+                    : "not-allowed",
                 fontSize: 12,
               }}
             >
@@ -791,9 +1225,17 @@ export default function WorkspacePanel({
               Refresh files
             </button>
           </div>
-          {!canGenerate ? (
+          {inventoryReady && inventoryMode === "manual" ? (
+            <p style={{ margin: "8px 0 0", color: "#b91c1c", fontSize: 12 }}>
+              Inventory already exists. Delete inventory.yml to regenerate.
+            </p>
+          ) : !inventoryReady && !canGenerate ? (
             <p style={{ margin: "8px 0 0", color: "#b91c1c", fontSize: 12 }}>
               Select roles and fill host/user to enable inventory generation.
+            </p>
+          ) : inventoryReady && inventoryMode === "auto" ? (
+            <p style={{ margin: "8px 0 0", color: "#0f766e", fontSize: 12 }}>
+              Auto mode is keeping inventory.yml in sync.
             </p>
           ) : null}
           {generateError ? (
@@ -811,42 +1253,25 @@ export default function WorkspacePanel({
             border: "1px solid rgba(15, 23, 42, 0.1)",
           }}
         >
-          <label style={{ fontSize: 12, color: "#64748b" }}>
-            Credentials & export
-          </label>
+          <label style={{ fontSize: 12, color: "#64748b" }}>Credentials</label>
           <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
             <button
               onClick={generateCredentials}
-              disabled={!inventoryReady || !vaultPassword || credentialsBusy}
+              disabled={!canGenerateCredentials}
               style={{
                 padding: "8px 12px",
                 borderRadius: 999,
                 border: "1px solid #0f172a",
                 background:
-                  inventoryReady && vaultPassword ? "#0f172a" : "#e2e8f0",
+                  canGenerateCredentials ? "#0f172a" : "#e2e8f0",
                 color:
-                  inventoryReady && vaultPassword ? "#fff" : "#64748b",
+                  canGenerateCredentials ? "#fff" : "#64748b",
                 cursor:
-                  inventoryReady && vaultPassword ? "pointer" : "not-allowed",
+                  canGenerateCredentials ? "pointer" : "not-allowed",
                 fontSize: 12,
               }}
             >
               {credentialsBusy ? "Working..." : "Generate credentials"}
-            </button>
-            <button
-              onClick={downloadZip}
-              disabled={!inventoryReady || zipBusy}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 999,
-                border: "1px solid #cbd5e1",
-                background: "#fff",
-                color: "#334155",
-                cursor: inventoryReady ? "pointer" : "not-allowed",
-                fontSize: 12,
-              }}
-            >
-              {zipBusy ? "Preparing..." : "Download ZIP"}
             </button>
           </div>
           <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
@@ -862,17 +1287,82 @@ export default function WorkspacePanel({
                 fontSize: 12,
               }}
             />
-            <input
-              value={setValuesText}
-              onChange={(e) => setSetValuesText(e.target.value)}
-              placeholder="Optional --set values (key=value, comma or newline)"
-              style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                border: "1px solid #cbd5e1",
-                fontSize: 12,
-              }}
-            />
+            {credentialsScope === "single" ? (
+              <input
+                value={setValuesText}
+                onChange={(e) => setSetValuesText(e.target.value)}
+                placeholder="Optional --set values (key=value, comma or newline)"
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  border: "1px solid #cbd5e1",
+                  fontSize: 12,
+                }}
+              />
+            ) : null}
+            <div style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontSize: 12, color: "#64748b" }}>
+                Generate for
+              </span>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 12,
+                  color: "#475569",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="credentials-scope"
+                  checked={credentialsScope === "all"}
+                  onChange={() => setCredentialsScope("all")}
+                />
+                All selected roles
+              </label>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 12,
+                  color: "#475569",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="credentials-scope"
+                  checked={credentialsScope === "single"}
+                  onChange={() => setCredentialsScope("single")}
+                />
+                Single role
+              </label>
+              {credentialsScope === "single" ? (
+                <select
+                  value={credentialsRole}
+                  onChange={(e) => setCredentialsRole(e.target.value)}
+                  disabled={selectedRoles.length === 0}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #cbd5e1",
+                    fontSize: 12,
+                    background: selectedRoles.length ? "#fff" : "#f1f5f9",
+                    color: selectedRoles.length ? "#0f172a" : "#94a3b8",
+                  }}
+                >
+                  {selectedRoles.length === 0 ? (
+                    <option value="">No roles selected</option>
+                  ) : null}
+                  {selectedRoles.map((roleId) => (
+                    <option key={roleId} value={roleId}>
+                      {roleId}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
             <label
               style={{
                 display: "flex",
@@ -905,6 +1395,11 @@ export default function WorkspacePanel({
               />
               Overwrite existing credentials
             </label>
+            {inventoryMode === "auto" ? (
+              <span style={{ fontSize: 11, color: "#64748b" }}>
+                Auto mode never forces overwrite. Manual clicks can use it.
+              </span>
+            ) : null}
           </div>
           {credentialsError ? (
             <p style={{ margin: "8px 0 0", color: "#b91c1c", fontSize: 12 }}>
@@ -916,9 +1411,71 @@ export default function WorkspacePanel({
               {credentialsStatus}
             </p>
           ) : null}
+        </div>
+
+        <div
+          style={{
+            padding: 16,
+            borderRadius: 18,
+            background: "#fff",
+            border: "1px solid rgba(15, 23, 42, 0.1)",
+          }}
+        >
+          <label style={{ fontSize: 12, color: "#64748b" }}>
+            Workspace import/export
+          </label>
+          <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+            <button
+              onClick={downloadZip}
+              disabled={!workspaceId || zipBusy}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 999,
+                border: "1px solid #cbd5e1",
+                background: "#fff",
+                color: "#334155",
+                cursor: workspaceId ? "pointer" : "not-allowed",
+                fontSize: 12,
+              }}
+            >
+              {zipBusy ? "Preparing..." : "Download ZIP"}
+            </button>
+            <button
+              onClick={openUploadPicker}
+              disabled={!workspaceId || uploadBusy}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 999,
+                border: "1px solid #0f172a",
+                background: workspaceId ? "#0f172a" : "#e2e8f0",
+                color: workspaceId ? "#fff" : "#64748b",
+                cursor: workspaceId ? "pointer" : "not-allowed",
+                fontSize: 12,
+              }}
+            >
+              {uploadBusy ? "Uploading..." : "Upload ZIP"}
+            </button>
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              onChange={onUploadSelect}
+              style={{ display: "none" }}
+            />
+          </div>
+          {uploadError ? (
+            <p style={{ margin: "8px 0 0", color: "#b91c1c", fontSize: 12 }}>
+              {uploadError}
+            </p>
+          ) : null}
           {zipError ? (
             <p style={{ margin: "8px 0 0", color: "#b91c1c", fontSize: 12 }}>
               {zipError}
+            </p>
+          ) : null}
+          {uploadStatus ? (
+            <p style={{ margin: "8px 0 0", color: "#0f766e", fontSize: 12 }}>
+              {uploadStatus}
             </p>
           ) : null}
         </div>

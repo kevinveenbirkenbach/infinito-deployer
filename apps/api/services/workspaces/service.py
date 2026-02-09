@@ -292,6 +292,9 @@ class WorkspaceService:
 
     def generate_inventory(self, workspace_id: str, payload: Dict[str, Any]) -> None:
         root = self.ensure(workspace_id)
+        inventory_path = root / INVENTORY_FILENAME
+        if inventory_path.exists():
+            raise HTTPException(status_code=409, detail="inventory already exists")
         safe_mkdir(root / "host_vars")
         safe_mkdir(root / "group_vars")
 
@@ -331,7 +334,7 @@ class WorkspaceService:
             allow_unicode=True,
         )
 
-        atomic_write_text(root / INVENTORY_FILENAME, inventory_yaml)
+        atomic_write_text(inventory_path, inventory_yaml)
         host_vars_name = _sanitize_host_filename(host)
         atomic_write_text(
             root / "host_vars" / f"{host_vars_name}.yml",
@@ -479,3 +482,80 @@ class WorkspaceService:
                     rel = fpath.relative_to(root).as_posix()
                     zf.write(fpath, rel)
         return buf.getvalue()
+
+    def _refresh_meta_after_upload(self, root: Path) -> None:
+        meta = _load_meta(root)
+        changed = False
+
+        inventory_path = root / INVENTORY_FILENAME
+        if inventory_path.exists() and not meta.get("inventory_generated_at"):
+            meta["inventory_generated_at"] = _now_iso()
+            changed = True
+
+        host_vars_file = meta.get("host_vars_file")
+        if host_vars_file:
+            try:
+                if not _safe_resolve(root, host_vars_file).is_file():
+                    host_vars_file = None
+            except HTTPException:
+                host_vars_file = None
+        if not host_vars_file:
+            host_vars_dir = root / "host_vars"
+            if host_vars_dir.is_dir():
+                candidates = sorted(
+                    [
+                        p
+                        for p in host_vars_dir.iterdir()
+                        if p.is_file() and p.suffix in (".yml", ".yaml")
+                    ]
+                )
+                if candidates:
+                    meta["host_vars_file"] = f"host_vars/{candidates[0].name}"
+                    changed = True
+
+        if changed:
+            _write_meta(root, meta)
+
+    def load_zip(self, workspace_id: str, data: bytes) -> None:
+        import zipfile
+
+        root = self.ensure(workspace_id)
+        try:
+            zf = zipfile.ZipFile(BytesIO(data))
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid zip")
+
+        root_resolved = root.resolve()
+        with zf:
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                name = (info.filename or "").replace("\\", "/")
+                if not name or name.endswith("/"):
+                    continue
+                if name.startswith("/") or name.startswith("\\"):
+                    continue
+                if re.match(r"^[A-Za-z]:", name):
+                    continue
+
+                parts = [part for part in name.split("/") if part]
+                if not parts or any(part == ".." for part in parts):
+                    continue
+                if any(part in _HIDDEN_FILES for part in parts):
+                    continue
+
+                target = root / "/".join(parts)
+                resolved = target.resolve()
+                if resolved == root_resolved or root_resolved not in resolved.parents:
+                    continue
+
+                safe_mkdir(resolved.parent)
+                try:
+                    with zf.open(info) as src, open(resolved, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                except Exception as exc:
+                    raise HTTPException(
+                        status_code=500, detail=f"failed to extract zip: {exc}"
+                    )
+
+        self._refresh_meta_after_upload(root)

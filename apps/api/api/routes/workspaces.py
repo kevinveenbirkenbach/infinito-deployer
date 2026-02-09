@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from fastapi import APIRouter
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from api.schemas.workspace import (
@@ -18,6 +18,7 @@ from api.schemas.workspace import (
     WorkspaceFileWriteIn,
     WorkspaceGenerateIn,
     WorkspaceGenerateOut,
+    WorkspaceUploadOut,
 )
 from services.workspaces import WorkspaceService
 
@@ -125,3 +126,15 @@ def download_zip(workspace_id: str) -> StreamingResponse:
         media_type="application/zip",
         headers=headers,
     )
+
+
+@router.post("/{workspace_id}/upload.zip", response_model=WorkspaceUploadOut)
+async def upload_zip(
+    workspace_id: str, file: UploadFile = File(...)
+) -> WorkspaceUploadOut:
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="zip file required")
+    data = await file.read()
+    _svc().load_zip(workspace_id, data)
+    return WorkspaceUploadOut(ok=True, files=_svc().list_files(workspace_id))

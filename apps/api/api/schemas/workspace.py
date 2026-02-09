@@ -64,6 +64,11 @@ class WorkspaceGenerateOut(BaseModel):
     warnings: List[str] = Field(default_factory=list)
 
 
+class WorkspaceUploadOut(BaseModel):
+    ok: bool
+    files: List[WorkspaceFileEntry]
+
+
 class WorkspaceCredentialsIn(BaseModel):
     vault_password: str = Field(..., min_length=1)
     selected_roles: Optional[List[str]] = None

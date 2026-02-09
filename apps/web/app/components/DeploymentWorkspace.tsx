@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import RoleDashboard from "./RoleDashboard";
 import DeploymentCredentialsForm from "./DeploymentCredentialsForm";
 import InventoryVariablesPanel from "./InventoryVariablesPanel";
@@ -75,6 +75,18 @@ export default function DeploymentWorkspace({
   const selectedRoles = useMemo(
     () => Array.from(selected.values()),
     [selected]
+  );
+
+  const applySelectedRoles = useCallback(
+    (rolesFromInventory: string[]) => {
+      const available = roles.map((role) => role.id);
+      const allowed = available.length ? new Set(available) : null;
+      const next = (rolesFromInventory || []).filter((id) =>
+        allowed ? allowed.has(id) : true
+      );
+      setSelected(new Set(next));
+    },
+    [roles]
   );
 
   const toggleSelected = (id: string) => {
@@ -171,6 +183,7 @@ export default function DeploymentWorkspace({
         credentials={credentials}
         inventoryVars={inventoryVars}
         onInventoryReadyChange={setInventoryReady}
+        onSelectedRolesChange={applySelectedRoles}
       />
 
       <InventoryVariablesPanel

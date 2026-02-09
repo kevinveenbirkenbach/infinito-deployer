@@ -9,12 +9,14 @@ Interactive creation, editing, and export of a complete inventory including cred
 
 - [x] Detect when **no inventory exists** (session / workspace / job)
 - [x] After app/role selection, **show a “Generate Inventory” button**
+- [x] Allow inventory generation **only if inventory.yml does not exist**
 - [x] Disable or de-prioritize “Preview Inventory” until an inventory exists
 - [x] Display a clear UI hint that an inventory must be generated first
 
 **Acceptance Criteria**
 - [x] Without an existing inventory, “Generate Inventory” is visible
 - [x] Clicking it creates a valid initial inventory structure
+- [x] If inventory.yml exists, generation is disabled and API rejects regeneration
 
 ---
 
@@ -26,7 +28,6 @@ Interactive creation, editing, and export of a complete inventory including cred
   - [x] `inventory.yml` (or defined main inventory file)
   - [x] Host file (e.g. `host_vars/<host>.yml`)
   - [x] Optional `group_vars/`
-  - [x] Optional `vars.json` / `vars.yml`
 - [x] Temporary vault password file is prepared (initially empty)
 
 **Acceptance Criteria**
@@ -74,6 +75,7 @@ Interactive creation, editing, and export of a complete inventory including cred
   - [x] `--vault-password-file`
   - [x] Optional `--set`
   - [x] Optional `--allow-empty-plain`
+- [x] Allow generating credentials **for all roles or a single role**
 - [x] Resulting changes are immediately visible in the file browser
 
 **Acceptance Criteria**
@@ -83,9 +85,10 @@ Interactive creation, editing, and export of a complete inventory including cred
 
 ---
 
-## 6. ZIP Export
+## 6. ZIP Export / Import
 
 - [x] Provide a “Download ZIP” button in the UI
+- [x] Provide an “Upload ZIP” button to load a workspace configuration
 - [x] ZIP contains **all workspace files**
 - [x] Temporary vault password file is **excluded by default**
 - [x] ZIP is generated server-side
@@ -93,6 +96,7 @@ Interactive creation, editing, and export of a complete inventory including cred
 **Acceptance Criteria**
 - [x] ZIP exactly matches the visible workspace state
 - [x] No sensitive temporary files are included
+- [x] Uploading a ZIP updates the workspace contents safely
 
 ---
 
@@ -105,6 +109,7 @@ Interactive creation, editing, and export of a complete inventory including cred
 - [x] `PUT /api/workspaces/{id}/files/{path}`
 - [x] `POST /api/workspaces/{id}/credentials`
 - [x] `GET /api/workspaces/{id}/download.zip`
+- [x] `POST /api/workspaces/{id}/upload.zip`
 - [x] Masking & input validation enabled everywhere
 
 **Acceptance Criteria**
@@ -122,6 +127,7 @@ Interactive creation, editing, and export of a complete inventory including cred
   4. Generate credentials
   5. Export ZIP **or** deploy
 - [x] Dedicated “Files” / “Workspace” tab or section
+- [x] Manual vs. automatic inventory mode (auto-sync roles + auto-credentials)
 
 **Acceptance Criteria**
 - [x] Users always understand the current step and state
