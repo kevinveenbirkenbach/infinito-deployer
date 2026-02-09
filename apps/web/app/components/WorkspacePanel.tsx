@@ -22,6 +22,7 @@ type FileEntry = {
 
 type CredentialsState = {
   deployTarget: string;
+  alias: string;
   host: string;
   user: string;
   authMethod: string;
@@ -29,12 +30,15 @@ type CredentialsState = {
 
 type WorkspacePanelProps = {
   baseUrl: string;
-  selectedRoles: string[];
+  selectedRolesByAlias: Record<string, string[]>;
   credentials: CredentialsState;
   onCredentialsPatch?: (patch: Partial<CredentialsState>) => void;
   onInventoryReadyChange?: (ready: boolean) => void;
-  onSelectedRolesChange?: (roles: string[]) => void;
+  onSelectedRolesByAliasChange?: (rolesByAlias: Record<string, string[]>) => void;
   onWorkspaceIdChange?: (id: string | null) => void;
+  aliasRenames?: { from: string; to: string }[];
+  onAliasRenamesHandled?: (count: number) => void;
+  selectionTouched?: boolean;
 };
 
 type TreeNode = {
@@ -133,6 +137,20 @@ function encodePath(path: string) {
     .join("/");
 }
 
+function hostVarsAliasesFromFiles(entries: FileEntry[]) {
+  return entries
+    .filter(
+      (entry) =>
+        entry.path.startsWith("host_vars/") &&
+        !entry.is_dir &&
+        (entry.path.endsWith(".yml") || entry.path.endsWith(".yaml"))
+    )
+    .map((entry) => entry.path.split("/").pop() || "")
+    .map((name) => name.replace(/\.ya?ml$/i, ""))
+    .map((alias) => alias.trim())
+    .filter(Boolean);
+}
+
 function normalizeRoles(roles: string[]) {
   return roles.map((role) => role.trim()).filter(Boolean);
 }
@@ -141,22 +159,34 @@ function rolesKey(roles: string[]) {
   return normalizeRoles(roles).sort().join("|");
 }
 
-function sanitizeHostFilename(host: string) {
-  const cleaned = host.trim().replace(/[^A-Za-z0-9._-]/g, "_");
+function rolesByAliasKey(map: Record<string, string[]>) {
+  const entries: Array<[string, string[]]> = Object.entries(map || {}).map(
+    ([alias, roles]) => [
+      alias,
+      normalizeRoles(Array.isArray(roles) ? roles : []).sort(),
+    ]
+  );
+  entries.sort(([a], [b]) => a.localeCompare(b));
+  return JSON.stringify(entries);
+}
+
+function sanitizeAliasFilename(alias: string) {
+  const cleaned = alias.trim().replace(/[^A-Za-z0-9._-]/g, "_");
   return cleaned || "host";
 }
 
-function pickHostVarsPath(entries: FileEntry[], host: string) {
+function pickHostVarsPath(entries: FileEntry[], alias: string) {
   const hostVars = entries.filter(
     (entry) =>
       entry.path.startsWith("host_vars/") &&
       (entry.path.endsWith(".yml") || entry.path.endsWith(".yaml"))
   );
-  if (host) {
-    const candidate = `host_vars/${sanitizeHostFilename(host)}.yml`;
+  if (alias) {
+    const candidate = `host_vars/${sanitizeAliasFilename(alias)}.yml`;
     if (hostVars.some((entry) => entry.path === candidate)) {
       return candidate;
     }
+    return null;
   }
   const sorted = hostVars
     .map((entry) => entry.path)
@@ -164,25 +194,40 @@ function pickHostVarsPath(entries: FileEntry[], host: string) {
   return sorted[0] ?? null;
 }
 
-function extractRolesFromInventory(content: string): string[] {
+function extractRolesByAlias(content: string): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
   try {
     const data = YAML.parse(content) ?? {};
     const children = (data as any)?.all?.children;
-    if (!children || typeof children !== "object") return [];
-    return Object.keys(children).filter((key) => key && key.trim());
+    if (!children || typeof children !== "object") return out;
+    Object.entries(children).forEach(([roleId, roleValue]) => {
+      if (!roleId || typeof roleId !== "string") return;
+      const hosts = (roleValue as any)?.hosts;
+      if (!hosts || typeof hosts !== "object") return;
+      Object.keys(hosts).forEach((alias) => {
+        const trimmed = String(alias || "").trim();
+        if (!trimmed) return;
+        if (!out[trimmed]) out[trimmed] = [];
+        out[trimmed].push(roleId);
+      });
+    });
   } catch {
-    return [];
+    return out;
   }
+  return out;
 }
 
 export default function WorkspacePanel({
   baseUrl,
-  selectedRoles,
+  selectedRolesByAlias,
   credentials,
   onCredentialsPatch,
   onInventoryReadyChange,
-  onSelectedRolesChange,
+  onSelectedRolesByAliasChange,
   onWorkspaceIdChange,
+  aliasRenames,
+  onAliasRenamesHandled,
+  selectionTouched,
 }: WorkspacePanelProps) {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
@@ -237,14 +282,16 @@ export default function WorkspacePanel({
     isDir: boolean;
   } | null>(null);
 
+  const activeAlias = (credentials.alias || "").trim();
+
   const inventoryEntry = useMemo(
     () => files.find((entry) => entry.path === "inventory.yml") ?? null,
     [files]
   );
   const inventoryModifiedAt = inventoryEntry?.modified_at ?? null;
   const hostVarsPath = useMemo(
-    () => pickHostVarsPath(files, credentials.host),
-    [files, credentials.host]
+    () => pickHostVarsPath(files, activeAlias),
+    [files, activeAlias]
   );
   const hostVarsEntry = useMemo(
     () =>
@@ -254,6 +301,15 @@ export default function WorkspacePanel({
     [files, hostVarsPath]
   );
   const hostVarsModifiedAt = hostVarsEntry?.modified_at ?? null;
+  const hostVarsAliases = useMemo(
+    () => hostVarsAliasesFromFiles(files),
+    [files]
+  );
+
+  const activeRoles = useMemo(
+    () => normalizeRoles(selectedRolesByAlias[activeAlias] ?? []),
+    [selectedRolesByAlias, activeAlias]
+  );
 
   const tree = useMemo(() => buildTree(files), [files]);
   const treeItems = useMemo(
@@ -352,9 +408,9 @@ export default function WorkspacePanel({
   useEffect(() => {
     if (credentialsScope !== "single") return;
     setCredentialsRole((prev) =>
-      selectedRoles.includes(prev) ? prev : selectedRoles[0] ?? ""
+      activeRoles.includes(prev) ? prev : activeRoles[0] ?? ""
     );
-  }, [selectedRoles, credentialsScope]);
+  }, [activeRoles, credentialsScope]);
 
   useEffect(() => {
     inventorySeededRef.current = false;
@@ -367,16 +423,60 @@ export default function WorkspacePanel({
   }, [inventoryReady]);
 
   useEffect(() => {
+    if (activeAlias) {
+      inventorySeededRef.current = false;
+    }
+  }, [activeAlias]);
+
+  useEffect(() => {
     if (!workspaceId || !inventoryReady) return;
-    if (!onSelectedRolesChange) {
+    if (!onSelectedRolesByAliasChange) {
       inventorySeededRef.current = true;
     }
-  }, [workspaceId, inventoryReady, onSelectedRolesChange]);
+  }, [workspaceId, inventoryReady, onSelectedRolesByAliasChange]);
+
+  useEffect(() => {
+    if (selectionTouched) {
+      inventorySeededRef.current = true;
+    }
+  }, [selectionTouched]);
+
+  useEffect(() => {
+    if (!onSelectedRolesByAliasChange) return;
+    if (hostVarsAliases.length === 0) return;
+    const merged = mergeRolesByAlias(selectedRolesByAlias);
+    if (rolesByAliasKey(merged) !== rolesByAliasKey(selectedRolesByAlias)) {
+      onSelectedRolesByAliasChange(merged);
+    }
+  }, [hostVarsAliases, onSelectedRolesByAliasChange, selectedRolesByAlias]);
 
   const syncInventoryReady = (nextFiles: FileEntry[]) => {
     const ready = nextFiles.some((f) => f.path === "inventory.yml");
     setInventoryReady(ready);
     onInventoryReadyChange?.(ready);
+  };
+
+  const mergeRolesByAlias = (
+    incoming: Record<string, string[]>
+  ): Record<string, string[]> => {
+    const merged: Record<string, string[]> = {};
+    Object.keys(selectedRolesByAlias || {}).forEach((alias) => {
+      merged[alias] = incoming?.[alias] ? normalizeRoles(incoming[alias]) : [];
+    });
+    Object.entries(incoming || {}).forEach(([alias, roles]) => {
+      if (!merged[alias]) {
+        merged[alias] = normalizeRoles(roles || []);
+      }
+    });
+    hostVarsAliases.forEach((alias) => {
+      if (!merged[alias]) {
+        merged[alias] = [];
+      }
+    });
+    if (activeAlias && !merged[activeAlias]) {
+      merged[activeAlias] = [];
+    }
+    return merged;
   };
 
   const refreshFiles = async (id: string) => {
@@ -425,6 +525,23 @@ export default function WorkspacePanel({
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
+      }
+    );
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+  };
+
+  const renameWorkspaceFile = async (path: string, newPath: string) => {
+    if (!workspaceId) {
+      throw new Error("workspace not ready");
+    }
+    const res = await fetch(
+      `${baseUrl}/api/workspaces/${workspaceId}/files/${encodePath(path)}/rename`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ new_path: newPath }),
       }
     );
     if (!res.ok) {
@@ -581,10 +698,11 @@ export default function WorkspacePanel({
       setEditorDirty(false);
       setEditorStatus("Saved.");
       await refreshFiles(workspaceId);
-      if (activePath === "inventory.yml" && onSelectedRolesChange) {
-        const roles = extractRolesFromInventory(editorValue);
-        if (rolesKey(roles) !== rolesKey(selectedRoles)) {
-          onSelectedRolesChange(roles);
+      if (activePath === "inventory.yml" && onSelectedRolesByAliasChange) {
+        const rolesByAlias = extractRolesByAlias(editorValue);
+        const merged = mergeRolesByAlias(rolesByAlias);
+        if (rolesByAliasKey(merged) !== rolesByAliasKey(selectedRolesByAlias)) {
+          onSelectedRolesByAliasChange(merged);
         }
       }
     } catch (err: any) {
@@ -597,7 +715,8 @@ export default function WorkspacePanel({
   const canGenerate =
     !!workspaceId &&
     !inventoryReady &&
-    selectedRoles.length > 0 &&
+    activeAlias &&
+    activeRoles.length > 0 &&
     credentials.deployTarget &&
     credentials.host &&
     credentials.user;
@@ -609,10 +728,11 @@ export default function WorkspacePanel({
     try {
       const payload = {
         deploy_target: credentials.deployTarget,
+        alias: activeAlias,
         host: credentials.host,
         user: credentials.user,
         auth_method: credentials.authMethod || null,
-        selected_roles: selectedRoles,
+        selected_roles: activeRoles,
       };
       const res = await fetch(
         `${baseUrl}/api/workspaces/${workspaceId}/generate-inventory`,
@@ -648,11 +768,55 @@ export default function WorkspacePanel({
     if (credentialsScope === "single") {
       return credentialsRole ? [credentialsRole] : [];
     }
-    return selectedRoles;
+    return activeRoles;
+  };
+
+  const renameAliasInInventory = async (fromAlias: string, toAlias: string) => {
+    if (!workspaceId || !inventoryReady) return;
+    const content = await readWorkspaceFile("inventory.yml");
+    const data = (YAML.parse(content) ?? {}) as Record<string, any>;
+    const allNode = data.all && typeof data.all === "object" ? data.all : {};
+    const childrenNode =
+      allNode.children && typeof allNode.children === "object"
+        ? allNode.children
+        : {};
+
+    let changed = false;
+    const nextChildren: Record<string, any> = { ...childrenNode };
+
+    Object.entries(childrenNode).forEach(([roleId, entryValue]) => {
+      if (!entryValue || typeof entryValue !== "object") return;
+      const entry = { ...(entryValue as Record<string, any>) };
+      const hosts =
+        entry.hosts && typeof entry.hosts === "object"
+          ? { ...entry.hosts }
+          : null;
+      if (!hosts) return;
+      if (!Object.prototype.hasOwnProperty.call(hosts, fromAlias)) return;
+      if (!Object.prototype.hasOwnProperty.call(hosts, toAlias)) {
+        hosts[toAlias] = hosts[fromAlias];
+      }
+      delete hosts[fromAlias];
+      entry.hosts = hosts;
+      nextChildren[roleId] = entry;
+      changed = true;
+    });
+
+    if (!changed) return;
+
+    const nextAll = { ...allNode, children: nextChildren };
+    const nextData = { ...data, all: nextAll };
+    const nextYaml = YAML.stringify(nextData);
+    await writeWorkspaceFile("inventory.yml", nextYaml);
+    if (activePath === "inventory.yml") {
+      setEditorValue(nextYaml);
+      setEditorDirty(false);
+    }
   };
 
   const syncInventoryWithSelection = async () => {
     if (!workspaceId || !inventoryReady) return;
+    if (!activeAlias) return;
     if (activePath === "inventory.yml" && editorDirty) return;
 
     try {
@@ -668,49 +832,44 @@ export default function WorkspacePanel({
           ? allNode.children
           : {};
 
-      const desiredRoles = normalizeRoles(selectedRoles);
-      const desiredKey = rolesKey(desiredRoles);
-      const currentRoles = Object.keys(childrenNode).filter(
-        (key) => key && key.trim()
-      );
-      const currentKey = rolesKey(currentRoles);
+      const desiredRoles = new Set(activeRoles);
+      let changed = false;
+      const nextChildren: Record<string, any> = { ...childrenNode };
 
-      let host = credentials.host?.trim() || "";
-      if (!host) {
-        for (const roleId of Object.keys(childrenNode)) {
-          const hosts = childrenNode?.[roleId]?.hosts;
-          if (hosts && typeof hosts === "object") {
-            const names = Object.keys(hosts);
-            if (names.length > 0) {
-              host = names[0];
-              break;
-            }
-          }
-        }
-      }
-
-      let changed = desiredKey !== currentKey;
-      const nextChildren: Record<string, any> = {};
-
-      desiredRoles.forEach((roleId) => {
+      activeRoles.forEach((roleId) => {
         const existing = childrenNode?.[roleId];
-        if (existing && typeof existing === "object") {
-          const nextEntry = { ...existing };
-          if (host) {
-            const hosts = nextEntry.hosts;
-            if (
-              !hosts ||
-              typeof hosts !== "object" ||
-              Object.keys(hosts).length === 0
-            ) {
-              nextEntry.hosts = { [host]: {} };
-              changed = true;
-            }
-          }
-          nextChildren[roleId] = nextEntry;
-        } else {
+        const nextEntry =
+          existing && typeof existing === "object" ? { ...existing } : {};
+        const hosts =
+          nextEntry.hosts && typeof nextEntry.hosts === "object"
+            ? { ...nextEntry.hosts }
+            : {};
+        if (!hosts[activeAlias]) {
+          hosts[activeAlias] = {};
           changed = true;
-          nextChildren[roleId] = host ? { hosts: { [host]: {} } } : { hosts: {} };
+        }
+        nextEntry.hosts = hosts;
+        nextChildren[roleId] = nextEntry;
+      });
+
+      Object.keys(nextChildren).forEach((roleId) => {
+        const entry = nextChildren[roleId];
+        if (!entry || typeof entry !== "object") return;
+        const hosts =
+          entry.hosts && typeof entry.hosts === "object"
+            ? { ...entry.hosts }
+            : null;
+        if (!hosts) return;
+        if (desiredRoles.has(roleId)) return;
+        if (Object.prototype.hasOwnProperty.call(hosts, activeAlias)) {
+          delete hosts[activeAlias];
+          changed = true;
+        }
+        if (Object.keys(hosts).length === 0) {
+          delete nextChildren[roleId];
+          changed = true;
+        } else {
+          nextChildren[roleId] = { ...entry, hosts };
         }
       });
 
@@ -739,16 +898,17 @@ export default function WorkspacePanel({
     if (
       !workspaceId ||
       !inventoryReady ||
-      !onSelectedRolesChange ||
+      !onSelectedRolesByAliasChange ||
       (activePath === "inventory.yml" && editorDirty)
     )
       return;
 
     try {
       const content = await readWorkspaceFile("inventory.yml");
-      const roles = extractRolesFromInventory(content);
-      if (rolesKey(roles) !== rolesKey(selectedRoles)) {
-        onSelectedRolesChange(roles);
+      const rolesByAlias = extractRolesByAlias(content);
+      const merged = mergeRolesByAlias(rolesByAlias);
+      if (rolesByAliasKey(merged) !== rolesByAliasKey(selectedRolesByAlias)) {
+        onSelectedRolesByAliasChange(merged);
       }
     } catch {
       // ignore
@@ -758,10 +918,14 @@ export default function WorkspacePanel({
   const syncHostVarsFromCredentials = async () => {
     if (!workspaceId) return;
     if (hostVarsSyncRef.current) return;
+    if (!activeAlias) return;
     const host = credentials.host?.trim() || "";
     const user = credentials.user?.trim() || "";
     const targetPath =
-      hostVarsPath || (host ? `host_vars/${sanitizeHostFilename(host)}.yml` : null);
+      hostVarsPath ||
+      (activeAlias
+        ? `host_vars/${sanitizeAliasFilename(activeAlias)}.yml`
+        : null);
     if (!targetPath) return;
     if (activePath === targetPath && editorDirty) return;
     if (!host && !user) return;
@@ -847,6 +1011,7 @@ export default function WorkspacePanel({
             allow_empty_plain: allowEmptyPlain,
             set_values: setValues.length > 0 ? setValues : undefined,
             force,
+            alias: activeAlias || undefined,
           }),
         }
       );
@@ -885,6 +1050,7 @@ export default function WorkspacePanel({
         : [];
     autoCredentialsKeyRef.current = [
       "auto",
+      activeAlias || "",
       rolesKey(targetRoles),
       allowEmptyPlain ? "1" : "0",
       forceOverwrite ? "1" : "0",
@@ -923,15 +1089,15 @@ export default function WorkspacePanel({
     canGenerate,
     generateBusy,
     workspaceLoading,
-    selectedRoles,
-    credentials.host,
+    activeRoles,
+    activeAlias,
     activePath,
     editorDirty,
   ]);
 
   useEffect(() => {
     if (!workspaceId || !inventoryReady) return;
-    if (!onSelectedRolesChange) return;
+    if (!onSelectedRolesByAliasChange) return;
     if (autoSyncRef.current) return;
     if (activePath === "inventory.yml" && editorDirty) return;
 
@@ -950,18 +1116,67 @@ export default function WorkspacePanel({
     workspaceId,
     inventoryReady,
     inventoryModifiedAt,
-    onSelectedRolesChange,
-    selectedRoles,
+    onSelectedRolesByAliasChange,
+    activeAlias,
     activePath,
     editorDirty,
   ]);
 
   useEffect(() => {
-    if (!workspaceId || !inventoryReady) return;
-    void syncHostVarsFromCredentials();
+    if (!workspaceId) return;
+    if (!aliasRenames || aliasRenames.length === 0) return;
+    if (autoSyncRef.current) return;
+
+    const { from, to } = aliasRenames[0] || {};
+    if (!from || !to || from === to) {
+      onAliasRenamesHandled?.(1);
+      return;
+    }
+
+    const run = async () => {
+      autoSyncRef.current = true;
+      try {
+        if (inventoryReady) {
+          await renameAliasInInventory(from, to);
+        }
+        const fromPath = `host_vars/${sanitizeAliasFilename(from)}.yml`;
+        const toPath = `host_vars/${sanitizeAliasFilename(to)}.yml`;
+        const fromExists = files.some((entry) => entry.path === fromPath);
+        const toExists = files.some((entry) => entry.path === toPath);
+        if (fromExists && !toExists) {
+          await renameWorkspaceFile(fromPath, toPath);
+          if (activePath === fromPath) {
+            setActivePath(toPath);
+          }
+        }
+        await refreshFiles(workspaceId);
+      } catch (err: any) {
+        setInventorySyncError(
+          err?.message
+            ? `Alias rename failed: ${err.message}`
+            : "Alias rename failed."
+        );
+      } finally {
+        autoSyncRef.current = false;
+        onAliasRenamesHandled?.(1);
+      }
+    };
+
+    void run();
   }, [
     workspaceId,
     inventoryReady,
+    aliasRenames,
+    files,
+    activePath,
+    onAliasRenamesHandled,
+  ]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    void syncHostVarsFromCredentials();
+  }, [
+    workspaceId,
     credentials.host,
     credentials.user,
     hostVarsPath,
@@ -970,11 +1185,10 @@ export default function WorkspacePanel({
   ]);
 
   useEffect(() => {
-    if (!workspaceId || !inventoryReady) return;
+    if (!workspaceId) return;
     void syncCredentialsFromHostVars();
   }, [
     workspaceId,
-    inventoryReady,
     hostVarsPath,
     hostVarsModifiedAt,
     activePath,
@@ -998,6 +1212,7 @@ export default function WorkspacePanel({
 
     const key = [
       "auto",
+      activeAlias || "",
       rolesKey(targetRoles),
       allowEmptyPlain ? "1" : "0",
       forceOverwrite ? "1" : "0",
@@ -1013,7 +1228,8 @@ export default function WorkspacePanel({
     workspaceId,
     vaultPassword,
     credentialsBusy,
-    selectedRoles,
+    activeRoles,
+    activeAlias,
     credentialsScope,
     credentialsRole,
     allowEmptyPlain,
@@ -1026,7 +1242,7 @@ export default function WorkspacePanel({
     !!vaultPassword &&
     !credentialsBusy &&
     (credentialsScope === "all"
-      ? selectedRoles.length > 0
+      ? activeRoles.length > 0
       : !!credentialsRole);
 
   const downloadZip = async () => {
@@ -1441,20 +1657,20 @@ export default function WorkspacePanel({
                 <select
                   value={credentialsRole}
                   onChange={(e) => setCredentialsRole(e.target.value)}
-                  disabled={selectedRoles.length === 0}
+                  disabled={activeRoles.length === 0}
                   style={{
                     padding: "8px 10px",
                     borderRadius: 10,
                     border: "1px solid #cbd5e1",
                     fontSize: 12,
-                    background: selectedRoles.length ? "#fff" : "#f1f5f9",
-                    color: selectedRoles.length ? "#0f172a" : "#94a3b8",
+                    background: activeRoles.length ? "#fff" : "#f1f5f9",
+                    color: activeRoles.length ? "#0f172a" : "#94a3b8",
                   }}
                 >
-                  {selectedRoles.length === 0 ? (
+                  {activeRoles.length === 0 ? (
                     <option value="">No roles selected</option>
                   ) : null}
-                  {selectedRoles.map((roleId) => (
+                  {activeRoles.map((roleId) => (
                     <option key={roleId} value={roleId}>
                       {roleId}
                     </option>
@@ -1495,7 +1711,8 @@ export default function WorkspacePanel({
               Overwrite existing credentials
             </label>
             <span style={{ fontSize: 11, color: "#64748b" }}>
-              Auto sync never forces overwrite. Manual clicks can use it.
+              Auto sync runs when a vault password is set. Overwrite applies to
+              both auto and manual runs.
             </span>
           </div>
           {credentialsError ? (

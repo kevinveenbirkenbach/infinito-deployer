@@ -339,6 +339,9 @@ class JobRunnerService:
             req.deploy_target,
         ]
 
+        if req.limit:
+            cmd.extend(["-l", req.limit])
+
         if env_bool("JOB_RUNNER_SKIP_CLEANUP", False):
             cmd.append("--skip-cleanup")
         if env_bool("JOB_RUNNER_SKIP_BUILD", False):

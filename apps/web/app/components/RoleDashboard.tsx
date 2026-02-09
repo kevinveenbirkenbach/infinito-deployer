@@ -56,12 +56,28 @@ function initials(name: string) {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
+function displayTargets(targets: string[]) {
+  const out = new Set<string>();
+  targets.forEach((target) => {
+    const trimmed = (target || "").trim();
+    if (!trimmed) return;
+    if (trimmed === "universal") {
+      out.add("server");
+      out.add("workstation");
+      return;
+    }
+    out.add(trimmed);
+  });
+  return Array.from(out);
+}
+
 type RoleDashboardProps = {
   roles: Role[];
   loading: boolean;
   error: string | null;
   selected: Set<string>;
   onToggleSelected: (id: string) => void;
+  activeAlias?: string;
 };
 
 export default function RoleDashboard({
@@ -70,6 +86,7 @@ export default function RoleDashboard({
   error,
   selected,
   onToggleSelected,
+  activeAlias,
 }: RoleDashboardProps) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<Set<string>>(
@@ -165,6 +182,7 @@ export default function RoleDashboard({
                   {hiddenSelected > 0 ? ` (${hiddenSelected} hidden)` : ""}
                 </span>
               ) : null}
+              {activeAlias ? ` · Active: ${activeAlias}` : ""}
             </span>
           )}
         </div>
@@ -412,7 +430,7 @@ export default function RoleDashboard({
               </div>
 
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {(role.deployment_targets ?? []).map((target) => (
+                {displayTargets(role.deployment_targets ?? []).map((target) => (
                   <span
                     key={`${role.id}-${target}`}
                     style={{

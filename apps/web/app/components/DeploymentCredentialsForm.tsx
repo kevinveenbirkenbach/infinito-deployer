@@ -1,17 +1,34 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AUTH_METHODS,
   DEPLOY_TARGETS,
-  createInitialState,
   validateForm,
 } from "../lib/deploy_form";
 
-type FormState = ReturnType<typeof createInitialState>;
+type ServerState = {
+  alias: string;
+  host: string;
+  user: string;
+  authMethod: string;
+  password: string;
+  privateKey: string;
+};
+
+type FormState = {
+  deployTarget: string;
+  alias: string;
+  host: string;
+  user: string;
+  authMethod: string;
+  password: string;
+  privateKey: string;
+};
 
 const FIELD_LABELS: Record<string, string> = {
   deployTarget: "Deploy target",
+  alias: "Alias",
   host: "Host",
   user: "User",
   authMethod: "Auth method",
@@ -21,18 +38,55 @@ const FIELD_LABELS: Record<string, string> = {
 
 export default function DeploymentCredentialsForm({
   baseUrl,
-  value,
-  onChange,
+  deployTarget,
+  onDeployTargetChange,
+  servers,
+  activeAlias,
+  onActiveAliasChange,
+  onUpdateServer,
+  onAddServer,
 }: {
   baseUrl: string;
-  value: FormState;
-  onChange: (next: FormState) => void;
+  deployTarget: string;
+  onDeployTargetChange: (next: string) => void;
+  servers: ServerState[];
+  activeAlias: string;
+  onActiveAliasChange: (alias: string) => void;
+  onUpdateServer: (alias: string, patch: Partial<ServerState>) => void;
+  onAddServer: () => void;
 }) {
-  const errors = useMemo(() => validateForm(value), [value]);
-  const isValid = Object.keys(errors).length === 0;
+  const activeServer = useMemo(() => {
+    if (activeAlias) {
+      const found = servers.find((server) => server.alias === activeAlias);
+      if (found) return found;
+    }
+    return servers[0] ?? null;
+  }, [servers, activeAlias]);
 
-  const update = (patch: Partial<FormState>) => {
-    onChange({ ...value, ...patch });
+  const [aliasDraft, setAliasDraft] = useState(activeServer?.alias ?? "");
+  const [aliasError, setAliasError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAliasDraft(activeServer?.alias ?? "");
+    setAliasError(null);
+  }, [activeServer?.alias]);
+
+  const validationTarget: FormState = {
+    deployTarget,
+    alias: activeServer?.alias ?? "",
+    host: activeServer?.host ?? "",
+    user: activeServer?.user ?? "",
+    authMethod: activeServer?.authMethod ?? "password",
+    password: activeServer?.password ?? "",
+    privateKey: activeServer?.privateKey ?? "",
+  };
+
+  const errors = useMemo(() => validateForm(validationTarget), [validationTarget]);
+  const isValid = Object.keys(errors).length === 0 && !aliasError;
+
+  const update = (patch: Partial<ServerState>) => {
+    if (!activeServer) return;
+    onUpdateServer(activeServer.alias, patch);
   };
 
   const onAuthChange = (next: string) => {
@@ -40,6 +94,27 @@ export default function DeploymentCredentialsForm({
       update({ authMethod: next, privateKey: "" });
     } else {
       update({ authMethod: next, password: "" });
+    }
+  };
+
+  const commitAlias = () => {
+    if (!activeServer) return;
+    const nextAlias = aliasDraft.trim();
+    if (!nextAlias) {
+      setAliasError("Alias is required.");
+      setAliasDraft(activeServer.alias);
+      return;
+    }
+    const duplicate = servers.some(
+      (server) => server.alias === nextAlias && server.alias !== activeServer.alias
+    );
+    if (duplicate) {
+      setAliasError("Alias already exists.");
+      return;
+    }
+    setAliasError(null);
+    if (nextAlias !== activeServer.alias) {
+      onUpdateServer(activeServer.alias, { alias: nextAlias });
     }
   };
 
@@ -91,10 +166,58 @@ export default function DeploymentCredentialsForm({
         style={{
           marginTop: 20,
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
           gap: 16,
         }}
       >
+        <div
+          style={{
+            padding: 16,
+            borderRadius: 18,
+            background: "#fff",
+            border: "1px solid rgba(15, 23, 42, 0.1)",
+          }}
+        >
+          <label style={{ fontSize: 12, color: "#64748b" }}>
+            Active server
+          </label>
+          <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+            <select
+              value={activeAlias || activeServer?.alias || ""}
+              onChange={(e) => onActiveAliasChange(e.target.value)}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: "1px solid #cbd5e1",
+                fontSize: 12,
+              }}
+            >
+              {servers.length === 0 ? (
+                <option value="">No servers yet</option>
+              ) : null}
+              {servers.map((server) => (
+                <option key={server.alias} value={server.alias}>
+                  {server.alias || "(unnamed)"}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={onAddServer}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid #0f172a",
+                background: "#0f172a",
+                color: "#fff",
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              Add server
+            </button>
+          </div>
+        </div>
+
         <div
           style={{
             padding: 16,
@@ -110,18 +233,16 @@ export default function DeploymentCredentialsForm({
             {DEPLOY_TARGETS.map((target) => (
               <button
                 key={target}
-                onClick={() => update({ deployTarget: target })}
+                onClick={() => onDeployTargetChange(target)}
                 style={{
                   padding: "6px 10px",
                   borderRadius: 999,
                   border:
-                    value.deployTarget === target
+                    deployTarget === target
                       ? "1px solid #0f172a"
                       : "1px solid #cbd5e1",
-                  background:
-                    value.deployTarget === target ? "#0f172a" : "#fff",
-                  color:
-                    value.deployTarget === target ? "#fff" : "#334155",
+                  background: deployTarget === target ? "#0f172a" : "#fff",
+                  color: deployTarget === target ? "#fff" : "#334155",
                   fontSize: 12,
                   cursor: "pointer",
                 }}
@@ -145,9 +266,49 @@ export default function DeploymentCredentialsForm({
             border: "1px solid rgba(15, 23, 42, 0.1)",
           }}
         >
+          <label style={{ fontSize: 12, color: "#64748b" }}>Alias</label>
+          <input
+            value={aliasDraft}
+            onChange={(e) => setAliasDraft(e.target.value)}
+            onBlur={commitAlias}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commitAlias();
+              }
+            }}
+            placeholder="main"
+            style={{
+              width: "100%",
+              marginTop: 8,
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid #cbd5e1",
+            }}
+          />
+          {aliasError ? (
+            <p style={{ margin: "8px 0 0", color: "#b91c1c" }}>
+              {aliasError}
+            </p>
+          ) : null}
+          {!aliasError && errors.alias ? (
+            <p style={{ margin: "8px 0 0", color: "#b91c1c" }}>
+              {errors.alias}
+            </p>
+          ) : null}
+        </div>
+
+        <div
+          style={{
+            padding: 16,
+            borderRadius: 18,
+            background: "#fff",
+            border: "1px solid rgba(15, 23, 42, 0.1)",
+          }}
+        >
           <label style={{ fontSize: 12, color: "#64748b" }}>Host</label>
           <input
-            value={value.host}
+            value={activeServer?.host ?? ""}
             onChange={(e) => update({ host: e.target.value })}
             placeholder="example.com or 192.168.0.2"
             style={{
@@ -175,7 +336,7 @@ export default function DeploymentCredentialsForm({
         >
           <label style={{ fontSize: 12, color: "#64748b" }}>User</label>
           <input
-            value={value.user}
+            value={activeServer?.user ?? ""}
             onChange={(e) => update({ user: e.target.value })}
             placeholder="root"
             style={{
@@ -203,9 +364,7 @@ export default function DeploymentCredentialsForm({
           border: "1px solid rgba(15, 23, 42, 0.1)",
         }}
       >
-        <label style={{ fontSize: 12, color: "#64748b" }}>
-          Auth method
-        </label>
+        <label style={{ fontSize: 12, color: "#64748b" }}>Auth method</label>
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           {AUTH_METHODS.map((method) => (
             <button
@@ -215,13 +374,13 @@ export default function DeploymentCredentialsForm({
                 padding: "6px 10px",
                 borderRadius: 999,
                 border:
-                  value.authMethod === method
+                  activeServer?.authMethod === method
                     ? "1px solid #0f172a"
                     : "1px solid #cbd5e1",
                 background:
-                  value.authMethod === method ? "#0f172a" : "#fff",
+                  activeServer?.authMethod === method ? "#0f172a" : "#fff",
                 color:
-                  value.authMethod === method ? "#fff" : "#334155",
+                  activeServer?.authMethod === method ? "#fff" : "#334155",
                 fontSize: 12,
                 cursor: "pointer",
               }}
@@ -245,16 +404,14 @@ export default function DeploymentCredentialsForm({
           }}
         >
           <div>
-            <label style={{ fontSize: 12, color: "#64748b" }}>
-              Password
-            </label>
+            <label style={{ fontSize: 12, color: "#64748b" }}>Password</label>
             <input
               type="password"
-              value={value.password}
+              value={activeServer?.password ?? ""}
               onChange={(e) => update({ password: e.target.value })}
-              disabled={value.authMethod !== "password"}
+              disabled={activeServer?.authMethod !== "password"}
               placeholder={
-                value.authMethod === "password"
+                activeServer?.authMethod === "password"
                   ? "Enter password"
                   : "Disabled for key auth"
               }
@@ -266,7 +423,7 @@ export default function DeploymentCredentialsForm({
                 borderRadius: 12,
                 border: "1px solid #cbd5e1",
                 background:
-                  value.authMethod === "password" ? "#fff" : "#f8fafc",
+                  activeServer?.authMethod === "password" ? "#fff" : "#f8fafc",
               }}
             />
             {errors.password ? (
@@ -281,11 +438,11 @@ export default function DeploymentCredentialsForm({
               Private key
             </label>
             <textarea
-              value={value.privateKey}
+              value={activeServer?.privateKey ?? ""}
               onChange={(e) => update({ privateKey: e.target.value })}
-              disabled={value.authMethod !== "private_key"}
+              disabled={activeServer?.authMethod !== "private_key"}
               placeholder={
-                value.authMethod === "private_key"
+                activeServer?.authMethod === "private_key"
                   ? "Paste SSH private key"
                   : "Disabled for password auth"
               }
@@ -299,7 +456,9 @@ export default function DeploymentCredentialsForm({
                 borderRadius: 12,
                 border: "1px solid #cbd5e1",
                 background:
-                  value.authMethod === "private_key" ? "#fff" : "#f8fafc",
+                  activeServer?.authMethod === "private_key"
+                    ? "#fff"
+                    : "#f8fafc",
                 resize: "vertical",
                 fontFamily:
                   "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",

@@ -93,7 +93,7 @@ def _sanitize_host_filename(host: str) -> str:
     return cleaned or "host"
 
 
-def _build_inventory(selected_roles: Iterable[str], host: str) -> Dict[str, Any]:
+def _build_inventory(selected_roles: Iterable[str], alias: str) -> Dict[str, Any]:
     children: Dict[str, Any] = {}
     seen: set[str] = set()
     for role_id in selected_roles:
@@ -103,7 +103,7 @@ def _build_inventory(selected_roles: Iterable[str], host: str) -> Dict[str, Any]
         if not rid or rid in seen:
             continue
         seen.add(rid)
-        children[rid] = {"hosts": {host: {}}}
+        children[rid] = {"hosts": {alias: {}}}
 
     return {"all": {"children": children}}
 
@@ -299,6 +299,7 @@ class WorkspaceService:
         safe_mkdir(root / "group_vars")
 
         deploy_target = (payload.get("deploy_target") or "").strip()
+        alias = (payload.get("alias") or "").strip()
         host = (payload.get("host") or "").strip()
         user = (payload.get("user") or "").strip()
         auth_method = payload.get("auth_method")
@@ -308,6 +309,8 @@ class WorkspaceService:
             raise HTTPException(
                 status_code=400, detail="deploy_target, host, and user are required"
             )
+        if not alias:
+            alias = host
         if not selected_roles:
             raise HTTPException(status_code=400, detail="selected_roles is required")
 
@@ -324,7 +327,7 @@ class WorkspaceService:
 
         inventory = _build_inventory(
             selected_roles=cleaned_roles,
-            host=host,
+            alias=alias,
         )
 
         inventory_yaml = yaml.safe_dump(
@@ -335,7 +338,7 @@ class WorkspaceService:
         )
 
         atomic_write_text(inventory_path, inventory_yaml)
-        host_vars_name = _sanitize_host_filename(host)
+        host_vars_name = _sanitize_host_filename(alias)
         atomic_write_text(
             root / "host_vars" / f"{host_vars_name}.yml",
             yaml.safe_dump(
@@ -363,6 +366,7 @@ class WorkspaceService:
                 "user": user,
                 "auth_method": auth_method,
                 "host_vars_file": f"host_vars/{host_vars_name}.yml",
+                "alias": alias,
             }
         )
         _write_meta(root, meta)
@@ -383,6 +387,7 @@ class WorkspaceService:
         allow_empty_plain: bool,
         set_values: List[str] | None,
         force: bool,
+        alias: str | None,
     ) -> None:
         root = self.ensure(workspace_id)
         meta = _load_meta(root)
@@ -396,7 +401,12 @@ class WorkspaceService:
             vault_path.chmod(0o600)
         except Exception:
             pass
-        host_vars_file = meta.get("host_vars_file")
+        host_vars_file = None
+        alias_value = (alias or meta.get("alias") or "").strip()
+        if alias_value:
+            host_vars_file = f"host_vars/{_sanitize_host_filename(alias_value)}.yml"
+        if not host_vars_file:
+            host_vars_file = meta.get("host_vars_file")
         if not host_vars_file:
             host = (meta.get("host") or "").strip()
             if not host:

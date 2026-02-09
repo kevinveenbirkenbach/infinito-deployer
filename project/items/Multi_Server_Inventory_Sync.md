@@ -75,6 +75,8 @@ Support multiple servers with aliases, per-server role selection, and **bidirect
 
 ## 6. Deploy Flow (Per Server)
 
+- [ ] Credential generation is always applied to the **current active server** (never to other servers)
+
 - [ ] Always show a deploy scope switch: `Active` or `All`
 - [ ] If only one server exists, deploy runs directly without extra choices
 - [ ] When `Active` is chosen, deploy uses `--limit <alias>`

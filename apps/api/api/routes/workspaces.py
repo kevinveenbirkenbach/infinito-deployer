@@ -111,6 +111,7 @@ def generate_credentials(
         allow_empty_plain=payload.allow_empty_plain,
         set_values=payload.set_values,
         force=payload.force,
+        alias=payload.alias,
     )
     return WorkspaceCredentialsOut(ok=True)
 

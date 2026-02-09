@@ -5,17 +5,20 @@ import { buildDeploymentPayload } from "../../../apps/web/app/lib/deployment_pay
 
 test("builds payload for password auth", () => {
   const result = buildDeploymentPayload({
-    credentials: {
-      deployTarget: "server",
+    deployTarget: "server",
+    deployScope: "active",
+    activeServer: {
+      alias: "server-1",
       host: " example.com ",
       user: "root",
       authMethod: "password",
       password: "secret",
       privateKey: "",
     },
-    selectedRoles: ["role-a", "role-b"],
-    inventoryVars: { foo: "bar" },
-    inventoryError: null,
+    selectedRolesByAlias: { "server-1": ["role-a", "role-b"] },
+    activeAlias: "server-1",
+    workspaceId: "ws1",
+    inventoryReady: true,
   });
 
   assert.deepEqual(result.errors, {});
@@ -26,59 +29,69 @@ test("builds payload for password auth", () => {
   assert.equal(result.payload.auth.method, "password");
   assert.equal(result.payload.auth.password, "secret");
   assert.equal(result.payload.auth.private_key, undefined);
+  assert.equal(result.payload.limit, "server-1");
 });
 
 test("requires at least one role", () => {
   const result = buildDeploymentPayload({
-    credentials: {
-      deployTarget: "server",
+    deployTarget: "server",
+    deployScope: "active",
+    activeServer: {
+      alias: "server-1",
       host: "example.com",
       user: "root",
       authMethod: "password",
       password: "secret",
       privateKey: "",
     },
-    selectedRoles: [],
-    inventoryVars: {},
-    inventoryError: null,
+    selectedRolesByAlias: { "server-1": [] },
+    activeAlias: "server-1",
+    workspaceId: "ws1",
+    inventoryReady: true,
   });
 
   assert.ok(result.errors.selectedRoles);
   assert.equal(result.payload, null);
 });
 
-test("surface inventory errors", () => {
+test("requires inventory ready", () => {
   const result = buildDeploymentPayload({
-    credentials: {
-      deployTarget: "server",
+    deployTarget: "server",
+    deployScope: "active",
+    activeServer: {
+      alias: "server-1",
       host: "example.com",
       user: "root",
       authMethod: "password",
       password: "secret",
       privateKey: "",
     },
-    selectedRoles: ["role-a"],
-    inventoryVars: null,
-    inventoryError: "Invalid JSON.",
+    selectedRolesByAlias: { "server-1": ["role-a"] },
+    activeAlias: "server-1",
+    workspaceId: "ws1",
+    inventoryReady: false,
   });
 
-  assert.ok(result.errors.inventoryVars);
+  assert.ok(result.errors.inventory);
   assert.equal(result.payload, null);
 });
 
 test("builds payload for key auth", () => {
   const result = buildDeploymentPayload({
-    credentials: {
-      deployTarget: "workstation",
+    deployTarget: "workstation",
+    deployScope: "active",
+    activeServer: {
+      alias: "server-1",
       host: "127.0.0.1",
       user: "dev",
       authMethod: "private_key",
       password: "",
       privateKey: "KEYDATA",
     },
-    selectedRoles: ["role-a"],
-    inventoryVars: { hello: "world" },
-    inventoryError: null,
+    selectedRolesByAlias: { "server-1": ["role-a"] },
+    activeAlias: "server-1",
+    workspaceId: "ws1",
+    inventoryReady: true,
   });
 
   assert.deepEqual(result.errors, {});

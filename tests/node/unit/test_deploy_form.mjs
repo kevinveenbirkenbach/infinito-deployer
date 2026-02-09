@@ -9,6 +9,7 @@ import {
 
 test("initial state is invalid and empty", () => {
   const state = createInitialState();
+  assert.ok(state.alias);
   assert.equal(state.host, "");
   assert.equal(state.user, "");
   assert.equal(state.password, "");
@@ -19,6 +20,7 @@ test("initial state is invalid and empty", () => {
 test("password auth requires password and forbids private key", () => {
   const errors = validateForm({
     deployTarget: "server",
+    alias: "server-1",
     host: "example.com",
     user: "root",
     authMethod: "password",
@@ -31,6 +33,7 @@ test("password auth requires password and forbids private key", () => {
 test("private key auth requires key and forbids password", () => {
   const errors = validateForm({
     deployTarget: "server",
+    alias: "server-1",
     host: "example.com",
     user: "root",
     authMethod: "private_key",
@@ -43,6 +46,7 @@ test("private key auth requires key and forbids password", () => {
 test("valid form passes", () => {
   const errors = validateForm({
     deployTarget: "workstation",
+    alias: "server-1",
     host: "127.0.0.1",
     user: "dev",
     authMethod: "password",

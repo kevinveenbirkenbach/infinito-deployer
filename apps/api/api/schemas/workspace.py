@@ -14,6 +14,9 @@ class WorkspaceCreateOut(BaseModel):
 
 class WorkspaceGenerateIn(BaseModel):
     deploy_target: DeployTarget
+    alias: Optional[str] = Field(
+        default=None, min_length=1, description="Inventory host alias"
+    )
     host: str = Field(..., min_length=1, description="localhost / IP / domain")
     user: str = Field(..., min_length=1, description="SSH user")
     auth_method: Optional[AuthMethod] = None
@@ -74,6 +77,9 @@ class WorkspaceCredentialsIn(BaseModel):
     allow_empty_plain: bool = False
     set_values: Optional[List[str]] = None
     force: bool = False
+    alias: Optional[str] = Field(
+        default=None, min_length=1, description="Inventory host alias"
+    )
 
 
 class WorkspaceCredentialsOut(BaseModel):

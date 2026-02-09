@@ -5,7 +5,7 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-DeployTarget = Literal["universal", "server", "workstation"]
+DeployTarget = Literal["server", "workstation"]
 AuthMethod = Literal["password", "private_key"]
 
 
@@ -53,6 +53,9 @@ class DeploymentRequest(BaseModel):
     host: str = Field(..., min_length=1, description="localhost / IP / domain")
     user: str = Field(..., min_length=1, description="SSH user")
     auth: DeploymentAuth
+    limit: Optional[str] = Field(
+        default=None, description="Optional Ansible --limit (inventory alias)"
+    )
 
     selected_roles: List[str] = Field(
         default_factory=list, description="List of role IDs (must not be empty)"
@@ -64,6 +67,14 @@ class DeploymentRequest(BaseModel):
         if not s:
             raise ValueError("must not be empty")
         return s
+
+    @field_validator("limit")
+    @classmethod
+    def _strip_limit(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        s = v.strip()
+        return s or None
 
     @field_validator("selected_roles")
     @classmethod

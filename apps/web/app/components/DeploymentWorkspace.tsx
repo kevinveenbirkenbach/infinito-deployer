@@ -16,6 +16,17 @@ type Role = {
   logo?: { source: string; css_class?: string | null; url?: string | null };
 };
 
+type ServerState = {
+  alias: string;
+  host: string;
+  user: string;
+  authMethod: string;
+  password: string;
+  privateKey: string;
+};
+
+type AliasRename = { from: string; to: string };
+
 type DeploymentWorkspaceProps = {
   baseUrl: string;
   onJobCreated?: (jobId: string) => void;
@@ -25,11 +36,30 @@ export default function DeploymentWorkspace({
   baseUrl,
   onJobCreated,
 }: DeploymentWorkspaceProps) {
+  const initial = useMemo(() => createInitialState(), []);
+  const defaultAlias = initial.alias;
   const [roles, setRoles] = useState<Role[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [rolesError, setRolesError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [credentials, setCredentials] = useState(createInitialState());
+  const [deployTarget, setDeployTarget] = useState(initial.deployTarget);
+  const [deployScope, setDeployScope] = useState<"active" | "all">("active");
+  const [servers, setServers] = useState<ServerState[]>([
+    {
+      alias: initial.alias,
+      host: initial.host,
+      user: initial.user,
+      authMethod: initial.authMethod,
+      password: initial.password,
+      privateKey: initial.privateKey,
+    },
+  ]);
+  const [activeAlias, setActiveAlias] = useState(initial.alias);
+  const [selectedByAlias, setSelectedByAlias] = useState<
+    Record<string, Set<string>>
+  >(() => ({ [initial.alias]: new Set<string>() }));
+  const [aliasRenames, setAliasRenames] = useState<AliasRename[]>([]);
+  const [selectionTouched, setSelectionTouched] = useState(false);
+
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [inventoryReady, setInventoryReady] = useState(false);
   const [deploying, setDeploying] = useState(false);
@@ -68,44 +98,224 @@ export default function DeploymentWorkspace({
     };
   }, [baseUrl]);
 
-  const selectedRoles = useMemo(
-    () => Array.from(selected.values()),
-    [selected]
+  useEffect(() => {
+    if (!activeAlias && servers.length > 0) {
+      setActiveAlias(servers[0].alias);
+      return;
+    }
+    if (activeAlias && !servers.some((server) => server.alias === activeAlias)) {
+      setActiveAlias(servers[0]?.alias ?? "");
+    }
+  }, [activeAlias, servers]);
+
+  useEffect(() => {
+    if (servers.length <= 1 && deployScope === "all") {
+      setDeployScope("active");
+    }
+  }, [servers, deployScope]);
+
+  useEffect(() => {
+    if (!activeAlias) return;
+    setSelectedByAlias((prev) => {
+      if (prev[activeAlias]) return prev;
+      return { ...prev, [activeAlias]: new Set<string>() };
+    });
+  }, [activeAlias]);
+
+  const createServer = useCallback(
+    (alias: string): ServerState => ({
+      alias,
+      host: "",
+      user: "",
+      authMethod: "password",
+      password: "",
+      privateKey: "",
+    }),
+    []
   );
 
-  const applySelectedRoles = useCallback(
-    (rolesFromInventory: string[]) => {
-      const available = roles.map((role) => role.id);
-      const allowed = available.length ? new Set(available) : null;
-      const next = (rolesFromInventory || []).filter((id) =>
-        allowed ? allowed.has(id) : true
-      );
-      setSelected(new Set(next));
-    },
-    [roles]
+  const activeServer = useMemo(() => {
+    if (activeAlias) {
+      const found = servers.find((server) => server.alias === activeAlias);
+      if (found) return found;
+    }
+    return servers[0] ?? null;
+  }, [servers, activeAlias]);
+
+  const selectedRolesByAlias = useMemo(() => {
+    const out: Record<string, string[]> = {};
+    Object.entries(selectedByAlias).forEach(([alias, set]) => {
+      out[alias] = Array.from(set);
+    });
+    return out;
+  }, [selectedByAlias]);
+
+  const selectedRoles = useMemo(
+    () => selectedRolesByAlias[activeAlias] ?? [],
+    [selectedRolesByAlias, activeAlias]
   );
+
+  const applySelectedRolesByAlias = useCallback(
+    (rolesByAlias: Record<string, string[]>) => {
+      const rawAliases = Object.keys(rolesByAlias || {}).filter(Boolean);
+      const hasRealAliases = rawAliases.some((alias) => alias !== defaultAlias);
+      const placeholderRoles = rolesByAlias?.[defaultAlias] ?? [];
+      const placeholderServer = servers.find(
+        (server) => server.alias === defaultAlias
+      );
+      const placeholderHasData = !!(
+        placeholderServer &&
+        (placeholderServer.host ||
+          placeholderServer.user ||
+          placeholderServer.password ||
+          placeholderServer.privateKey)
+      );
+
+      let aliases = rawAliases;
+      if (hasRealAliases && !placeholderHasData && placeholderRoles.length === 0) {
+        aliases = rawAliases.filter((alias) => alias !== defaultAlias);
+      }
+      if (aliases.length === 0) {
+        aliases = [defaultAlias];
+      }
+
+      setSelectedByAlias((prev) => {
+        const next: Record<string, Set<string>> = {};
+        aliases.forEach((alias) => {
+          next[alias] = new Set<string>(rolesByAlias?.[alias] ?? []);
+        });
+        return next;
+      });
+
+      setServers((prev) => {
+        const byAlias = new Map(prev.map((server) => [server.alias, server]));
+        const ordered: string[] = [];
+        const seen = new Set<string>();
+        prev.forEach((server) => {
+          if (aliases.includes(server.alias) && !seen.has(server.alias)) {
+            ordered.push(server.alias);
+            seen.add(server.alias);
+          }
+        });
+        aliases
+          .filter((alias) => !seen.has(alias))
+          .sort((a, b) => a.localeCompare(b))
+          .forEach((alias) => ordered.push(alias));
+
+        return ordered.map((alias) => byAlias.get(alias) ?? createServer(alias));
+      });
+
+      if (
+        !activeAlias ||
+        !aliases.includes(activeAlias) ||
+        (activeAlias === defaultAlias && aliases[0] !== defaultAlias)
+      ) {
+        setActiveAlias(aliases[0] ?? "");
+      }
+    },
+    [activeAlias, createServer, defaultAlias, servers]
+  );
+
+  const updateServer = useCallback(
+    (alias: string, patch: Partial<ServerState>) => {
+      if (!alias) return;
+      const nextAliasRaw =
+        typeof patch.alias === "string" ? patch.alias.trim() : "";
+      const shouldRename = nextAliasRaw && nextAliasRaw !== alias;
+
+      setServers((prev) => {
+        const idx = prev.findIndex((server) => server.alias === alias);
+        if (idx === -1) return prev;
+        if (
+          shouldRename &&
+          prev.some((server, i) => server.alias === nextAliasRaw && i !== idx)
+        ) {
+          return prev;
+        }
+        const next = [...prev];
+        next[idx] = {
+          ...prev[idx],
+          ...patch,
+          alias: shouldRename ? nextAliasRaw : prev[idx].alias,
+        };
+        return next;
+      });
+
+      if (shouldRename) {
+        const nextAlias = nextAliasRaw;
+        setSelectedByAlias((prev) => {
+          const next: Record<string, Set<string>> = { ...prev };
+          const roles = next[alias]
+            ? new Set<string>(next[alias])
+            : new Set<string>();
+          delete next[alias];
+          if (next[nextAlias]) {
+            roles.forEach((role) => next[nextAlias].add(role));
+          } else {
+            next[nextAlias] = roles;
+          }
+          return next;
+        });
+        if (activeAlias === alias) {
+          setActiveAlias(nextAlias);
+        }
+        setAliasRenames((prev) => [...prev, { from: alias, to: nextAlias }]);
+      }
+    },
+    [activeAlias]
+  );
+
+  const addServer = useCallback(() => {
+    let idx = 1;
+    let alias = `server-${idx}`;
+    const existing = new Set(servers.map((server) => server.alias));
+    while (existing.has(alias)) {
+      idx += 1;
+      alias = `server-${idx}`;
+    }
+    setServers((prev) => [...prev, createServer(alias)]);
+    setSelectedByAlias((prev) => ({ ...prev, [alias]: new Set<string>() }));
+    setActiveAlias(alias);
+  }, [servers, createServer]);
 
   const toggleSelected = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
+    if (!activeAlias) return;
+    setSelectedByAlias((prev) => {
+      const next: Record<string, Set<string>> = { ...prev };
+      const set = next[activeAlias]
+        ? new Set<string>(next[activeAlias])
+        : new Set<string>();
+      if (set.has(id)) {
+        set.delete(id);
       } else {
-        next.add(id);
+        set.add(id);
       }
+      next[activeAlias] = set;
       return next;
     });
+    setSelectionTouched(true);
   };
 
   const deploymentPlan = useMemo(
     () =>
       buildDeploymentPayload({
-        credentials,
-        selectedRoles,
+        deployTarget,
+        deployScope,
+        activeServer,
+        selectedRolesByAlias,
+        activeAlias,
         workspaceId,
         inventoryReady,
       }),
-    [credentials, selectedRoles, workspaceId, inventoryReady]
+    [
+      deployTarget,
+      deployScope,
+      activeServer,
+      selectedRolesByAlias,
+      activeAlias,
+      workspaceId,
+      inventoryReady,
+    ]
   );
 
   const deploymentErrors = deploymentPlan.errors;
@@ -152,32 +362,55 @@ export default function DeploymentWorkspace({
     }
   };
 
+  const credentials = useMemo(() => {
+    return {
+      deployTarget,
+      alias: activeServer?.alias ?? "",
+      host: activeServer?.host ?? "",
+      user: activeServer?.user ?? "",
+      authMethod: activeServer?.authMethod ?? "password",
+    };
+  }, [deployTarget, activeServer]);
+
   return (
     <>
       <RoleDashboard
         roles={roles}
         loading={rolesLoading}
         error={rolesError}
-        selected={selected}
+        selected={new Set<string>(selectedRoles)}
         onToggleSelected={toggleSelected}
+        activeAlias={activeAlias}
       />
 
       <DeploymentCredentialsForm
         baseUrl={baseUrl}
-        value={credentials}
-        onChange={setCredentials}
+        deployTarget={deployTarget}
+        onDeployTargetChange={setDeployTarget}
+        servers={servers}
+        activeAlias={activeAlias}
+        onActiveAliasChange={setActiveAlias}
+        onUpdateServer={updateServer}
+        onAddServer={addServer}
       />
 
       <WorkspacePanel
         baseUrl={baseUrl}
-        selectedRoles={selectedRoles}
+        selectedRolesByAlias={selectedRolesByAlias}
         credentials={credentials}
-        onCredentialsPatch={(patch) =>
-          setCredentials((prev) => ({ ...prev, ...patch }))
-        }
+        onCredentialsPatch={(patch) => {
+          if (!activeServer) return;
+          const { deployTarget: _ignored, ...rest } = patch as any;
+          updateServer(activeServer.alias, rest);
+        }}
         onInventoryReadyChange={setInventoryReady}
-        onSelectedRolesChange={applySelectedRoles}
+        onSelectedRolesByAliasChange={applySelectedRolesByAlias}
         onWorkspaceIdChange={setWorkspaceId}
+        aliasRenames={aliasRenames}
+        onAliasRenamesHandled={(count) =>
+          setAliasRenames((prev) => prev.slice(count))
+        }
+        selectionTouched={selectionTouched}
       />
 
       <section
@@ -219,10 +452,11 @@ export default function DeploymentWorkspace({
               fontSize: 13,
             }}
           >
-            Selected roles:{" "}
-            <strong>{selectedRoles.length || "none"}</strong>
+            Selected roles: <strong>{selectedRoles.length || "none"}</strong>
             <br />
-            Target: <strong>{credentials.deployTarget || "—"}</strong>
+            Target: <strong>{deployTarget || "—"}</strong>
+            <br />
+            Active server: <strong>{activeAlias || "—"}</strong>
           </div>
         </div>
 
@@ -235,6 +469,35 @@ export default function DeploymentWorkspace({
             alignItems: "center",
           }}
         >
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: "#cbd5f5" }}>
+              Deploy scope:
+            </span>
+            {["active", "all"].map((scope) => {
+              const disabled = servers.length <= 1 && scope === "all";
+              const isActive = deployScope === scope;
+              return (
+                <button
+                  key={scope}
+                  onClick={() => !disabled && setDeployScope(scope as any)}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 999,
+                    border: "1px solid rgba(248, 250, 252, 0.4)",
+                    background: isActive
+                      ? "#38bdf8"
+                      : "rgba(15, 23, 42, 0.6)",
+                    color: isActive ? "#0f172a" : "#e2e8f0",
+                    cursor: disabled ? "not-allowed" : "pointer",
+                    fontSize: 12,
+                    opacity: disabled ? 0.5 : 1,
+                  }}
+                >
+                  {scope === "active" ? "Active" : "All"}
+                </button>
+              );
+            })}
+          </div>
           <button
             onClick={startDeployment}
             disabled={!canDeploy}
