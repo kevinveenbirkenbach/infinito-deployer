@@ -56,6 +56,32 @@ make setup
 * `CORS_ALLOW_ORIGINS` should include the Web UI URL
 * `NEXT_PUBLIC_API_BASE_URL` must point to the API endpoint
 
+### Job Runner Backend (Local vs Container)
+
+By default, deployments run inside the API container (`JOB_RUNNER_BACKEND=local`).
+If you prefer per‑job isolation, switch to the container backend:
+
+1. Set `JOB_RUNNER_BACKEND=container`.
+2. Ensure `STATE_HOST_PATH` is an **absolute path** (Docker needs host paths).
+3. Enable the Docker socket mount for the API container in `docker-compose.yml`.
+
+Note: the container backend requires Docker socket access in the API container.
+For stronger isolation, consider moving the job runner into a separate service
+that owns the Docker socket.
+
+Optional (for custom runner images):
+* Set `JOB_RUNNER_IMAGE` (defaults to `INFINITO_NEXUS_IMAGE` if unset).
+* If your runner image does not include the repo, mount it via `JOB_RUNNER_REPO_HOST_PATH` (absolute path).
+* If the API container cannot find `docker`, set `JOB_RUNNER_DOCKER_BIN` (e.g. `docker.io`).
+
+Example:
+
+```
+JOB_RUNNER_BACKEND=container
+JOB_RUNNER_IMAGE=ghcr.io/kevinveenbirkenbach/infinito-arch
+STATE_HOST_PATH=/absolute/path/to/state
+```
+
 Example (local setup):
 
 * `INFINITO_REPO_HOST_PATH=./infinito-nexus`

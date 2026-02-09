@@ -58,6 +58,7 @@ services:
     environment:
       INFINITO_REPO_PATH: ${INFINITO_REPO_PATH}
       STATE_DIR: ${STATE_DIR}
+      STATE_HOST_PATH: ${STATE_HOST_PATH}
 
       APP_ENV: ${APP_ENV}
       APP_HOST: ${API_APP_HOST}
@@ -68,12 +69,23 @@ services:
       ROLE_CATALOG_LIST_JSON: ${ROLE_CATALOG_LIST_JSON}
       ROLE_CATALOG_CATEGORIES_YML: ${ROLE_CATALOG_CATEGORIES_YML}
 
+      # Job runner backend selection
+      JOB_RUNNER_BACKEND: ${JOB_RUNNER_BACKEND}
+      JOB_RUNNER_IMAGE: ${JOB_RUNNER_IMAGE}
+      JOB_RUNNER_REPO_DIR: ${JOB_RUNNER_REPO_DIR}
+      JOB_RUNNER_WORKDIR: ${JOB_RUNNER_WORKDIR}
+      JOB_RUNNER_REPO_HOST_PATH: ${JOB_RUNNER_REPO_HOST_PATH}
+      JOB_RUNNER_DOCKER_ARGS: ${JOB_RUNNER_DOCKER_ARGS}
+      JOB_RUNNER_SKIP_CLEANUP: ${JOB_RUNNER_SKIP_CLEANUP}
+      JOB_RUNNER_SKIP_BUILD: ${JOB_RUNNER_SKIP_BUILD}
+      DOCKER_NETWORK_NAME: ${DOCKER_NETWORK_NAME}
+
     volumes:
       - infinito_repo:${INFINITO_REPO_PATH}:ro
       - ${STATE_HOST_PATH}:${STATE_DIR}
 
-      # Optional: enable only if you really need Docker access
-      # - ${DOCKER_SOCKET_PATH}:/var/run/docker.sock
+      # Required when JOB_RUNNER_BACKEND=container
+      - ${DOCKER_SOCKET_PATH}:/var/run/docker.sock
 
     ports:
       - "${API_PORT}:${API_APP_PORT}"

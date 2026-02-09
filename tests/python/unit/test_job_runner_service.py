@@ -13,6 +13,8 @@ class TestJobRunnerService(unittest.TestCase):
 
         self._old_state_dir = os.environ.get("STATE_DIR")
         os.environ["STATE_DIR"] = self._tmp.name
+        self._old_runner_cmd = os.environ.get("RUNNER_CMD")
+        os.environ["RUNNER_CMD"] = "true"
         self.workspace_id = "abc123"
         workspace_root = Path(self._tmp.name) / "workspaces" / self.workspace_id
         workspace_root.mkdir(parents=True, exist_ok=True)
@@ -26,6 +28,10 @@ class TestJobRunnerService(unittest.TestCase):
             os.environ.pop("STATE_DIR", None)
         else:
             os.environ["STATE_DIR"] = self._old_state_dir
+        if self._old_runner_cmd is None:
+            os.environ.pop("RUNNER_CMD", None)
+        else:
+            os.environ["RUNNER_CMD"] = self._old_runner_cmd
 
     def _minimal_request(self):
         from api.schemas.deployment import DeploymentRequest  # noqa: WPS433
@@ -216,7 +222,9 @@ class TestJobRunnerService(unittest.TestCase):
 
         started = {"proc": None, "log_fh": None}
 
-        def _start_process(*, run_path, cwd, log_path, secrets=None, on_line=None):
+        def _start_process(
+            *, run_path, cwd, log_path, secrets=None, on_line=None, args=None
+        ):
             # Long enough that cancel has something to kill, short enough to finish fast.
             log_fh = open(log_path, "ab", buffering=0)
             proc = subprocess.Popen(

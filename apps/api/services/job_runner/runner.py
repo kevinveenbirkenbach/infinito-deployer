@@ -35,6 +35,10 @@ run_cmd() {
   fi
 }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH}"
+export PATH="${SCRIPT_DIR}:${PATH}"
+
 echo "+ pwd"
 pwd
 
@@ -66,6 +70,13 @@ exit 1
 def runner_env() -> Dict[str, str]:
     env = dict(os.environ)
     env.setdefault("STATE_DIR", env.get("STATE_DIR", "/state"))
+    repo_root = (env.get("INFINITO_REPO_PATH") or "").strip()
+    if repo_root:
+        py_path = env.get("PYTHONPATH") or ""
+        if repo_root not in py_path.split(os.pathsep):
+            env["PYTHONPATH"] = (
+                f"{repo_root}{os.pathsep}{py_path}" if py_path else repo_root
+            )
     return env
 
 
@@ -76,13 +87,18 @@ def start_process(
     log_path: Path,
     secrets: Iterable[str] | None = None,
     on_line=None,
+    args: Iterable[str] | None = None,
 ) -> tuple[subprocess.Popen, object, threading.Thread]:
     """
     Start the runner in its own process group so cancellation can kill the group.
     """
     log_fh = open(log_path, "a", encoding="utf-8", buffering=1)
+    cmd = ["/bin/bash", str(run_path)]
+    if args:
+        cmd.extend(list(args))
+
     proc = subprocess.Popen(
-        ["/bin/bash", str(run_path)],
+        cmd,
         cwd=str(cwd),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

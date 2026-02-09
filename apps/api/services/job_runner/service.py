@@ -19,6 +19,8 @@ from services.workspaces import WorkspaceService
 from .paths import job_paths, jobs_root
 from .persistence import load_json, mask_request_for_persistence, write_meta
 from .runner import start_process, terminate_process_group, write_runner_script
+from .config import env_bool, runner_backend
+from .container_runner import build_container_command, load_container_config, stop_container
 from .secrets import collect_secrets
 from .util import atomic_write_json, atomic_write_text, safe_mkdir, utc_iso
 from .log_hub import LogHub
@@ -93,10 +95,11 @@ class JobRunnerService:
 
         secrets = collect_secrets(req)
         vars_data = self._build_vars(req, p, secrets)
+        roles_from_inventory: List[str] = []
         if req.workspace_id and p.inventory_path.is_file():
-            roles = self._roles_from_inventory(p.inventory_path)
-            if roles:
-                vars_data["selected_roles"] = roles
+            roles_from_inventory = self._roles_from_inventory(p.inventory_path)
+            if roles_from_inventory:
+                vars_data["selected_roles"] = roles_from_inventory
 
         # Persist masked request + inventory (no secrets on disk)
         atomic_write_json(p.request_path, mask_request_for_persistence(req))
@@ -112,6 +115,7 @@ class JobRunnerService:
         )
 
         write_runner_script(p.run_path)
+        self._write_infinito_shim(p.job_dir)
         self._remember_secrets(job_id, secrets)
 
         meta: Dict[str, Any] = {
@@ -122,8 +126,47 @@ class JobRunnerService:
             "finished_at": None,
             "pid": None,
             "exit_code": None,
+            "container_id": None,
         }
         write_meta(p.meta_path, meta)
+
+        runner_args = None
+        backend = runner_backend()
+        if backend not in {"local", "container"}:
+            raise HTTPException(
+                status_code=500,
+                detail="JOB_RUNNER_BACKEND must be 'local' or 'container'",
+            )
+
+        if not os.environ.get("RUNNER_CMD"):
+            cfg = None
+            inventory_arg = str(p.inventory_path)
+            if backend == "container":
+                cfg = load_container_config()
+                inventory_arg = f"{cfg.workdir}/inventory.yml"
+
+            cli_args = self._build_runner_args(
+                req=req,
+                inventory_path=p.inventory_path,
+                inventory_arg=inventory_arg,
+                roles_from_inventory=roles_from_inventory,
+            )
+
+            if backend == "container":
+                runner_args, container_id, cfg = build_container_command(
+                    job_id=job_id,
+                    job_dir=p.job_dir,
+                    cli_args=cli_args,
+                    cfg=cfg,
+                )
+                meta["container_id"] = container_id
+                if cfg.skip_cleanup:
+                    meta["skip_cleanup"] = True
+                if cfg.skip_build:
+                    meta["skip_build"] = True
+                write_meta(p.meta_path, meta)
+            else:
+                runner_args = cli_args
 
         try:
             proc, log_fh, reader = start_process(
@@ -132,6 +175,7 @@ class JobRunnerService:
                 log_path=p.log_path,
                 secrets=secrets,
                 on_line=lambda line: self._log_hub.publish(job_id, line),
+                args=runner_args,
             )
         except Exception as exc:
             meta["status"] = "failed"
@@ -176,6 +220,7 @@ class JobRunnerService:
             finished_at=meta.get("finished_at"),
             pid=meta.get("pid"),
             exit_code=meta.get("exit_code"),
+            container_id=meta.get("container_id"),
             workspace_dir=str(p.job_dir),
             log_path=str(p.log_path),
             inventory_path=str(p.inventory_path),
@@ -197,6 +242,10 @@ class JobRunnerService:
 
         pid = meta.get("pid")
         terminate_process_group(pid if isinstance(pid, int) else None)
+
+        container_id = meta.get("container_id")
+        if isinstance(container_id, str) and container_id.strip():
+            stop_container(container_id)
 
         meta["status"] = "canceled"
         meta["finished_at"] = utc_iso()
@@ -258,6 +307,65 @@ class JobRunnerService:
             merged_vars["ansible_password"] = "<provided_at_runtime>"
 
         return merged_vars
+
+    def _build_runner_args(
+        self,
+        *,
+        req: DeploymentRequest,
+        inventory_path: Path,
+        inventory_arg: str,
+        roles_from_inventory: List[str],
+    ) -> List[str]:
+        repo_root = (os.getenv("INFINITO_REPO_PATH") or "").strip()
+        if repo_root:
+            if not Path(repo_root).is_dir():
+                raise HTTPException(
+                    status_code=500, detail="INFINITO_REPO_PATH is invalid"
+                )
+        elif runner_backend() == "local":
+            raise HTTPException(
+                status_code=500, detail="INFINITO_REPO_PATH is not set"
+            )
+        if not inventory_path.is_file():
+            raise HTTPException(status_code=500, detail="inventory.yml is missing")
+
+        cmd: List[str] = [
+            "infinito",
+            "--no-signal",
+            "deploy",
+            "dedicated",
+            inventory_arg,
+            "-T",
+            req.deploy_target,
+        ]
+
+        if env_bool("JOB_RUNNER_SKIP_CLEANUP", False):
+            cmd.append("--skip-cleanup")
+        if env_bool("JOB_RUNNER_SKIP_BUILD", False):
+            cmd.append("--skip-build")
+
+        roles = roles_from_inventory or list(req.selected_roles)
+        if roles:
+            cmd.append("--id")
+            cmd.extend(roles)
+
+        return cmd
+
+    def _write_infinito_shim(self, job_dir: Path) -> None:
+        shim_path = job_dir / "infinito"
+        if shim_path.exists():
+            return
+        script = """#!/usr/bin/env bash
+set -euo pipefail
+
+if command -v python3 >/dev/null 2>&1; then
+  exec python3 -m cli.__main__ "$@"
+fi
+
+exec python -m cli.__main__ "$@"
+"""
+        atomic_write_text(shim_path, script)
+        shim_path.chmod(0o700)
 
     def _remember_secrets(self, job_id: str, secrets: List[str]) -> None:
         if not secrets:

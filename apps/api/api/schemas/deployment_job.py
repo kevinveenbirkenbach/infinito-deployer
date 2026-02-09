@@ -32,6 +32,7 @@ class DeploymentJobOut(BaseModel):
 
     pid: Optional[int] = None
     exit_code: Optional[int] = None
+    container_id: Optional[str] = None
 
     # Paths inside the container (useful for debugging)
     workspace_dir: str
