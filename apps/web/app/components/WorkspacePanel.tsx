@@ -5,10 +5,13 @@ import type { ChangeEvent, MouseEvent } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { json as jsonLang } from "@codemirror/lang-json";
 import { yaml as yamlLang } from "@codemirror/lang-yaml";
-import { markdown as markdownLang } from "@codemirror/lang-markdown";
 import { python as pythonLang } from "@codemirror/lang-python";
 import YAML from "yaml";
-import ReactMarkdown from "react-markdown";
+import { marked } from "marked";
+import TurndownService from "turndown";
+import dynamic from "next/dynamic";
+
+const ReactQuill = dynamic(() => import("react-quill"), { ssr: false });
 
 type FileEntry = {
   path: string;
@@ -193,7 +196,7 @@ export default function WorkspacePanel({
   const [editorLoading, setEditorLoading] = useState(false);
   const [editorError, setEditorError] = useState<string | null>(null);
   const [editorStatus, setEditorStatus] = useState<string | null>(null);
-  const [markdownPreview, setMarkdownPreview] = useState(false);
+  const [markdownHtml, setMarkdownHtml] = useState("");
 
   const [openDirs, setOpenDirs] = useState<Set<string>>(new Set());
 
@@ -219,6 +222,7 @@ export default function WorkspacePanel({
   const autoCredentialsKeyRef = useRef("");
   const hostVarsSyncRef = useRef(false);
   const inventorySeededRef = useRef(false);
+  const markdownSyncRef = useRef(false);
 
   const [generateBusy, setGenerateBusy] = useState(false);
   const [inventorySyncError, setInventorySyncError] = useState<string | null>(
@@ -268,8 +272,6 @@ export default function WorkspacePanel({
         return [jsonLang()];
       case "yaml":
         return [yamlLang()];
-      case "markdown":
-        return [markdownLang()];
       case "python":
         return [pythonLang()];
       default:
@@ -277,11 +279,57 @@ export default function WorkspacePanel({
     }
   }, [activeExtension]);
 
+  const turndown = useMemo(
+    () =>
+      new TurndownService({
+        codeBlockStyle: "fenced",
+        emDelimiter: "*",
+        strongDelimiter: "**",
+      }),
+    []
+  );
+
+  const quillModules = useMemo(
+    () => ({
+      toolbar: [
+        [{ header: [1, 2, 3, false] }],
+        ["bold", "italic", "underline", "strike"],
+        [{ list: "ordered" }, { list: "bullet" }],
+        ["blockquote", "code-block", "link"],
+        ["clean"],
+      ],
+    }),
+    []
+  );
+
   useEffect(() => {
-    if (activeExtension !== "markdown") {
-      setMarkdownPreview(false);
+    if (activeExtension !== "markdown") return;
+    if (markdownSyncRef.current) {
+      markdownSyncRef.current = false;
+      return;
     }
-  }, [activeExtension]);
+    let alive = true;
+    const source = editorValue ?? "";
+    try {
+      const result = marked.parse(source);
+      if (typeof result === "string") {
+        if (alive) setMarkdownHtml(result);
+      } else {
+        void result
+          .then((html) => {
+            if (alive) setMarkdownHtml(html);
+          })
+          .catch(() => {
+            if (alive) setMarkdownHtml(source);
+          });
+      }
+    } catch {
+      if (alive) setMarkdownHtml(source);
+    }
+    return () => {
+      alive = false;
+    };
+  }, [activeExtension, editorValue]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -1662,38 +1710,32 @@ export default function WorkspacePanel({
                     >
                       Reload
                     </button>
-                    {activeExtension === "markdown" ? (
-                      <button
-                        onClick={() => setMarkdownPreview((prev) => !prev)}
-                        style={{
-                          padding: "6px 10px",
-                          borderRadius: 999,
-                          border: "1px solid #cbd5e1",
-                          background: markdownPreview ? "#0f172a" : "#fff",
-                          color: markdownPreview ? "#fff" : "#334155",
-                          cursor: "pointer",
-                          fontSize: 12,
-                        }}
-                      >
-                        {markdownPreview ? "Edit" : "Preview"}
-                      </button>
-                    ) : null}
                   </div>
                 </div>
-                {activeExtension === "markdown" && markdownPreview ? (
+                {activeExtension === "markdown" ? (
                   <div
                     style={{
                       minHeight: 360,
                       borderRadius: 12,
                       border: "1px solid #e2e8f0",
-                      padding: 12,
-                      background: "#f8fafc",
-                      color: "#0f172a",
-                      fontSize: 14,
-                      lineHeight: 1.6,
+                      background: "#fff",
                     }}
                   >
-                    <ReactMarkdown>{editorValue}</ReactMarkdown>
+                    <ReactQuill
+                      theme="snow"
+                      value={markdownHtml}
+                      onChange={(value) => {
+                        markdownSyncRef.current = true;
+                        setMarkdownHtml(value);
+                        const nextMarkdown = turndown.turndown(value || "");
+                        setEditorValue(nextMarkdown);
+                        setEditorDirty(true);
+                        setEditorStatus(null);
+                        setEditorError(null);
+                      }}
+                      modules={quillModules}
+                      style={{ minHeight: 360 }}
+                    />
                   </div>
                 ) : (
                   <CodeMirror
