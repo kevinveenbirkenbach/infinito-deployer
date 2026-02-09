@@ -101,7 +101,6 @@ For each role:
   → Persistenter Cache unter `${STATE_DIR}/cache/simpleicons.json`
   → inkl. **negative caching** (404 wird gemerkt)
 
-
 ---
 
 ## 2. Backend API (FastAPI)
@@ -156,7 +155,7 @@ For each role:
   * [x] authentication:
 
     * [x] password OR
-    * [x] private key
+    * [x] key
   * [x] selected_roles[]
   * [x] inventory_vars (JSON)
 
@@ -302,7 +301,7 @@ For each job:
   * host
   * user
   * auth method selector
-* [x] Private key textarea (never echoed back)
+* [x] Key textarea (never echoed back)
 * [x] Password field
 
 **A/C**
@@ -310,6 +309,23 @@ For each job:
 * [x] Form prevents invalid combinations
 * [x] Secrets are cleared on page reload
 * [x] UI explains where credentials are used
+
+---
+
+### 4.2.1 SSH Key Generation
+
+* [ ] Generate SSH keypair directly in the UI
+  * [ ] Generate key via explicit user action (button)
+  * [ ] Generated private key is inserted into the Key field
+  * [ ] Generated public key is displayed in a read-only field
+  * [ ] Public key can be copied to clipboard
+  * [ ] Regeneration requires confirmation
+
+**A/C**
+
+* [ ] Public key is valid for `authorized_keys` (e.g. `ssh-ed25519 ...`)
+* [ ] Private key never leaves the browser unless a deployment job is started
+* [ ] No key material appears in logs, SSE streams, or persisted files except the job-local key file
 
 ---
 
