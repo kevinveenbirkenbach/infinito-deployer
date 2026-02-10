@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { filterRoles } from "../lib/role_filter";
 
 type RoleLogo = {
@@ -36,6 +36,8 @@ const STATUS_COLORS: Record<
   "pre-alpha": { bg: "#fee2e2", fg: "#991b1b", border: "#fecaca" },
   deprecated: { bg: "#e5e7eb", fg: "#374151", border: "#d1d5db" },
 };
+
+const PAGE_SIZE = 12;
 
 function sortStatuses(statuses: string[]): string[] {
   const order = new Map(STATUS_ORDER.map((s, idx) => [s, idx]));
@@ -93,6 +95,8 @@ export default function RoleDashboard({
     new Set()
   );
   const [targetFilter, setTargetFilter] = useState("all");
+  const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+  const [page, setPage] = useState(1);
 
   const statusOptions = useMemo(() => {
     const set = new Set<string>();
@@ -102,13 +106,28 @@ export default function RoleDashboard({
     return sortStatuses(Array.from(set));
   }, [roles]);
 
-  const filteredRoles = useMemo(() => {
+  const baseFilteredRoles = useMemo(() => {
     return filterRoles(roles, {
       statuses: statusFilter,
       target: targetFilter,
       query,
     });
   }, [roles, statusFilter, targetFilter, query]);
+
+  const filteredRoles = useMemo(() => {
+    if (!showSelectedOnly) return baseFilteredRoles;
+    return baseFilteredRoles.filter((role) => selected.has(role.id));
+  }, [baseFilteredRoles, selected, showSelectedOnly]);
+
+  const pageCount = Math.max(
+    1,
+    Math.ceil(filteredRoles.length / PAGE_SIZE)
+  );
+  const currentPage = Math.min(page, pageCount);
+  const paginatedRoles = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredRoles.slice(start, start + PAGE_SIZE);
+  }, [filteredRoles, currentPage]);
 
   const selectedCount = selected.size;
   const filteredSelectedCount = filteredRoles.filter((role) =>
@@ -130,6 +149,14 @@ export default function RoleDashboard({
       return next;
     });
   };
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, statusFilter, targetFilter, showSelectedOnly]);
+
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
 
   return (
     <section
@@ -300,6 +327,44 @@ export default function RoleDashboard({
             })}
           </div>
         </div>
+        <div
+          style={{
+            padding: 16,
+            borderRadius: 18,
+            border: "1px solid rgba(15, 23, 42, 0.1)",
+            background: "rgba(255,255,255,0.9)",
+          }}
+        >
+          <label style={{ fontSize: 12, color: "#64748b" }}>
+            Selection filter
+          </label>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            {[
+              { key: "all", label: "all", active: !showSelectedOnly },
+              { key: "selected", label: "selected", active: showSelectedOnly },
+            ].map((item) => (
+              <button
+                key={item.key}
+                onClick={() =>
+                  setShowSelectedOnly(item.key === "selected")
+                }
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: item.active
+                    ? "1px solid #0f172a"
+                    : "1px solid #cbd5e1",
+                  background: item.active ? "#0f172a" : "#fff",
+                  color: item.active ? "#fff" : "#334155",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {error ? (
@@ -312,9 +377,12 @@ export default function RoleDashboard({
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
           gap: 16,
+          maxWidth: 1120,
+          marginLeft: "auto",
+          marginRight: "auto",
         }}
       >
-        {filteredRoles.map((role) => {
+        {paginatedRoles.map((role) => {
           const selectedState = selected.has(role.id);
           const statusColors =
             STATUS_COLORS[role.status] ??
@@ -449,6 +517,52 @@ export default function RoleDashboard({
             </article>
           );
         })}
+      </div>
+      <div
+        style={{
+          marginTop: 14,
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          gap: 12,
+          color: "#475569",
+          fontSize: 12,
+        }}
+      >
+        <button
+          onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+          disabled={currentPage <= 1}
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: "1px solid #cbd5e1",
+            background: currentPage <= 1 ? "#e2e8f0" : "#fff",
+            color: currentPage <= 1 ? "#94a3b8" : "#334155",
+            cursor: currentPage <= 1 ? "not-allowed" : "pointer",
+          }}
+        >
+          Prev
+        </button>
+        <span>
+          Page {currentPage} / {pageCount}
+        </span>
+        <button
+          onClick={() =>
+            setPage((prev) => Math.min(pageCount, prev + 1))
+          }
+          disabled={currentPage >= pageCount}
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: "1px solid #cbd5e1",
+            background: currentPage >= pageCount ? "#e2e8f0" : "#fff",
+            color: currentPage >= pageCount ? "#94a3b8" : "#334155",
+            cursor:
+              currentPage >= pageCount ? "not-allowed" : "pointer",
+          }}
+        >
+          Next
+        </button>
       </div>
     </section>
   );
