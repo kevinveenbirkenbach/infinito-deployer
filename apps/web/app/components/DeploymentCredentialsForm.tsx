@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  AUTH_METHODS,
-  DEPLOY_TARGETS,
-  validateForm,
-} from "../lib/deploy_form";
+import { AUTH_METHODS, validateForm } from "../lib/deploy_form";
 
 type ServerState = {
   alias: string;
@@ -17,7 +13,6 @@ type ServerState = {
 };
 
 type FormState = {
-  deployTarget: string;
   alias: string;
   host: string;
   user: string;
@@ -27,7 +22,6 @@ type FormState = {
 };
 
 const FIELD_LABELS: Record<string, string> = {
-  deployTarget: "Deploy target",
   alias: "Alias",
   host: "Host",
   user: "User",
@@ -38,8 +32,6 @@ const FIELD_LABELS: Record<string, string> = {
 
 export default function DeploymentCredentialsForm({
   baseUrl,
-  deployTarget,
-  onDeployTargetChange,
   servers,
   activeAlias,
   onActiveAliasChange,
@@ -47,8 +39,6 @@ export default function DeploymentCredentialsForm({
   onAddServer,
 }: {
   baseUrl: string;
-  deployTarget: string;
-  onDeployTargetChange: (next: string) => void;
   servers: ServerState[];
   activeAlias: string;
   onActiveAliasChange: (alias: string) => void;
@@ -72,7 +62,6 @@ export default function DeploymentCredentialsForm({
   }, [activeServer?.alias]);
 
   const validationTarget: FormState = {
-    deployTarget,
     alias: activeServer?.alias ?? "",
     host: activeServer?.host ?? "",
     user: activeServer?.user ?? "",
@@ -141,7 +130,7 @@ export default function DeploymentCredentialsForm({
               color: "#0f172a",
             }}
           >
-            Deployment Target & Credentials
+            Deployment Credentials
           </h2>
           <p style={{ margin: "8px 0 0", color: "#475569" }}>
             Credentials are only used to establish the SSH session during
@@ -216,46 +205,6 @@ export default function DeploymentCredentialsForm({
               Add server
             </button>
           </div>
-        </div>
-
-        <div
-          style={{
-            padding: 16,
-            borderRadius: 18,
-            background: "#fff",
-            border: "1px solid rgba(15, 23, 42, 0.1)",
-          }}
-        >
-          <label style={{ fontSize: 12, color: "#64748b" }}>
-            Deploy target
-          </label>
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            {DEPLOY_TARGETS.map((target) => (
-              <button
-                key={target}
-                onClick={() => onDeployTargetChange(target)}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 999,
-                  border:
-                    deployTarget === target
-                      ? "1px solid #0f172a"
-                      : "1px solid #cbd5e1",
-                  background: deployTarget === target ? "#0f172a" : "#fff",
-                  color: deployTarget === target ? "#fff" : "#334155",
-                  fontSize: 12,
-                  cursor: "pointer",
-                }}
-              >
-                {target}
-              </button>
-            ))}
-          </div>
-          {errors.deployTarget ? (
-            <p style={{ margin: "8px 0 0", color: "#b91c1c" }}>
-              {errors.deployTarget}
-            </p>
-          ) : null}
         </div>
 
         <div

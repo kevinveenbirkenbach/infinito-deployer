@@ -5,7 +5,6 @@ import { buildDeploymentPayload } from "../../../apps/web/app/lib/deployment_pay
 
 test("builds payload for password auth", () => {
   const result = buildDeploymentPayload({
-    deployTarget: "server",
     deployScope: "active",
     activeServer: {
       alias: "server-1",
@@ -22,7 +21,6 @@ test("builds payload for password auth", () => {
   });
 
   assert.deepEqual(result.errors, {});
-  assert.equal(result.payload.deploy_target, "server");
   assert.equal(result.payload.host, "example.com");
   assert.equal(result.payload.user, "root");
   assert.deepEqual(result.payload.selected_roles, ["role-a", "role-b"]);
@@ -34,7 +32,6 @@ test("builds payload for password auth", () => {
 
 test("requires at least one role", () => {
   const result = buildDeploymentPayload({
-    deployTarget: "server",
     deployScope: "active",
     activeServer: {
       alias: "server-1",
@@ -56,7 +53,6 @@ test("requires at least one role", () => {
 
 test("requires inventory ready", () => {
   const result = buildDeploymentPayload({
-    deployTarget: "server",
     deployScope: "active",
     activeServer: {
       alias: "server-1",
@@ -78,7 +74,6 @@ test("requires inventory ready", () => {
 
 test("builds payload for key auth", () => {
   const result = buildDeploymentPayload({
-    deployTarget: "workstation",
     deployScope: "active",
     activeServer: {
       alias: "server-1",

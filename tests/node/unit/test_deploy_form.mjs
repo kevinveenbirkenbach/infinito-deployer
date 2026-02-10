@@ -19,7 +19,6 @@ test("initial state is invalid and empty", () => {
 
 test("password auth requires password and forbids private key", () => {
   const errors = validateForm({
-    deployTarget: "server",
     alias: "server-1",
     host: "example.com",
     user: "root",
@@ -32,7 +31,6 @@ test("password auth requires password and forbids private key", () => {
 
 test("private key auth requires key and forbids password", () => {
   const errors = validateForm({
-    deployTarget: "server",
     alias: "server-1",
     host: "example.com",
     user: "root",
@@ -45,7 +43,6 @@ test("private key auth requires key and forbids password", () => {
 
 test("valid form passes", () => {
   const errors = validateForm({
-    deployTarget: "workstation",
     alias: "server-1",
     host: "127.0.0.1",
     user: "dev",

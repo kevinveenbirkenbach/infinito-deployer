@@ -21,7 +21,6 @@ type FileEntry = {
 };
 
 type CredentialsState = {
-  deployTarget: string;
   alias: string;
   host: string;
   user: string;
@@ -717,7 +716,6 @@ export default function WorkspacePanel({
     !inventoryReady &&
     activeAlias &&
     activeRoles.length > 0 &&
-    credentials.deployTarget &&
     credentials.host &&
     credentials.user;
 
@@ -727,7 +725,6 @@ export default function WorkspacePanel({
     setInventorySyncError(null);
     try {
       const payload = {
-        deploy_target: credentials.deployTarget,
         alias: activeAlias,
         host: credentials.host,
         user: credentials.user,

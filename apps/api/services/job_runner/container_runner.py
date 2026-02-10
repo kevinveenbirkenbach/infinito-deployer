@@ -36,7 +36,9 @@ def _require_absolute(path: str, label: str) -> Path:
 
 
 def load_container_config() -> ContainerRunnerConfig:
-    image = (os.getenv("JOB_RUNNER_IMAGE") or os.getenv("INFINITO_NEXUS_IMAGE") or "").strip()
+    image = (
+        os.getenv("JOB_RUNNER_IMAGE") or os.getenv("INFINITO_NEXUS_IMAGE") or ""
+    ).strip()
     if not image:
         raise HTTPException(
             status_code=500,
@@ -80,7 +82,9 @@ def load_container_config() -> ContainerRunnerConfig:
 
 def resolve_docker_bin() -> str:
     preferred = (os.getenv("JOB_RUNNER_DOCKER_BIN") or "").strip()
-    candidates = [preferred, "docker", "docker.io"] if preferred else ["docker", "docker.io"]
+    candidates = (
+        [preferred, "docker", "docker.io"] if preferred else ["docker", "docker.io"]
+    )
     for cand in candidates:
         if cand and shutil.which(cand):
             return cand
@@ -124,9 +128,8 @@ def build_container_command(
     host_job_dir = resolve_host_job_dir(job_dir)
 
     container_name = f"infinito-job-{job_id}"
-    inner_cmd = (
-        f"export PATH={shlex.quote(cfg.workdir)}:$PATH; "
-        + " ".join(shlex.quote(arg) for arg in cli_args)
+    inner_cmd = f"export PATH={shlex.quote(cfg.workdir)}:$PATH; " + " ".join(
+        shlex.quote(arg) for arg in cli_args
     )
 
     cmd: List[str] = [

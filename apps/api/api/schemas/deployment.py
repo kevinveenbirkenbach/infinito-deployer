@@ -60,6 +60,7 @@ class DeploymentRequest(BaseModel):
     selected_roles: List[str] = Field(
         default_factory=list, description="List of role IDs (must not be empty)"
     )
+
     @field_validator("workspace_id", "host", "user")
     @classmethod
     def _strip_required(cls, v: str) -> str:

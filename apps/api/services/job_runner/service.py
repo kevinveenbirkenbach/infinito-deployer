@@ -20,7 +20,11 @@ from .paths import job_paths, jobs_root
 from .persistence import load_json, mask_request_for_persistence, write_meta
 from .runner import start_process, terminate_process_group, write_runner_script
 from .config import env_bool, runner_backend
-from .container_runner import build_container_command, load_container_config, stop_container
+from .container_runner import (
+    build_container_command,
+    load_container_config,
+    stop_container,
+)
 from .secrets import collect_secrets
 from .util import atomic_write_json, atomic_write_text, safe_mkdir, utc_iso
 from .log_hub import LogHub
@@ -323,20 +327,15 @@ class JobRunnerService:
                     status_code=500, detail="INFINITO_REPO_PATH is invalid"
                 )
         elif runner_backend() == "local":
-            raise HTTPException(
-                status_code=500, detail="INFINITO_REPO_PATH is not set"
-            )
+            raise HTTPException(status_code=500, detail="INFINITO_REPO_PATH is not set")
         if not inventory_path.is_file():
             raise HTTPException(status_code=500, detail="inventory.yml is missing")
 
         cmd: List[str] = [
             "infinito",
-            "--no-signal",
             "deploy",
             "dedicated",
             inventory_arg,
-            "-T",
-            req.deploy_target,
         ]
 
         if req.limit:

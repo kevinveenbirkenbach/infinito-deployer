@@ -41,7 +41,6 @@ export default function DeploymentWorkspace({
   const [roles, setRoles] = useState<Role[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [rolesError, setRolesError] = useState<string | null>(null);
-  const [deployTarget, setDeployTarget] = useState(initial.deployTarget);
   const [deployScope, setDeployScope] = useState<"active" | "all">("active");
   const [servers, setServers] = useState<ServerState[]>([
     {
@@ -299,7 +298,6 @@ export default function DeploymentWorkspace({
   const deploymentPlan = useMemo(
     () =>
       buildDeploymentPayload({
-        deployTarget,
         deployScope,
         activeServer,
         selectedRolesByAlias,
@@ -308,7 +306,6 @@ export default function DeploymentWorkspace({
         inventoryReady,
       }),
     [
-      deployTarget,
       deployScope,
       activeServer,
       selectedRolesByAlias,
@@ -364,13 +361,12 @@ export default function DeploymentWorkspace({
 
   const credentials = useMemo(() => {
     return {
-      deployTarget,
       alias: activeServer?.alias ?? "",
       host: activeServer?.host ?? "",
       user: activeServer?.user ?? "",
       authMethod: activeServer?.authMethod ?? "password",
     };
-  }, [deployTarget, activeServer]);
+  }, [activeServer]);
 
   return (
     <>
@@ -385,8 +381,6 @@ export default function DeploymentWorkspace({
 
       <DeploymentCredentialsForm
         baseUrl={baseUrl}
-        deployTarget={deployTarget}
-        onDeployTargetChange={setDeployTarget}
         servers={servers}
         activeAlias={activeAlias}
         onActiveAliasChange={setActiveAlias}
@@ -400,8 +394,7 @@ export default function DeploymentWorkspace({
         credentials={credentials}
         onCredentialsPatch={(patch) => {
           if (!activeServer) return;
-          const { deployTarget: _ignored, ...rest } = patch as any;
-          updateServer(activeServer.alias, rest);
+          updateServer(activeServer.alias, patch);
         }}
         onInventoryReadyChange={setInventoryReady}
         onSelectedRolesByAliasChange={applySelectedRolesByAlias}
@@ -453,8 +446,6 @@ export default function DeploymentWorkspace({
             }}
           >
             Selected roles: <strong>{selectedRoles.length || "none"}</strong>
-            <br />
-            Target: <strong>{deployTarget || "—"}</strong>
             <br />
             Active server: <strong>{activeAlias || "—"}</strong>
           </div>

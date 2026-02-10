@@ -1,9 +1,7 @@
 export const AUTH_METHODS = ["password", "private_key"];
-export const DEPLOY_TARGETS = ["server", "workstation"];
 
 export function createInitialState() {
   return {
-    deployTarget: "server",
     alias: "main",
     host: "",
     user: "",
@@ -15,7 +13,6 @@ export function createInitialState() {
 
 export function validateForm(state) {
   const errors = {};
-  const deployTarget = state?.deployTarget ?? "";
   const alias = String(state?.alias ?? "").trim();
   const host = String(state?.host ?? "").trim();
   const user = String(state?.user ?? "").trim();
@@ -23,9 +20,6 @@ export function validateForm(state) {
   const password = String(state?.password ?? "");
   const privateKey = String(state?.privateKey ?? "");
 
-  if (!DEPLOY_TARGETS.includes(deployTarget)) {
-    errors.deployTarget = "Choose a valid deployment target.";
-  }
   if (!alias) {
     errors.alias = "Alias is required.";
   }

@@ -12,7 +12,12 @@ from typing import Any, Dict, Iterable, List
 import yaml
 from fastapi import HTTPException
 
-from services.job_runner.util import atomic_write_json, atomic_write_text, safe_mkdir, utc_iso
+from services.job_runner.util import (
+    atomic_write_json,
+    atomic_write_text,
+    safe_mkdir,
+    utc_iso,
+)
 from services.role_index.paths import repo_roles_root
 
 from .paths import workspace_dir, workspaces_root
@@ -251,7 +256,9 @@ class WorkspaceService:
         try:
             safe_mkdir(target)
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"failed to create directory: {exc}")
+            raise HTTPException(
+                status_code=500, detail=f"failed to create directory: {exc}"
+            )
         return target.relative_to(root).as_posix()
 
     def rename_file(self, workspace_id: str, rel_path: str, new_path: str) -> str:
@@ -265,7 +272,9 @@ class WorkspaceService:
 
         dst = _safe_resolve(root, raw_new)
         if src.is_dir() and src in dst.parents:
-            raise HTTPException(status_code=400, detail="cannot move directory into itself")
+            raise HTTPException(
+                status_code=400, detail="cannot move directory into itself"
+            )
         if dst.exists():
             raise HTTPException(status_code=409, detail="target already exists")
         if not dst.parent.exists():
@@ -410,7 +419,9 @@ class WorkspaceService:
         if not host_vars_file:
             host = (meta.get("host") or "").strip()
             if not host:
-                raise HTTPException(status_code=400, detail="host missing for workspace")
+                raise HTTPException(
+                    status_code=400, detail="host missing for workspace"
+                )
             host_vars_file = f"host_vars/{_sanitize_host_filename(host)}.yml"
 
         host_vars_path = _safe_resolve(root, host_vars_file)

@@ -2,7 +2,6 @@ import { validateForm } from "./deploy_form.js";
 
 /**
  * @param {object} args
- * @param {string} args.deployTarget
  * @param {"active"|"all"} args.deployScope
  * @param {object | null} args.activeServer
  * @param {Record<string, string[]>} args.selectedRolesByAlias
@@ -11,7 +10,6 @@ import { validateForm } from "./deploy_form.js";
  * @param {boolean} args.inventoryReady
  */
 export function buildDeploymentPayload({
-  deployTarget,
   deployScope,
   activeServer,
   selectedRolesByAlias,
@@ -21,7 +19,6 @@ export function buildDeploymentPayload({
 }) {
   const server = activeServer || {};
   const credentials = {
-    deployTarget,
     alias: server.alias || "",
     host: server.host || "",
     user: server.user || "",
@@ -83,7 +80,6 @@ export function buildDeploymentPayload({
 
   const payload = {
     workspace_id: workspaceId,
-    deploy_target: credentials.deployTarget,
     host: String(credentials.host ?? "").trim(),
     user: String(credentials.user ?? "").trim(),
     auth,
