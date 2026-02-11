@@ -43,6 +43,7 @@ type WorkspacePanelProps = {
   aliasDeletes?: string[];
   onAliasDeletesHandled?: (count: number) => void;
   selectionTouched?: boolean;
+  compact?: boolean;
 };
 
 type TreeNode = {
@@ -380,7 +381,19 @@ export default function WorkspacePanel({
   aliasDeletes,
   onAliasDeletesHandled,
   selectionTouched,
+  compact = false,
 }: WorkspacePanelProps) {
+  const Wrapper = compact ? "div" : "section";
+  const wrapperStyle = compact
+    ? undefined
+    : {
+        marginTop: 28,
+        padding: 24,
+        borderRadius: 24,
+        background: "var(--deployer-panel-workspace-bg)",
+        border: "1px solid var(--bs-border-color-translucent)",
+        boxShadow: "var(--deployer-shadow)",
+      };
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
@@ -675,6 +688,20 @@ export default function WorkspacePanel({
       inventorySeededRef.current = true;
     }
   }, [selectionTouched]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    if (!onSelectedRolesByAliasChange) return;
+    const merged = mergeRolesByAlias(selectedRolesByAlias);
+    if (rolesByAliasKey(merged) !== rolesByAliasKey(selectedRolesByAlias)) {
+      onSelectedRolesByAliasChange(merged);
+    }
+  }, [
+    workspaceId,
+    hostVarsAliases,
+    onSelectedRolesByAliasChange,
+    selectedRolesByAlias,
+  ]);
 
 
   const syncInventoryReady = (nextFiles: FileEntry[]) => {
@@ -2218,50 +2245,43 @@ export default function WorkspacePanel({
 
   return (
     <>
-      <section
-        style={{
-          marginTop: 28,
-          padding: 24,
-          borderRadius: 24,
-          background: "var(--deployer-panel-workspace-bg)",
-          border: "1px solid var(--bs-border-color-translucent)",
-          boxShadow: "var(--deployer-shadow)",
-        }}
-      >
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-        <div style={{ flex: "1 1 320px" }}>
-          <h2
-            className="text-body"
+      <Wrapper style={wrapperStyle}>
+      {!compact ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+          <div style={{ flex: "1 1 320px" }}>
+            <h2
+              className="text-body"
+              style={{
+                margin: 0,
+                fontFamily: "var(--font-display)",
+                fontSize: 26,
+                letterSpacing: "-0.02em",
+              }}
+            >
+              Inventory
+            </h2>
+            <p className="text-body-secondary" style={{ margin: "8px 0 0" }}>
+              Step-by-step: select roles → edit files → generate credentials →
+              export ZIP or deploy.
+            </p>
+          </div>
+          <div
+            className="text-body-secondary"
             style={{
-              margin: 0,
-              fontFamily: "var(--font-display)",
-              fontSize: 26,
-              letterSpacing: "-0.02em",
+              flex: "1 1 240px",
+              alignSelf: "center",
+              textAlign: "right",
+              fontSize: 13,
             }}
           >
-            Workspace & Files
-          </h2>
-          <p className="text-body-secondary" style={{ margin: "8px 0 0" }}>
-            Step-by-step: select roles → edit files → generate credentials →
-            export ZIP or deploy.
-          </p>
+            Workspace:{" "}
+            <strong>{workspaceId ? workspaceId : "creating..."}</strong>
+            <br />
+            Inventory:{" "}
+            <strong>{inventoryReady ? "ready" : "not generated"}</strong>
+          </div>
         </div>
-        <div
-          className="text-body-secondary"
-          style={{
-            flex: "1 1 240px",
-            alignSelf: "center",
-            textAlign: "right",
-            fontSize: 13,
-          }}
-        >
-          Workspace:{" "}
-          <strong>{workspaceId ? workspaceId : "creating..."}</strong>
-          <br />
-          Inventory:{" "}
-          <strong>{inventoryReady ? "ready" : "not generated"}</strong>
-        </div>
-      </div>
+      ) : null}
 
       {workspaceError ? (
         <div className="text-danger" style={{ marginTop: 12, fontSize: 12 }}>
@@ -2952,7 +2972,7 @@ export default function WorkspacePanel({
           </div>
         </div>
       </div>
-    </section>
+      </Wrapper>
       {contextMenu ? (
         <div
           onClick={(event) => event.stopPropagation()}

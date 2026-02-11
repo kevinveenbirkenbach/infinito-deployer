@@ -64,7 +64,8 @@ const STATUS_COLORS: Record<
   },
 };
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 8;
+const LAYOUT_MAX_WIDTH = 960;
 
 function sortStatuses(statuses: string[]): string[] {
   const order = new Map(STATUS_ORDER.map((s, idx) => [s, idx]));
@@ -143,6 +144,7 @@ type RoleDashboardProps = {
   selected: Set<string>;
   onToggleSelected: (id: string) => void;
   activeAlias?: string;
+  compact?: boolean;
 };
 
 export default function RoleDashboard({
@@ -152,7 +154,19 @@ export default function RoleDashboard({
   selected,
   onToggleSelected,
   activeAlias,
+  compact = false,
 }: RoleDashboardProps) {
+  const Wrapper = compact ? "div" : "section";
+  const wrapperStyle: CSSProperties | undefined = compact
+    ? undefined
+    : {
+        marginTop: 28,
+        padding: 24,
+        borderRadius: 24,
+        background: "var(--deployer-panel-catalog-bg)",
+        border: "1px solid var(--bs-border-color-translucent)",
+        boxShadow: "var(--deployer-shadow)",
+      };
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<Set<string>>(
     new Set()
@@ -237,77 +251,67 @@ export default function RoleDashboard({
   }, [page, pageCount]);
 
   return (
-    <section
-      style={{
-        marginTop: 28,
-        padding: 24,
-        borderRadius: 24,
-        background: "var(--deployer-panel-catalog-bg)",
-        border: "1px solid var(--bs-border-color-translucent)",
-        boxShadow: "var(--deployer-shadow)",
-      }}
-    >
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-        <div style={{ flex: "1 1 320px" }}>
-          <h2
-            className="text-body"
+    <Wrapper style={wrapperStyle}>
+      {!compact ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+          <div style={{ flex: "1 1 320px" }}>
+            <h2
+              className="text-body"
+              style={{
+                margin: 0,
+                fontFamily: "var(--font-display)",
+                fontSize: 28,
+                letterSpacing: "-0.02em",
+              }}
+            >
+            Store
+            </h2>
+            <p className="text-body-secondary" style={{ margin: "8px 0 0" }}>
+              Browse roles, filter fast, and keep your selections locked in
+              while you explore.
+            </p>
+          </div>
+          <div
+            className="text-body-secondary"
             style={{
-              margin: 0,
-              fontFamily: "var(--font-display)",
-              fontSize: 28,
-              letterSpacing: "-0.02em",
+              flex: "1 1 240px",
+              alignSelf: "center",
+              textAlign: "right",
+              fontSize: 13,
             }}
           >
-            Deployment Catalog
-          </h2>
-          <p className="text-body-secondary" style={{ margin: "8px 0 0" }}>
-            Browse roles, filter fast, and keep your selections locked in
-            while you explore.
-          </p>
+            {loading ? (
+              <span>Loading roles…</span>
+            ) : (
+              <span>
+                {filteredRoles.length} / {roles.length} roles
+                {selectedCount > 0 ? (
+                  <span>
+                    {" "}
+                    · Selected {selectedCount}
+                    {hiddenSelected > 0 ? ` (${hiddenSelected} hidden)` : ""}
+                  </span>
+                ) : null}
+                {activeAlias ? ` · Active: ${activeAlias}` : ""}
+              </span>
+            )}
+          </div>
         </div>
-        <div
-          className="text-body-secondary"
-          style={{
-            flex: "1 1 240px",
-            alignSelf: "center",
-            textAlign: "right",
-            fontSize: 13,
-          }}
-        >
-          {loading ? (
-            <span>Loading roles…</span>
-          ) : (
-            <span>
-              {filteredRoles.length} / {roles.length} roles
-              {selectedCount > 0 ? (
-                <span>
-                  {" "}
-                  · Selected {selectedCount}
-                  {hiddenSelected > 0 ? ` (${hiddenSelected} hidden)` : ""}
-                </span>
-              ) : null}
-              {activeAlias ? ` · Active: ${activeAlias}` : ""}
-            </span>
-          )}
-        </div>
-      </div>
+      ) : null}
 
       <div
         style={{
+          marginTop: 20,
+          maxWidth: LAYOUT_MAX_WIDTH,
+          marginLeft: "auto",
+          marginRight: "auto",
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: 12,
-          marginTop: 20,
+          gap: 14,
+          alignItems: "end",
         }}
       >
-        <div
-          style={{
-            padding: 16,
-            borderRadius: 18,
-            border: "1px solid var(--bs-border-color-translucent)",
-            background: "var(--deployer-card-bg-soft)",
-          }}
-        >
+        <div>
           <label className="text-body-tertiary" style={{ fontSize: 12 }}>
             Search
           </label>
@@ -315,35 +319,26 @@ export default function RoleDashboard({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search roles"
+            className="form-control"
             style={{
-              width: "100%",
               marginTop: 6,
-              padding: "10px 12px",
               borderRadius: 12,
-              border: "1px solid var(--bs-border-color)",
               background: "var(--bs-body-bg)",
               fontSize: 14,
             }}
           />
         </div>
-        <div
-          style={{
-            padding: 16,
-            borderRadius: 18,
-            border: "1px solid var(--bs-border-color-translucent)",
-            background: "var(--deployer-card-bg-soft)",
-          }}
-        >
+        <div>
           <label className="text-body-tertiary" style={{ fontSize: 12 }}>
             Deploy target
           </label>
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
             {["all", "server", "workstation"].map((target) => (
               <button
                 key={target}
                 onClick={() => setTargetFilter(target)}
                 style={{
-                  padding: "6px 10px",
+                  padding: "6px 12px",
                   borderRadius: 999,
                   border:
                     targetFilter === target
@@ -358,7 +353,6 @@ export default function RoleDashboard({
                       ? "var(--bs-body-bg)"
                       : "var(--deployer-muted-ink)",
                   fontSize: 12,
-                  cursor: "pointer",
                 }}
               >
                 {target}
@@ -366,25 +360,11 @@ export default function RoleDashboard({
             ))}
           </div>
         </div>
-        <div
-          style={{
-            padding: 16,
-            borderRadius: 18,
-            border: "1px solid var(--bs-border-color-translucent)",
-            background: "var(--deployer-card-bg-soft)",
-          }}
-        >
+        <div>
           <label className="text-body-tertiary" style={{ fontSize: 12 }}>
             Status filter
           </label>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              marginTop: 8,
-            }}
-          >
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
             {statusOptions.map((status) => {
               const active = statusFilter.has(status);
               const colors =
@@ -399,7 +379,7 @@ export default function RoleDashboard({
                   key={status}
                   onClick={() => toggleStatus(status)}
                   style={{
-                    padding: "6px 10px",
+                    padding: "6px 12px",
                     borderRadius: 999,
                     border: `1px solid ${
                       active ? "var(--bs-body-color)" : colors.border
@@ -407,7 +387,6 @@ export default function RoleDashboard({
                     background: active ? "var(--bs-body-color)" : colors.bg,
                     color: active ? "var(--bs-body-bg)" : colors.fg,
                     fontSize: 12,
-                    cursor: "pointer",
                   }}
                 >
                   {status}
@@ -416,29 +395,20 @@ export default function RoleDashboard({
             })}
           </div>
         </div>
-        <div
-          style={{
-            padding: 16,
-            borderRadius: 18,
-            border: "1px solid var(--bs-border-color-translucent)",
-            background: "var(--deployer-card-bg-soft)",
-          }}
-        >
+        <div>
           <label className="text-body-tertiary" style={{ fontSize: 12 }}>
             Selection filter
           </label>
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
             {[
               { key: "all", label: "all", active: !showSelectedOnly },
               { key: "selected", label: "selected", active: showSelectedOnly },
             ].map((item) => (
               <button
                 key={item.key}
-                onClick={() =>
-                  setShowSelectedOnly(item.key === "selected")
-                }
+                onClick={() => setShowSelectedOnly(item.key === "selected")}
                 style={{
-                  padding: "6px 10px",
+                  padding: "6px 12px",
                   borderRadius: 999,
                   border: item.active
                     ? "1px solid var(--bs-body-color)"
@@ -450,7 +420,6 @@ export default function RoleDashboard({
                     ? "var(--bs-body-bg)"
                     : "var(--deployer-muted-ink)",
                   fontSize: 12,
-                  cursor: "pointer",
                 }}
               >
                 {item.label}
@@ -469,12 +438,12 @@ export default function RoleDashboard({
       <div
         style={{
           marginTop: 22,
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: 16,
-          maxWidth: 1120,
+          maxWidth: LAYOUT_MAX_WIDTH,
           marginLeft: "auto",
           marginRight: "auto",
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+          gap: 16,
         }}
       >
         {paginatedRoles.map((role) => {
@@ -731,7 +700,7 @@ export default function RoleDashboard({
                   </div>
                 );
               })()}
-            </article>
+              </article>
           );
         })}
       </div>
@@ -744,13 +713,16 @@ export default function RoleDashboard({
           alignItems: "center",
           gap: 12,
           fontSize: 12,
+          maxWidth: LAYOUT_MAX_WIDTH,
+          marginLeft: "auto",
+          marginRight: "auto",
         }}
       >
         <button
           onClick={() => setPage((prev) => Math.max(1, prev - 1))}
           disabled={currentPage <= 1}
+          className="btn btn-sm"
           style={{
-            padding: "6px 10px",
             borderRadius: 999,
             border: "1px solid var(--bs-border-color)",
             background:
@@ -761,7 +733,6 @@ export default function RoleDashboard({
               currentPage <= 1
                 ? "var(--deployer-disabled-text)"
                 : "var(--deployer-muted-ink)",
-            cursor: currentPage <= 1 ? "not-allowed" : "pointer",
           }}
         >
           Prev
@@ -774,8 +745,8 @@ export default function RoleDashboard({
             setPage((prev) => Math.min(pageCount, prev + 1))
           }
           disabled={currentPage >= pageCount}
+          className="btn btn-sm"
           style={{
-            padding: "6px 10px",
             borderRadius: 999,
             border: "1px solid var(--bs-border-color)",
             background:
@@ -786,8 +757,6 @@ export default function RoleDashboard({
               currentPage >= pageCount
                 ? "var(--deployer-disabled-text)"
                 : "var(--deployer-muted-ink)",
-            cursor:
-              currentPage >= pageCount ? "not-allowed" : "pointer",
           }}
         >
           Next
@@ -860,6 +829,6 @@ export default function RoleDashboard({
           </div>
         </div>
       ) : null}
-    </section>
+    </Wrapper>
   );
 }

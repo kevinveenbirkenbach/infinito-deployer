@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AUTH_METHODS, validateForm } from "../lib/deploy_form";
+import { validateForm } from "../lib/deploy_form";
 import VaultPasswordModal from "./VaultPasswordModal";
 
 type ServerState = {
@@ -41,7 +41,7 @@ const FIELD_LABELS: Record<string, string> = {
   host: "Host",
   port: "Port",
   user: "User",
-  authMethod: "Auth method",
+  authMethod: "Credential type",
   password: "Password",
   privateKey: "Private key",
 };
@@ -55,6 +55,7 @@ export default function DeploymentCredentialsForm({
   onUpdateServer,
   onRemoveServer,
   onAddServer,
+  compact = false,
 }: {
   baseUrl: string;
   workspaceId: string | null;
@@ -64,7 +65,19 @@ export default function DeploymentCredentialsForm({
   onUpdateServer: (alias: string, patch: Partial<ServerState>) => void;
   onRemoveServer: (alias: string) => Promise<void> | void;
   onAddServer: () => void;
+  compact?: boolean;
 }) {
+  const Wrapper = compact ? "div" : "section";
+  const wrapperStyle = compact
+    ? undefined
+    : {
+        marginTop: 28,
+        padding: 24,
+        borderRadius: 24,
+        background: "var(--deployer-panel-credentials-bg)",
+        border: "1px solid var(--bs-border-color-translucent)",
+        boxShadow: "var(--deployer-shadow)",
+      };
   const [openAlias, setOpenAlias] = useState<string | null>(null);
   const [testBusy, setTestBusy] = useState<Record<string, boolean>>({});
   const [testResults, setTestResults] = useState<Record<string, ConnectionResult>>(
@@ -147,6 +160,7 @@ export default function DeploymentCredentialsForm({
       updateServer(alias, { authMethod: next, privateKey: "", publicKey: "" });
     } else {
       updateServer(alias, { authMethod: next, password: "" });
+      setPasswordConfirm("");
     }
   };
 
@@ -334,49 +348,41 @@ export default function DeploymentCredentialsForm({
   };
 
   return (
-    <section
-      style={{
-        marginTop: 28,
-        padding: 24,
-        borderRadius: 24,
-        background: "var(--deployer-panel-credentials-bg)",
-        border: "1px solid var(--bs-border-color-translucent)",
-        boxShadow: "var(--deployer-shadow)",
-      }}
-    >
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-        <div style={{ flex: "1 1 300px" }}>
-          <h2
-            className="text-body"
+    <Wrapper style={wrapperStyle}>
+      {!compact ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+          <div style={{ flex: "1 1 300px" }}>
+            <h2
+              className="text-body"
+              style={{
+                margin: 0,
+                fontFamily: "var(--font-display)",
+                fontSize: 26,
+                letterSpacing: "-0.02em",
+              }}
+            >
+              Server
+            </h2>
+            <p className="text-body-secondary" style={{ margin: "8px 0 0" }}>
+              Configure server connections for deployments. Secrets can be stored
+              in the workspace vault and are never persisted in browser storage.
+            </p>
+          </div>
+          <div
+            className="text-body-secondary"
             style={{
-              margin: 0,
-              fontFamily: "var(--font-display)",
-              fontSize: 26,
-              letterSpacing: "-0.02em",
+              flex: "1 1 240px",
+              alignSelf: "center",
+              textAlign: "right",
+              fontSize: 13,
             }}
           >
-            Deployment Credentials
-          </h2>
-          <p className="text-body-secondary" style={{ margin: "8px 0 0" }}>
-            Credentials are used to establish the SSH session during deployment.
-            Secrets can be stored in the workspace vault and are never persisted
-            in browser storage.
-          </p>
+            API Base: <code>{baseUrl}</code>
+          </div>
         </div>
-        <div
-          className="text-body-secondary"
-          style={{
-            flex: "1 1 240px",
-            alignSelf: "center",
-            textAlign: "right",
-            fontSize: 13,
-          }}
-        >
-          API Base: <code>{baseUrl}</code>
-        </div>
-      </div>
+      ) : null}
 
-      <div style={{ marginTop: 20, display: "flex", gap: 12 }}>
+      <div style={{ marginTop: compact ? 0 : 20, display: "flex", gap: 12 }}>
         <button
           onClick={onAddServer}
           style={{
@@ -652,14 +658,13 @@ export default function DeploymentCredentialsForm({
             >
               <div>
                 <h3 style={{ margin: 0, fontSize: 18 }}>
-                  Credentials · {openServer.alias}
+                  Server · {openServer.alias}
                 </h3>
                 <p
                   className="text-body-secondary"
                   style={{ margin: "6px 0 0", fontSize: 12 }}
                 >
-                  Configure auth method, passwords, and SSH keys for this
-                  server.
+                  Configure password or SSH key access for this server.
                 </p>
               </div>
               <button
@@ -679,33 +684,36 @@ export default function DeploymentCredentialsForm({
 
             <div>
               <label className="text-body-tertiary" style={{ fontSize: 12 }}>
-                Auth method
+                Credential type
               </label>
               <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                {AUTH_METHODS.map((method) => (
+                {[
+                  { key: "password", label: "Password" },
+                  { key: "private_key", label: "SSH key" },
+                ].map((method) => (
                   <button
-                    key={method}
-                    onClick={() => onAuthChange(openServer.alias, method)}
+                    key={method.key}
+                    onClick={() => onAuthChange(openServer.alias, method.key)}
                     style={{
-                      padding: "6px 10px",
+                      padding: "6px 12px",
                       borderRadius: 999,
                       border:
-                        openServer.authMethod === method
+                        openServer.authMethod === method.key
                           ? "1px solid var(--bs-body-color)"
                           : "1px solid var(--bs-border-color)",
                       background:
-                        openServer.authMethod === method
+                        openServer.authMethod === method.key
                           ? "var(--bs-body-color)"
                           : "var(--bs-body-bg)",
                       color:
-                        openServer.authMethod === method
+                        openServer.authMethod === method.key
                           ? "var(--bs-body-bg)"
                           : "var(--deployer-muted-ink)",
                       fontSize: 12,
                       cursor: "pointer",
                     }}
                   >
-                    {method.replace("_", " ")}
+                    {method.label}
                   </button>
                 ))}
               </div>
@@ -716,50 +724,36 @@ export default function DeploymentCredentialsForm({
               ) : null}
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 16,
-              }}
-            >
-              <div>
-                <label className="text-body-tertiary" style={{ fontSize: 12 }}>
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={openServer.password}
-                  onChange={(event) =>
-                    updateServer(openServer.alias, {
-                      password: event.target.value,
-                    })
-                  }
-                  disabled={openServer.authMethod !== "password"}
-                  placeholder={
-                    openServer.authMethod === "password"
-                      ? "Enter password"
-                      : "Disabled for key auth"
-                  }
-                  autoComplete="off"
-                  style={{
-                    width: "100%",
-                    marginTop: 8,
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: "1px solid var(--bs-border-color)",
-                    background:
-                      openServer.authMethod === "password"
-                        ? "var(--bs-body-bg)"
-                        : "var(--deployer-input-disabled-bg)",
-                  }}
-                />
-                {formErrors.password ? (
-                  <p className="text-danger" style={{ margin: "8px 0 0" }}>
-                    {formErrors.password}
-                  </p>
-                ) : null}
-                {openServer.authMethod === "password" ? (
+            {openServer.authMethod === "password" ? (
+              <div style={{ display: "grid", gap: 16 }}>
+                <div>
+                  <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={openServer.password}
+                    onChange={(event) =>
+                      updateServer(openServer.alias, {
+                        password: event.target.value,
+                      })
+                    }
+                    placeholder="Enter password"
+                    autoComplete="off"
+                    style={{
+                      width: "100%",
+                      marginTop: 8,
+                      padding: "10px 12px",
+                      borderRadius: 12,
+                      border: "1px solid var(--bs-border-color)",
+                      background: "var(--bs-body-bg)",
+                    }}
+                  />
+                  {formErrors.password ? (
+                    <p className="text-danger" style={{ margin: "8px 0 0" }}>
+                      {formErrors.password}
+                    </p>
+                  ) : null}
                   <input
                     type="password"
                     value={passwordConfirm}
@@ -775,196 +769,194 @@ export default function DeploymentCredentialsForm({
                       background: "var(--bs-body-bg)",
                     }}
                   />
-                ) : null}
-                <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-                  <button
-                    onClick={() => triggerVaultPrompt("store-password", true)}
-                    disabled={openServer.authMethod !== "password" || !workspaceId}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: 999,
-                      border: "1px solid var(--bs-border-color)",
-                      background: "var(--bs-body-bg)",
-                      color: "var(--deployer-muted-ink)",
-                      fontSize: 12,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Store in vault
-                  </button>
+                  <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                    <button
+                      onClick={() => triggerVaultPrompt("store-password", true)}
+                      disabled={!workspaceId}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        border: "1px solid var(--bs-border-color)",
+                        background: "var(--bs-body-bg)",
+                        color: "var(--deployer-muted-ink)",
+                        fontSize: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Store in vault
+                    </button>
+                  </div>
                 </div>
               </div>
+            ) : null}
 
-              <div>
-                <label className="text-body-tertiary" style={{ fontSize: 12 }}>
-                  Private key
-                </label>
-                <textarea
-                  value={openServer.privateKey}
-                  onChange={(event) =>
-                    updateServer(openServer.alias, {
-                      privateKey: event.target.value,
-                    })
-                  }
-                  disabled={openServer.authMethod !== "private_key"}
-                  placeholder={
-                    openServer.authMethod === "private_key"
-                      ? "Paste SSH private key"
-                      : "Disabled for password auth"
-                  }
-                  rows={5}
-                  autoComplete="off"
-                  spellCheck={false}
+            {openServer.authMethod === "private_key" ? (
+              <div style={{ display: "grid", gap: 16 }}>
+                <div>
+                  <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                    Private key
+                  </label>
+                  <textarea
+                    value={openServer.privateKey}
+                    onChange={(event) =>
+                      updateServer(openServer.alias, {
+                        privateKey: event.target.value,
+                      })
+                    }
+                    placeholder="Paste SSH private key"
+                    rows={6}
+                    autoComplete="off"
+                    spellCheck={false}
+                    style={{
+                      width: "100%",
+                      marginTop: 8,
+                      padding: "10px 12px",
+                      borderRadius: 12,
+                      border: "1px solid var(--bs-border-color)",
+                      background: "var(--bs-body-bg)",
+                      resize: "vertical",
+                      fontFamily:
+                        "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+                      fontSize: 12,
+                    }}
+                  />
+                  {formErrors.privateKey ? (
+                    <p className="text-danger" style={{ margin: "8px 0 0" }}>
+                      {formErrors.privateKey}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div
                   style={{
-                    width: "100%",
-                    marginTop: 8,
-                    padding: "10px 12px",
+                    padding: 12,
                     borderRadius: 12,
-                    border: "1px solid var(--bs-border-color)",
-                    background:
-                      openServer.authMethod === "private_key"
-                        ? "var(--bs-body-bg)"
-                        : "var(--deployer-input-disabled-bg)",
-                    resize: "vertical",
-                    fontFamily:
-                      "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-                    fontSize: 12,
+                    border: "1px solid var(--bs-border-color-translucent)",
+                    background: "var(--deployer-card-bg-soft)",
+                    display: "grid",
+                    gap: 10,
                   }}
-                />
-                {formErrors.privateKey ? (
-                  <p className="text-danger" style={{ margin: "8px 0 0" }}>
-                    {formErrors.privateKey}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <span style={{ fontSize: 12, fontWeight: 600 }}>
+                      SSH key generator
+                    </span>
+                    <button
+                      onClick={() =>
+                        passphraseEnabled
+                          ? triggerVaultPrompt("keygen", true)
+                          : handleKeygen(null, null)
+                      }
+                      disabled={keygenBusy || !workspaceId}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        border: "1px solid var(--bs-body-color)",
+                        background: "var(--bs-body-color)",
+                        color: "var(--bs-body-bg)",
+                        fontSize: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {keygenBusy ? "Generating..." : "Generate key"}
+                    </button>
+                  </div>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                      Algorithm
+                    </label>
+                    <select
+                      value={openServer.keyAlgorithm || "ed25519"}
+                      onChange={(event) =>
+                        updateServer(openServer.alias, {
+                          keyAlgorithm: event.target.value,
+                        })
+                      }
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 10,
+                        border: "1px solid var(--bs-border-color)",
+                        background: "var(--bs-body-bg)",
+                        fontSize: 12,
+                      }}
+                    >
+                      <option value="ed25519">ed25519 (recommended)</option>
+                      <option value="rsa">rsa 4096</option>
+                      <option value="ecdsa">ecdsa</option>
+                    </select>
+                  </div>
+                  <label
+                    className="text-body-secondary"
+                    style={{ display: "flex", gap: 8, alignItems: "center" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={passphraseEnabled}
+                      onChange={(event) =>
+                        setPassphraseEnabled(event.target.checked)
+                      }
+                    />
+                    Generate passphrase (stored in credentials vault)
+                  </label>
+                  <div>
+                    <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                      Public key
+                    </label>
+                    <textarea
+                      readOnly
+                      value={openServer.publicKey || ""}
+                      placeholder="Public key will appear here"
+                      rows={3}
+                      style={{
+                        width: "100%",
+                        marginTop: 8,
+                        padding: "10px 12px",
+                        borderRadius: 12,
+                        border: "1px solid var(--bs-border-color)",
+                        background: "var(--deployer-input-disabled-bg)",
+                        resize: "vertical",
+                        fontFamily:
+                          "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+                        fontSize: 12,
+                      }}
+                    />
+                    <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                      <button
+                        onClick={copyPublicKey}
+                        disabled={!openServer.publicKey}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          border: "1px solid var(--bs-border-color)",
+                          background: "var(--bs-body-bg)",
+                          color: "var(--deployer-muted-ink)",
+                          fontSize: 12,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Copy public key
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {keygenError ? (
+                  <p className="text-danger" style={{ margin: 0, fontSize: 12 }}>
+                    {keygenError}
+                  </p>
+                ) : null}
+                {keygenStatus ? (
+                  <p className="text-success" style={{ margin: 0, fontSize: 12 }}>
+                    {keygenStatus}
                   </p>
                 ) : null}
               </div>
-            </div>
-
-            <div
-              style={{
-                padding: 12,
-                borderRadius: 12,
-                border: "1px solid var(--bs-border-color-translucent)",
-                background: "var(--deployer-card-bg-soft)",
-                display: "grid",
-                gap: 10,
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <span style={{ fontSize: 12, fontWeight: 600 }}>
-                  SSH key generator
-                </span>
-                <button
-                  onClick={() =>
-                    passphraseEnabled
-                      ? triggerVaultPrompt("keygen", true)
-                      : handleKeygen(null, null)
-                  }
-                  disabled={keygenBusy || !workspaceId}
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    border: "1px solid var(--bs-body-color)",
-                    background: "var(--bs-body-color)",
-                    color: "var(--bs-body-bg)",
-                    fontSize: 12,
-                    cursor: "pointer",
-                  }}
-                >
-                  {keygenBusy ? "Generating..." : "Generate key"}
-                </button>
-              </div>
-              <div style={{ display: "grid", gap: 8 }}>
-                <label className="text-body-tertiary" style={{ fontSize: 12 }}>
-                  Algorithm
-                </label>
-                <select
-                  value={openServer.keyAlgorithm || "ed25519"}
-                  onChange={(event) =>
-                    updateServer(openServer.alias, {
-                      keyAlgorithm: event.target.value,
-                    })
-                  }
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid var(--bs-border-color)",
-                    background: "var(--bs-body-bg)",
-                    fontSize: 12,
-                  }}
-                >
-                  <option value="ed25519">ed25519 (recommended)</option>
-                  <option value="rsa">rsa 4096</option>
-                  <option value="ecdsa">ecdsa</option>
-                </select>
-              </div>
-              <label
-                className="text-body-secondary"
-                style={{ display: "flex", gap: 8, alignItems: "center" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={passphraseEnabled}
-                  onChange={(event) => setPassphraseEnabled(event.target.checked)}
-                />
-                Generate passphrase (stored in credentials vault)
-              </label>
-              <div>
-                <label className="text-body-tertiary" style={{ fontSize: 12 }}>
-                  Public key
-                </label>
-                <textarea
-                  readOnly
-                  value={openServer.publicKey || ""}
-                  placeholder="Public key will appear here"
-                  rows={3}
-                  style={{
-                    width: "100%",
-                    marginTop: 8,
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: "1px solid var(--bs-border-color)",
-                    background: "var(--deployer-input-disabled-bg)",
-                    resize: "vertical",
-                    fontFamily:
-                      "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-                    fontSize: 12,
-                  }}
-                />
-                <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-                  <button
-                    onClick={copyPublicKey}
-                    disabled={!openServer.publicKey}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: 999,
-                      border: "1px solid var(--bs-border-color)",
-                      background: "var(--bs-body-bg)",
-                      color: "var(--deployer-muted-ink)",
-                      fontSize: 12,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Copy public key
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {keygenError ? (
-              <p className="text-danger" style={{ margin: 0, fontSize: 12 }}>
-                {keygenError}
-              </p>
-            ) : null}
-            {keygenStatus ? (
-              <p className="text-success" style={{ margin: 0, fontSize: 12 }}>
-                {keygenStatus}
-              </p>
             ) : null}
 
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -1111,6 +1103,6 @@ export default function DeploymentCredentialsForm({
           </div>
         </div>
       ) : null}
-    </section>
+    </Wrapper>
   );
 }

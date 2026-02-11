@@ -22,11 +22,24 @@ export default function LiveDeploymentView({
   baseUrl,
   jobId: externalJobId,
   autoConnect = false,
+  compact = false,
 }: {
   baseUrl: string;
   jobId?: string;
   autoConnect?: boolean;
+  compact?: boolean;
 }) {
+  const Wrapper = compact ? "div" : "section";
+  const wrapperStyle = compact
+    ? undefined
+    : {
+        marginTop: 28,
+        padding: 24,
+        borderRadius: 24,
+        background: "var(--deployer-panel-live-bg)",
+        border: "1px solid var(--bs-border-color-translucent)",
+        boxShadow: "var(--deployer-shadow)",
+      };
   const [jobId, setJobId] = useState(externalJobId ?? "");
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const [connected, setConnected] = useState(false);
@@ -241,57 +254,50 @@ export default function LiveDeploymentView({
   };
 
   return (
-    <section
-      style={{
-        marginTop: 28,
-        padding: 24,
-        borderRadius: 24,
-        background: "var(--deployer-panel-live-bg)",
-        border: "1px solid var(--bs-border-color-translucent)",
-        boxShadow: "var(--deployer-shadow)",
-      }}
-    >
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-        <div style={{ flex: "1 1 320px" }}>
-          <h2
-            className="text-body"
+    <Wrapper style={wrapperStyle}>
+      {!compact ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+          <div style={{ flex: "1 1 320px" }}>
+            <h2
+              className="text-body"
+              style={{
+                margin: 0,
+                fontFamily: "var(--font-display)",
+                fontSize: 26,
+                letterSpacing: "-0.02em",
+              }}
+            >
+              Live Deployment View
+            </h2>
+            <p className="text-body-secondary" style={{ margin: "8px 0 0" }}>
+              Docker-like terminal output via SSE, with real-time status updates.
+            </p>
+          </div>
+          <div
+            className="text-body-secondary"
             style={{
-              margin: 0,
-              fontFamily: "var(--font-display)",
-              fontSize: 26,
-              letterSpacing: "-0.02em",
+              flex: "1 1 240px",
+              alignSelf: "center",
+              textAlign: "right",
+              fontSize: 13,
             }}
           >
-            Live Deployment View
-          </h2>
-          <p className="text-body-secondary" style={{ margin: "8px 0 0" }}>
-            Docker-like terminal output via SSE, with real-time status updates.
-          </p>
+            Status:{" "}
+            <span
+              style={{
+                padding: "4px 8px",
+                borderRadius: 999,
+                background: statusStyles.bg,
+                color: statusStyles.fg,
+                border: `1px solid ${statusStyles.border}`,
+                fontSize: 12,
+              }}
+            >
+              {statusLabel(status?.status)}
+            </span>
+          </div>
         </div>
-        <div
-          className="text-body-secondary"
-          style={{
-            flex: "1 1 240px",
-            alignSelf: "center",
-            textAlign: "right",
-            fontSize: 13,
-          }}
-        >
-          Status:{" "}
-          <span
-            style={{
-              padding: "4px 8px",
-              borderRadius: 999,
-              background: statusStyles.bg,
-              color: statusStyles.fg,
-              border: `1px solid ${statusStyles.border}`,
-              fontSize: 12,
-            }}
-          >
-            {statusLabel(status?.status)}
-          </span>
-        </div>
-      </div>
+      ) : null}
 
       <div
         style={{
@@ -387,6 +393,6 @@ export default function LiveDeploymentView({
             : ""}
         </div>
       ) : null}
-    </section>
+    </Wrapper>
   );
 }

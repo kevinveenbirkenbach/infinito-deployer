@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import RoleDashboard from "./RoleDashboard";
 import DeploymentCredentialsForm from "./DeploymentCredentialsForm";
 import WorkspacePanel from "./WorkspacePanel";
+import LiveDeploymentView from "./LiveDeploymentView";
 import { createInitialState } from "../lib/deploy_form";
 import { buildDeploymentPayload } from "../lib/deployment_payload";
 
@@ -78,6 +80,9 @@ export default function DeploymentWorkspace({
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [activePanel, setActivePanel] = useState<
+    "store" | "server" | "inventory" | "deploy"
+  >("store");
 
   useEffect(() => {
     let alive = true;
@@ -396,17 +401,30 @@ export default function DeploymentWorkspace({
     };
   }, [activeServer]);
 
-  return (
-    <>
-      <RoleDashboard
-        roles={roles}
-        loading={rolesLoading}
-        error={rolesError}
-        selected={new Set<string>(selectedRoles)}
-        onToggleSelected={toggleSelected}
-        activeAlias={activeAlias}
-      />
-
+  const panels: {
+    key: "store" | "server" | "inventory" | "deploy";
+    title: string;
+    content: ReactNode;
+  }[] = [
+    {
+      key: "store",
+      title: "Store",
+      content: (
+        <RoleDashboard
+          roles={roles}
+          loading={rolesLoading}
+          error={rolesError}
+          selected={new Set<string>(selectedRoles)}
+          onToggleSelected={toggleSelected}
+          activeAlias={activeAlias}
+          compact
+        />
+      ),
+    },
+    {
+      key: "server",
+      title: "Server",
+      content: (
         <DeploymentCredentialsForm
           baseUrl={baseUrl}
           workspaceId={workspaceId}
@@ -416,177 +434,279 @@ export default function DeploymentWorkspace({
           onUpdateServer={updateServer}
           onRemoveServer={removeServer}
           onAddServer={addServer}
+          compact
         />
-
-      <WorkspacePanel
-        baseUrl={baseUrl}
-        selectedRolesByAlias={selectedRolesByAlias}
-        credentials={credentials}
-        onCredentialsPatch={(patch) => {
-          if (!activeServer) return;
-          updateServer(activeServer.alias, patch);
-        }}
-        onInventoryReadyChange={setInventoryReady}
-        onSelectedRolesByAliasChange={applySelectedRolesByAlias}
-        onWorkspaceIdChange={setWorkspaceId}
-        aliasRenames={aliasRenames}
-        onAliasRenamesHandled={(count) =>
-          setAliasRenames((prev) => prev.slice(count))
-        }
-        aliasDeletes={aliasDeletes}
-        onAliasDeletesHandled={(count) =>
-          setAliasDeletes((prev) => prev.slice(count))
-        }
-        selectionTouched={selectionTouched}
-      />
-
-      <section
-        style={{
-          marginTop: 28,
-          padding: 24,
-          borderRadius: 24,
-          background: "var(--deployer-panel-dark-bg)",
-          border: "1px solid var(--deployer-panel-dark-border)",
-          color: "var(--deployer-panel-dark-text)",
-          boxShadow: "var(--deployer-shadow-strong)",
-        }}
-      >
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-          <div style={{ flex: "1 1 320px" }}>
-            <h2
-              style={{
-                margin: 0,
-                fontFamily: "var(--font-display)",
-                fontSize: 26,
-                letterSpacing: "-0.02em",
-              }}
-            >
-              Launch Deployment
-            </h2>
-            <p
-              style={{
-                margin: "8px 0 0",
-                color: "var(--deployer-panel-dark-muted)",
-              }}
-            >
-              Kick off a real run using the selected roles, credentials, and
-              the workspace inventory. The job ID streams live logs below.
-            </p>
+      ),
+    },
+    {
+      key: "inventory",
+      title: "Inventory",
+      content: (
+        <WorkspacePanel
+          baseUrl={baseUrl}
+          selectedRolesByAlias={selectedRolesByAlias}
+          credentials={credentials}
+          onCredentialsPatch={(patch) => {
+            if (!activeServer) return;
+            updateServer(activeServer.alias, patch);
+          }}
+          onInventoryReadyChange={setInventoryReady}
+          onSelectedRolesByAliasChange={applySelectedRolesByAlias}
+          onWorkspaceIdChange={setWorkspaceId}
+          aliasRenames={aliasRenames}
+          onAliasRenamesHandled={(count) =>
+            setAliasRenames((prev) => prev.slice(count))
+          }
+          aliasDeletes={aliasDeletes}
+          onAliasDeletesHandled={(count) =>
+            setAliasDeletes((prev) => prev.slice(count))
+          }
+          selectionTouched={selectionTouched}
+          compact
+        />
+      ),
+    },
+    {
+      key: "deploy",
+      title: "Deploy",
+      content: (
+        <div style={{ display: "grid", gap: 18 }}>
+          <div
+            className="text-body-secondary"
+            style={{ fontSize: 12, display: "flex", gap: 16, flexWrap: "wrap" }}
+          >
+            <span>
+              Selected roles: <strong>{selectedRoles.length || "none"}</strong>
+            </span>
+            <span>
+              Active server: <strong>{activeAlias || "—"}</strong>
+            </span>
           </div>
+
           <div
             style={{
-              flex: "1 1 240px",
-              alignSelf: "center",
-              textAlign: "right",
-              fontSize: 13,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 12,
+              alignItems: "center",
             }}
           >
-            Selected roles: <strong>{selectedRoles.length || "none"}</strong>
-            <br />
-            Active server: <strong>{activeAlias || "—"}</strong>
-          </div>
-        </div>
-
-        <div
-          style={{
-            marginTop: 16,
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 12,
-            alignItems: "center",
-          }}
-        >
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span
-              style={{
-                fontSize: 12,
-                color: "var(--deployer-panel-dark-muted)",
-              }}
-            >
-              Deploy scope:
-            </span>
-            {["active", "all"].map((scope) => {
-              const disabled = servers.length <= 1 && scope === "all";
-              const isActive = deployScope === scope;
-              return (
-                <button
-                  key={scope}
-                  onClick={() => !disabled && setDeployScope(scope as any)}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: 999,
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span
+                style={{
+                  fontSize: 12,
+                  color: "var(--deployer-muted-ink)",
+                }}
+              >
+                Deploy scope:
+              </span>
+              {["active", "all"].map((scope) => {
+                const disabled = servers.length <= 1 && scope === "all";
+                const isActive = deployScope === scope;
+                return (
+                  <button
+                    key={scope}
+                    onClick={() =>
+                      !disabled && setDeployScope(scope as "active" | "all")
+                    }
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 999,
                     border: "1px solid var(--deployer-panel-dark-border)",
                     background: isActive
                       ? "var(--deployer-accent)"
-                      : "var(--deployer-panel-dark-pill-bg)",
+                      : "var(--bs-body-bg)",
                     color: isActive
                       ? "var(--deployer-accent-contrast)"
-                      : "var(--deployer-panel-dark-text)",
-                    cursor: disabled ? "not-allowed" : "pointer",
-                    fontSize: 12,
-                    opacity: disabled ? 0.5 : 1,
-                  }}
-                >
-                  {scope === "active" ? "Active" : "All"}
-                </button>
-              );
-            })}
+                      : "var(--bs-body-color)",
+                      cursor: disabled ? "not-allowed" : "pointer",
+                      fontSize: 12,
+                      opacity: disabled ? 0.5 : 1,
+                    }}
+                  >
+                    {scope === "active" ? "Active" : "All"}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={startDeployment}
+              disabled={!canDeploy}
+              style={{
+                padding: "10px 18px",
+                borderRadius: 999,
+                border: "1px solid var(--bs-border-color)",
+                background: canDeploy
+                  ? "var(--deployer-accent)"
+                  : "var(--deployer-disabled-bg)",
+                color: canDeploy
+                  ? "var(--deployer-accent-contrast)"
+                  : "var(--deployer-disabled-text)",
+                cursor: canDeploy ? "pointer" : "not-allowed",
+                fontWeight: 600,
+              }}
+            >
+              {deploying ? "Starting..." : "Start deployment"}
+            </button>
+            {jobId ? (
+              <div style={{ fontSize: 12 }}>
+                Job ID: <code>{jobId}</code>
+              </div>
+            ) : null}
           </div>
-          <button
-            onClick={startDeployment}
-            disabled={!canDeploy}
-            style={{
-              padding: "10px 18px",
-              borderRadius: 999,
-              border: "1px solid var(--deployer-panel-dark-border)",
-              background: canDeploy
-                ? "var(--deployer-accent)"
-                : "var(--deployer-disabled-bg)",
-              color: canDeploy
-                ? "var(--deployer-accent-contrast)"
-                : "var(--deployer-disabled-text)",
-              cursor: canDeploy ? "pointer" : "not-allowed",
-              fontWeight: 600,
-            }}
-          >
-            {deploying ? "Starting..." : "Start deployment"}
-          </button>
-          {jobId ? (
-            <div style={{ fontSize: 12 }}>
-              Job ID: <code>{jobId}</code>
+
+          {Object.keys(deploymentErrors).length > 0 ? (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 12,
+                borderRadius: 12,
+                background: "var(--bs-tertiary-bg)",
+                border: "1px solid var(--bs-border-color-translucent)",
+                fontSize: 12,
+              }}
+            >
+              {Object.values(deploymentErrors).map((message, idx) => (
+                <div key={idx}>{message}</div>
+              ))}
             </div>
           ) : null}
+
+          {deployError ? (
+            <div
+              style={{
+                marginTop: 8,
+                color: "var(--bs-danger-text-emphasis)",
+                fontSize: 12,
+              }}
+            >
+              {deployError}
+            </div>
+          ) : null}
+          <div
+            style={{
+              height: 1,
+              background: "var(--bs-border-color-translucent)",
+            }}
+          />
+          <LiveDeploymentView
+            baseUrl={baseUrl}
+            jobId={jobId ?? ""}
+            autoConnect
+            compact
+          />
         </div>
+      ),
+    },
+  ];
 
-        {Object.keys(deploymentErrors).length > 0 ? (
-          <div
-            style={{
-              marginTop: 12,
-              padding: 12,
-              borderRadius: 12,
-              background: "var(--deployer-panel-dark-subtle-bg)",
-              border: "1px solid var(--deployer-panel-dark-border)",
-              fontSize: 12,
-            }}
-          >
-            {Object.values(deploymentErrors).map((message, idx) => (
-              <div key={idx}>{message}</div>
-            ))}
-          </div>
-        ) : null}
+  const activeIndex = panels.findIndex((panel) => panel.key === activePanel);
+  const hasPrev = activeIndex > 0;
+  const hasNext = activeIndex >= 0 && activeIndex < panels.length - 1;
 
-        {deployError ? (
-          <div
-            style={{
-              marginTop: 8,
-              color: "var(--bs-danger-text-emphasis)",
-              fontSize: 12,
-            }}
-          >
-            {deployError}
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      {panels.map((panel) => {
+        const isOpen = activePanel === panel.key;
+        const keepMounted = panel.key === "inventory";
+        const mountContent = isOpen || keepMounted;
+        return (
+          <div key={panel.key}>
+            <button
+              onClick={() => setActivePanel(panel.key)}
+              aria-expanded={isOpen}
+              style={{
+                width: "100%",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "12px 16px",
+                borderRadius: isOpen ? "16px 16px 0 0" : 16,
+                border: "1px solid var(--bs-border-color-translucent)",
+                borderBottom: isOpen
+                  ? "none"
+                  : "1px solid var(--bs-border-color-translucent)",
+                background: isOpen
+                  ? "var(--bs-body-bg)"
+                  : "var(--deployer-card-bg-soft)",
+                cursor: "pointer",
+                fontFamily: "var(--font-display)",
+                fontSize: 16,
+              }}
+            >
+              <span>{panel.title}</span>
+              <span style={{ fontSize: 18 }}>{isOpen ? "–" : "+"}</span>
+            </button>
+            {mountContent ? (
+              <div
+                style={{
+                  marginTop: 0,
+                  border: "1px solid var(--bs-border-color-translucent)",
+                  borderTop: "none",
+                  borderRadius: "0 0 16px 16px",
+                  padding: 12,
+                  background: "var(--bs-body-bg)",
+                  display: isOpen ? "block" : "none",
+                }}
+                aria-hidden={!isOpen}
+              >
+                {panel.content}
+              </div>
+            ) : null}
           </div>
-        ) : null}
-      </section>
-    </>
+        );
+      })}
+      <div
+        style={{
+          marginTop: 8,
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
+      >
+        <button
+          onClick={() =>
+            hasPrev && setActivePanel(panels[activeIndex - 1].key)
+          }
+          disabled={!hasPrev}
+          style={{
+            padding: "8px 14px",
+            borderRadius: 999,
+            border: "1px solid var(--bs-border-color)",
+            background: hasPrev
+              ? "var(--bs-body-bg)"
+              : "var(--deployer-disabled-bg)",
+            color: hasPrev
+              ? "var(--deployer-muted-ink)"
+              : "var(--deployer-disabled-text)",
+            cursor: hasPrev ? "pointer" : "not-allowed",
+            fontSize: 12,
+          }}
+        >
+          Back
+        </button>
+        <button
+          onClick={() =>
+            hasNext && setActivePanel(panels[activeIndex + 1].key)
+          }
+          disabled={!hasNext}
+          style={{
+            padding: "8px 14px",
+            borderRadius: 999,
+            border: "1px solid var(--bs-body-color)",
+            background: hasNext
+              ? "var(--bs-body-color)"
+              : "var(--deployer-disabled-bg)",
+            color: hasNext
+              ? "var(--bs-body-bg)"
+              : "var(--deployer-disabled-text)",
+            cursor: hasNext ? "pointer" : "not-allowed",
+            fontSize: 12,
+          }}
+        >
+          Next
+        </button>
+      </div>
+    </div>
   );
 }
