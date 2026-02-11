@@ -65,6 +65,22 @@ Interactive creation, editing, and export of a complete inventory including cred
 
 ---
 
+## 4.1 Vault & Key UX (Context Actions)
+
+- [ ] Context menu on `secrets/credentials.kdbx` allows changing master password
+- [ ] Context menu on private key file allows changing key passphrase
+- [ ] Hover on vault-encrypted values enables right-click show plaintext (explicit action)
+- [ ] Hover on vault-encrypted values enables right-click change value (re-encrypt)
+- [ ] Any password change requires double entry
+- [ ] Vault encrypt/decrypt uses the vault password from `secrets/credentials.kdbx`
+
+**Acceptance Criteria**
+- [ ] Master password is required on each vault access (read/write)
+- [ ] Plaintext is only shown after explicit action
+- [ ] No plaintext or passwords appear in logs or SSE streams
+
+---
+
 ## 5. Credential Generation via `infinito create credentials`
 
 - [x] UI explicitly asks for a **vault password**
@@ -90,13 +106,11 @@ Interactive creation, editing, and export of a complete inventory including cred
 
 - [x] Provide a “Download ZIP” button in the UI
 - [x] Provide an “Upload ZIP” button to load a workspace configuration
-- [x] ZIP contains **all workspace files**
-- [x] Temporary vault password file is **excluded by default**
+- [x] ZIP contains **all workspace files** (default)
 - [x] ZIP is generated server-side
 
 **Acceptance Criteria**
-- [x] ZIP exactly matches the visible workspace state
-- [x] No sensitive temporary files are included
+- [x] ZIP exactly matches the visible workspace state (including `secrets/`)
 - [x] Uploading a ZIP updates the workspace contents safely
 
 ---

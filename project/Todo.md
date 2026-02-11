@@ -314,20 +314,62 @@ For each job:
 
 ### 4.2.1 SSH Key Generation
 
-* [ ] Generate SSH keypair directly in the UI
+* [ ] Generate SSH keypair via backend (triggered from UI)
   * [ ] Generate key via explicit user action (button)
+  * [ ] Algorithm is selectable; default is best-practice (`ed25519`)
+  * [ ] Optional passphrase; generated server-side
   * [ ] Generated private key is inserted into the Key field
   * [ ] Generated public key is displayed in a read-only field
   * [ ] Public key can be copied to clipboard
   * [ ] Regeneration requires confirmation
+  * [ ] Both keys are stored in the workspace (e.g. `ssh_key`, `ssh_key.pub`)
 
 **A/C**
 
 * [ ] Public key is valid for `authorized_keys` (e.g. `ssh-ed25519 ...`)
-* [ ] Private key never leaves the browser unless a deployment job is started
-* [ ] No key material appears in logs, SSE streams, or persisted files except the job-local key file
+* [ ] Private key and optional passphrase never appear in logs or SSE streams
+* [ ] Key material is persisted only in workspace files and returned to the UI only on explicit user action
 
 ---
+
+### 4.2.2 KeePassXC Credentials Vault (Workspace)
+
+* [ ] Store all generated passwords **only** in `secrets/credentials.kdbx`
+  * [ ] **No** `secrets/passwords/` directory exists
+  * [ ] Entries include: server password, vault password, SSH key passphrase (if set)
+  * [ ] File is created server-side inside the workspace
+  * [ ] Whenever reading/writing the KDBX, prompt for master password
+  * [ ] If KDBX does not exist, create it and require master password twice
+  * [ ] Master password is never stored or logged
+  * [ ] UI uses a smooth JS modal/popup for password entry
+  * [ ] User can download the KDBX file explicitly
+  * [ ] ZIP export includes `secrets/` by default (including the KDBX)
+
+**A/C**
+
+* [ ] Only KDBX contains passwords (no plaintext password files)
+* [ ] Master password is required on each access (read/write)
+* [ ] KDBX creation requires matching double-entry
+* [ ] No KDBX contents or master password appear in logs or SSE streams
+* [ ] ZIP export contains all workspace files by default (including `secrets/`)
+
+---
+
+### 4.2.3 Vault & Key UX (Context Actions)
+
+* [ ] Context menu on `secrets/credentials.kdbx` allows **change master password**
+* [ ] Context menu on private key file allows **change key passphrase**
+* [ ] Hover on vault-encrypted values enables **right-click → show plaintext** (explicit action)
+* [ ] Hover on vault-encrypted values enables **right-click → change value** (re-encrypt)
+* [ ] Any password change requires **double entry**
+* [ ] Vault encrypt/decrypt uses the **vault password from `secrets/credentials.kdbx`**
+
+**A/C**
+
+* [ ] Master password change updates the KDBX and reuses new password immediately
+* [ ] Key passphrase change rewrites the private key and preserves public key
+* [ ] Vault decrypt/show only works after explicit action and does not auto-reveal
+* [ ] Plaintext is never logged or streamed over SSE
 
 ### 4.3 Workspace Inventory (SPOT)
 
