@@ -61,6 +61,78 @@ type TreeItem = {
   size?: number | null;
 };
 
+type KdbxEntryView = {
+  id: string;
+  group: string;
+  title: string;
+  username: string;
+  password: string;
+  url: string;
+  notes: string;
+};
+
+function unwrapKdbxValue(value: any): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value.getText === "function") return value.getText();
+  try {
+    return String(value);
+  } catch {
+    return "";
+  }
+}
+
+function readKdbxField(fields: any, key: string): string {
+  if (!fields) return "";
+  if (typeof fields.get === "function") {
+    return unwrapKdbxValue(fields.get(key));
+  }
+  if (Object.prototype.hasOwnProperty.call(fields, key)) {
+    return unwrapKdbxValue(fields[key]);
+  }
+  const lower = key.toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(fields, lower)) {
+    return unwrapKdbxValue(fields[lower]);
+  }
+  return "";
+}
+
+function collectKdbxEntries(
+  group: any,
+  path: string[],
+  out: KdbxEntryView[]
+): void {
+  if (!group) return;
+  const name = group.name || group.title || "Group";
+  const nextPath = name ? [...path, name] : path;
+  const entries = Array.isArray(group.entries) ? group.entries : [];
+  entries.forEach((entry: any, index: number) => {
+    const fields = entry?.fields;
+    const title = readKdbxField(fields, "Title");
+    const username = readKdbxField(fields, "UserName");
+    const password = readKdbxField(fields, "Password");
+    const url = readKdbxField(fields, "URL");
+    const notes = readKdbxField(fields, "Notes");
+    const uuid =
+      entry?.uuid?.id ||
+      (typeof entry?.uuid?.toString === "function"
+        ? entry.uuid.toString()
+        : "");
+    const id = uuid || `${nextPath.join("/")}:${index}`;
+    out.push({
+      id,
+      group: nextPath.join(" / "),
+      title: title || "(untitled)",
+      username,
+      password,
+      url,
+      notes,
+    });
+  });
+  const groups = Array.isArray(group.groups) ? group.groups : [];
+  groups.forEach((child: any) => collectKdbxEntries(child, nextPath, out));
+}
+
 type VaultBlock = {
   key: string;
   start: number;
@@ -138,6 +210,7 @@ function extensionForPath(path: string) {
   if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "markdown";
   if (lower.endsWith(".py")) return "python";
   if (lower.endsWith(".sh") || lower.endsWith(".bash")) return "text";
+  if (lower.endsWith(".kdbx")) return "kdbx";
   return "text";
 }
 
@@ -321,6 +394,15 @@ export default function WorkspacePanel({
   const [editorError, setEditorError] = useState<string | null>(null);
   const [editorStatus, setEditorStatus] = useState<string | null>(null);
   const [markdownHtml, setMarkdownHtml] = useState("");
+  const [kdbxEntries, setKdbxEntries] = useState<KdbxEntryView[]>([]);
+  const [kdbxError, setKdbxError] = useState<string | null>(null);
+  const [kdbxLoading, setKdbxLoading] = useState(false);
+  const [kdbxPromptOpen, setKdbxPromptOpen] = useState(false);
+  const [kdbxRevealed, setKdbxRevealed] = useState<Record<string, boolean>>(
+    {}
+  );
+  const kdbxPasswordRef = useRef<string>("");
+  const kdbxArgonReadyRef = useRef(false);
 
   const [openDirs, setOpenDirs] = useState<Set<string>>(new Set());
 
@@ -455,6 +537,7 @@ export default function WorkspacePanel({
     () => (activePath ? extensionForPath(activePath) : "text"),
     [activePath]
   );
+  const isKdbx = activeExtension === "kdbx";
 
   const editorExtensions = useMemo(() => {
     switch (activeExtension) {
@@ -767,12 +850,150 @@ export default function WorkspacePanel({
     });
   };
 
+  useEffect(() => {
+    if (isKdbx) return;
+    setKdbxEntries([]);
+    setKdbxError(null);
+    setKdbxLoading(false);
+    setKdbxRevealed({});
+    kdbxPasswordRef.current = "";
+  }, [isKdbx]);
+
+  const lockKdbx = () => {
+    kdbxPasswordRef.current = "";
+    setKdbxEntries([]);
+    setKdbxError(null);
+    setKdbxRevealed({});
+  };
+
+  const loadKdbx = async (path: string, masterPassword: string) => {
+    if (!workspaceId) return;
+    setKdbxLoading(true);
+    setKdbxError(null);
+    try {
+      const res = await fetch(
+        `${baseUrl}/api/workspaces/${workspaceId}/download/${encodePath(path)}`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const buffer = await res.arrayBuffer();
+      const kdbxMod = await import("kdbxweb");
+      const kdbx = (kdbxMod as any).default ?? kdbxMod;
+      if (!kdbxArgonReadyRef.current) {
+        const argonMod = await import(
+          "argon2-browser/dist/argon2-bundled.min.js"
+        );
+        let argon2Impl =
+          (argonMod as any).argon2 ||
+          (argonMod as any).default ||
+          (argonMod as any);
+        if (typeof argon2Impl === "function" && !argon2Impl?.hash) {
+          try {
+            const resolved = await (argon2Impl as any)();
+            if (resolved?.hash) {
+              argon2Impl = resolved;
+            }
+          } catch {
+            // ignore and fall back to global argon2 if available
+          }
+        }
+        if (!argon2Impl?.hash && (globalThis as any).argon2?.hash) {
+          argon2Impl = (globalThis as any).argon2;
+        }
+        if (!argon2Impl?.hash) {
+          throw new Error("Argon2 implementation missing");
+        }
+        const engine =
+          kdbx?.CryptoEngine ||
+          kdbx?.crypto ||
+          (kdbxMod as any).CryptoEngine ||
+          (kdbxMod as any).crypto;
+        if (engine?.setArgon2Impl) {
+          const argon2Wrapper = async (
+            password: ArrayBuffer,
+            salt: ArrayBuffer,
+            memory: number,
+            iterations: number,
+            length: number,
+            parallelism: number,
+            type: number,
+            version: number
+          ) => {
+            const result = await argon2Impl.hash({
+              pass: new Uint8Array(password),
+              salt: new Uint8Array(salt),
+              time: iterations,
+              mem: memory,
+              hashLen: length,
+              parallelism,
+              type,
+              version,
+              raw: true,
+            });
+            return result?.hash;
+          };
+          engine.setArgon2Impl(argon2Wrapper);
+          kdbxArgonReadyRef.current = true;
+        } else {
+          throw new Error("Argon2 engine not available");
+        }
+      }
+      const creds = new kdbx.Credentials(
+        kdbx.ProtectedValue.fromString(masterPassword)
+      );
+      const db = await kdbx.Kdbx.load(buffer, creds);
+      const entries: KdbxEntryView[] = [];
+      const rootGroup =
+        typeof db.getDefaultGroup === "function"
+          ? db.getDefaultGroup()
+          : Array.isArray(db.groups)
+            ? db.groups[0]
+            : null;
+      if (rootGroup) {
+        collectKdbxEntries(rootGroup, [], entries);
+      } else if (Array.isArray(db.groups)) {
+        db.groups.forEach((group: any) => collectKdbxEntries(group, [], entries));
+      }
+      setKdbxEntries(entries);
+    } catch (err: any) {
+      setKdbxError(err?.message ?? "failed to open kdbx");
+    } finally {
+      setKdbxLoading(false);
+      setEditorLoading(false);
+    }
+  };
+
+  const handleKdbxSubmit = (masterPassword: string) => {
+    setKdbxPromptOpen(false);
+    kdbxPasswordRef.current = masterPassword;
+    if (activePath) {
+      void loadKdbx(activePath, masterPassword);
+    }
+  };
+
   const loadFile = async (path: string) => {
     if (!workspaceId) return;
     setEditorLoading(true);
     setEditorError(null);
     setEditorStatus(null);
     try {
+      const kind = extensionForPath(path);
+      if (kind === "kdbx") {
+        setActivePath(path);
+        setEditorValue("");
+        setEditorDirty(false);
+        setKdbxError(null);
+        setKdbxEntries([]);
+        if (kdbxPasswordRef.current) {
+          await loadKdbx(path, kdbxPasswordRef.current);
+        } else {
+          setEditorLoading(false);
+          setKdbxPromptOpen(true);
+        }
+        return;
+      }
       const res = await fetch(
         `${baseUrl}/api/workspaces/${workspaceId}/files/${encodePath(path)}`,
         { cache: "no-store" }
@@ -2461,25 +2682,27 @@ export default function WorkspacePanel({
                     {activePath} · {activeExtension.toUpperCase()}
                   </span>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      onClick={saveFile}
-                      disabled={!editorDirty || editorLoading}
-                      style={{
-                        padding: "6px 10px",
-                        borderRadius: 999,
-                        border: "1px solid var(--bs-body-color)",
-                        background: editorDirty
-                          ? "var(--bs-body-color)"
-                          : "var(--deployer-disabled-bg)",
-                        color: editorDirty
-                          ? "var(--bs-body-bg)"
-                          : "var(--deployer-disabled-text)",
-                        cursor: editorDirty ? "pointer" : "not-allowed",
-                        fontSize: 12,
-                      }}
-                    >
-                      {editorLoading ? "Saving..." : "Save"}
-                    </button>
+                    {!isKdbx ? (
+                      <button
+                        onClick={saveFile}
+                        disabled={!editorDirty || editorLoading}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          border: "1px solid var(--bs-body-color)",
+                          background: editorDirty
+                            ? "var(--bs-body-color)"
+                            : "var(--deployer-disabled-bg)",
+                          color: editorDirty
+                            ? "var(--bs-body-bg)"
+                            : "var(--deployer-disabled-text)",
+                          cursor: editorDirty ? "pointer" : "not-allowed",
+                          fontSize: 12,
+                        }}
+                      >
+                        {editorLoading ? "Saving..." : "Save"}
+                      </button>
+                    ) : null}
                     <button
                       onClick={() => activePath && loadFile(activePath)}
                       disabled={editorLoading}
@@ -2495,6 +2718,26 @@ export default function WorkspacePanel({
                     >
                       Reload
                     </button>
+                    {isKdbx ? (
+                      <button
+                        onClick={() =>
+                          kdbxPasswordRef.current
+                            ? lockKdbx()
+                            : setKdbxPromptOpen(true)
+                        }
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          border: "1px solid var(--bs-border-color)",
+                          background: "var(--bs-body-bg)",
+                          color: "var(--deployer-muted-ink)",
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
+                      >
+                        {kdbxPasswordRef.current ? "Lock" : "Unlock"}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
                 {activeExtension === "markdown" ? (
@@ -2521,6 +2764,129 @@ export default function WorkspacePanel({
                       modules={quillModules}
                       style={{ minHeight: 360 }}
                     />
+                  </div>
+                ) : isKdbx ? (
+                  <div
+                    style={{
+                      minHeight: 360,
+                      borderRadius: 12,
+                      border: "1px solid var(--bs-border-color)",
+                      background: "var(--bs-body-bg)",
+                      padding: 12,
+                      display: "grid",
+                      gap: 12,
+                    }}
+                  >
+                    {kdbxLoading ? (
+                      <p className="text-body-tertiary" style={{ fontSize: 12 }}>
+                        Loading KDBX entries...
+                      </p>
+                    ) : null}
+                    {kdbxError ? (
+                      <p className="text-danger" style={{ fontSize: 12, margin: 0 }}>
+                        {kdbxError}
+                      </p>
+                    ) : null}
+                    {!kdbxLoading && !kdbxError && kdbxEntries.length === 0 ? (
+                      <p className="text-body-tertiary" style={{ fontSize: 12 }}>
+                        Unlock credentials.kdbx to view entries.
+                      </p>
+                    ) : null}
+                    {kdbxEntries.length > 0 ? (
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: 8,
+                          maxHeight: 360,
+                          overflow: "auto",
+                        }}
+                      >
+                        {kdbxEntries.map((entry) => (
+                          <div
+                            key={entry.id}
+                            style={{
+                              borderRadius: 12,
+                              border: "1px solid var(--bs-border-color)",
+                              padding: 10,
+                              display: "grid",
+                              gap: 6,
+                              fontSize: 12,
+                              background: "var(--deployer-card-bg-soft)",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                gap: 8,
+                              }}
+                            >
+                              <strong>{entry.title}</strong>
+                              <span className="text-body-tertiary">
+                                {entry.group}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-body-tertiary">User:</span>{" "}
+                              {entry.username || "-"}
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 8,
+                                alignItems: "center",
+                              }}
+                            >
+                              <span className="text-body-tertiary">
+                                Password:
+                              </span>
+                              <span>
+                                {entry.password
+                                  ? kdbxRevealed[entry.id]
+                                    ? entry.password
+                                    : "••••••••"
+                                  : "-"}
+                              </span>
+                              {entry.password ? (
+                                <button
+                                  onClick={() =>
+                                    setKdbxRevealed((prev) => ({
+                                      ...prev,
+                                      [entry.id]: !prev[entry.id],
+                                    }))
+                                  }
+                                  style={{
+                                    padding: "2px 8px",
+                                    borderRadius: 999,
+                                    border: "1px solid var(--bs-border-color)",
+                                    background: "var(--bs-body-bg)",
+                                    color: "var(--deployer-muted-ink)",
+                                    cursor: "pointer",
+                                    fontSize: 11,
+                                  }}
+                                >
+                                  {kdbxRevealed[entry.id] ? "Hide" : "Show"}
+                                </button>
+                              ) : null}
+                            </div>
+                            {entry.url ? (
+                              <div>
+                                <span className="text-body-tertiary">URL:</span>{" "}
+                                {entry.url}
+                              </div>
+                            ) : null}
+                            {entry.notes ? (
+                              <div>
+                                <span className="text-body-tertiary">
+                                  Notes:
+                                </span>{" "}
+                                {entry.notes}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <CodeMirror
@@ -2862,6 +3228,16 @@ export default function WorkspacePanel({
           </button>
         </div>
       ) : null}
+      <VaultPasswordModal
+        open={kdbxPromptOpen}
+        title="Unlock credentials.kdbx"
+        helperText="Master password is required to read KDBX files."
+        onSubmit={(masterPassword) => handleKdbxSubmit(masterPassword)}
+        onClose={() => {
+          setKdbxPromptOpen(false);
+          setEditorLoading(false);
+        }}
+      />
       <VaultPasswordModal
         open={vaultPromptOpen}
         title={
