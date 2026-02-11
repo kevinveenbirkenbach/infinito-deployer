@@ -237,7 +237,7 @@ export default function DeploymentLogs({ baseUrl }: { baseUrl: string }) {
       style={{
         marginTop: 24,
         padding: 16,
-        border: "1px solid #ddd",
+        border: "1px solid var(--bs-border-color)",
         borderRadius: 12,
       }}
     >
@@ -252,7 +252,8 @@ export default function DeploymentLogs({ baseUrl }: { baseUrl: string }) {
             flex: "1 1 280px",
             padding: "8px 10px",
             borderRadius: 8,
-            border: "1px solid #ccc",
+            border: "1px solid var(--bs-border-color)",
+            background: "var(--bs-body-bg)",
           }}
         />
         <button
@@ -261,9 +262,13 @@ export default function DeploymentLogs({ baseUrl }: { baseUrl: string }) {
           style={{
             padding: "8px 12px",
             borderRadius: 8,
-            border: "1px solid #111",
-            background: connected ? "#e5e7eb" : "#111827",
-            color: connected ? "#111827" : "#f9fafb",
+            border: "1px solid var(--bs-body-color)",
+            background: connected
+              ? "var(--deployer-disabled-bg)"
+              : "var(--bs-body-color)",
+            color: connected
+              ? "var(--deployer-disabled-text)"
+              : "var(--bs-body-bg)",
             cursor: connected ? "default" : "pointer",
           }}
         >
@@ -275,9 +280,9 @@ export default function DeploymentLogs({ baseUrl }: { baseUrl: string }) {
           style={{
             padding: "8px 12px",
             borderRadius: 8,
-            border: "1px solid #ccc",
-            background: "#fff",
-            color: "#111827",
+            border: "1px solid var(--bs-border-color)",
+            background: "var(--bs-body-bg)",
+            color: "var(--bs-body-color)",
             cursor: connected ? "pointer" : "default",
           }}
         >
@@ -285,12 +290,14 @@ export default function DeploymentLogs({ baseUrl }: { baseUrl: string }) {
         </button>
       </div>
 
-      <div style={{ marginTop: 12, color: "#374151" }}>
+      <div className="text-body-secondary" style={{ marginTop: 12 }}>
         Status: <strong>{status?.status ?? "—"}</strong>
         {status?.exit_code !== undefined && status?.exit_code !== null ? (
           <span> · exit {status.exit_code}</span>
         ) : null}
-        {error ? <span style={{ color: "#dc2626" }}> · {error}</span> : null}
+        {error ? (
+          <span className="text-danger"> · {error}</span>
+        ) : null}
       </div>
 
       <div
@@ -299,9 +306,9 @@ export default function DeploymentLogs({ baseUrl }: { baseUrl: string }) {
           height: 320,
           overflow: "auto",
           borderRadius: 12,
-          border: "1px solid #e5e7eb",
-          background: "#0b0f19",
-          color: "#e5e7eb",
+          border: "1px solid var(--bs-border-color)",
+          background: "var(--deployer-terminal-bg)",
+          color: "var(--deployer-terminal-text)",
           padding: 12,
           fontFamily:
             "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
@@ -310,7 +317,7 @@ export default function DeploymentLogs({ baseUrl }: { baseUrl: string }) {
         }}
       >
         {lines.length === 0 ? (
-          <div style={{ color: "#9ca3af" }}>
+          <div className="text-body-tertiary">
             No log output yet.
           </div>
         ) : (

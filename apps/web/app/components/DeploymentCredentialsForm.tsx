@@ -113,37 +113,36 @@ export default function DeploymentCredentialsForm({
         marginTop: 28,
         padding: 24,
         borderRadius: 24,
-        background:
-          "linear-gradient(120deg, rgba(236, 253, 245, 0.9), rgba(255, 251, 235, 0.9))",
-        border: "1px solid rgba(15, 23, 42, 0.08)",
-        boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+        background: "var(--deployer-panel-credentials-bg)",
+        border: "1px solid var(--bs-border-color-translucent)",
+        boxShadow: "var(--deployer-shadow)",
       }}
     >
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
         <div style={{ flex: "1 1 300px" }}>
           <h2
+            className="text-body"
             style={{
               margin: 0,
               fontFamily: "var(--font-display)",
               fontSize: 26,
               letterSpacing: "-0.02em",
-              color: "#0f172a",
             }}
           >
             Deployment Credentials
           </h2>
-          <p style={{ margin: "8px 0 0", color: "#475569" }}>
+          <p className="text-body-secondary" style={{ margin: "8px 0 0" }}>
             Credentials are only used to establish the SSH session during
             deployment. They are never stored in the browser and are not written
             to disk.
           </p>
         </div>
         <div
+          className="text-body-secondary"
           style={{
             flex: "1 1 240px",
             alignSelf: "center",
             textAlign: "right",
-            color: "#475569",
             fontSize: 13,
           }}
         >
@@ -160,14 +159,13 @@ export default function DeploymentCredentialsForm({
         }}
       >
         <div
+          className="bg-body border"
           style={{
             padding: 16,
             borderRadius: 18,
-            background: "#fff",
-            border: "1px solid rgba(15, 23, 42, 0.1)",
           }}
         >
-          <label style={{ fontSize: 12, color: "#64748b" }}>
+          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
             Active server
           </label>
           <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
@@ -177,8 +175,9 @@ export default function DeploymentCredentialsForm({
               style={{
                 padding: "8px 10px",
                 borderRadius: 10,
-                border: "1px solid #cbd5e1",
+                border: "1px solid var(--bs-border-color)",
                 fontSize: 12,
+                background: "var(--bs-body-bg)",
               }}
             >
               {servers.length === 0 ? (
@@ -195,9 +194,9 @@ export default function DeploymentCredentialsForm({
               style={{
                 padding: "6px 10px",
                 borderRadius: 999,
-                border: "1px solid #0f172a",
-                background: "#0f172a",
-                color: "#fff",
+                border: "1px solid var(--bs-body-color)",
+                background: "var(--bs-body-color)",
+                color: "var(--bs-body-bg)",
                 fontSize: 12,
                 cursor: "pointer",
               }}
@@ -208,14 +207,15 @@ export default function DeploymentCredentialsForm({
         </div>
 
         <div
+          className="bg-body border"
           style={{
             padding: 16,
             borderRadius: 18,
-            background: "#fff",
-            border: "1px solid rgba(15, 23, 42, 0.1)",
           }}
         >
-          <label style={{ fontSize: 12, color: "#64748b" }}>Alias</label>
+          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+            Alias
+          </label>
           <input
             value={aliasDraft}
             onChange={(e) => setAliasDraft(e.target.value)}
@@ -232,30 +232,32 @@ export default function DeploymentCredentialsForm({
               marginTop: 8,
               padding: "10px 12px",
               borderRadius: 12,
-              border: "1px solid #cbd5e1",
+              border: "1px solid var(--bs-border-color)",
+              background: "var(--bs-body-bg)",
             }}
           />
           {aliasError ? (
-            <p style={{ margin: "8px 0 0", color: "#b91c1c" }}>
+            <p className="text-danger" style={{ margin: "8px 0 0" }}>
               {aliasError}
             </p>
           ) : null}
           {!aliasError && errors.alias ? (
-            <p style={{ margin: "8px 0 0", color: "#b91c1c" }}>
+            <p className="text-danger" style={{ margin: "8px 0 0" }}>
               {errors.alias}
             </p>
           ) : null}
         </div>
 
         <div
+          className="bg-body border"
           style={{
             padding: 16,
             borderRadius: 18,
-            background: "#fff",
-            border: "1px solid rgba(15, 23, 42, 0.1)",
           }}
         >
-          <label style={{ fontSize: 12, color: "#64748b" }}>Host</label>
+          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+            Host
+          </label>
           <input
             value={activeServer?.host ?? ""}
             onChange={(e) => update({ host: e.target.value })}
@@ -265,25 +267,27 @@ export default function DeploymentCredentialsForm({
               marginTop: 8,
               padding: "10px 12px",
               borderRadius: 12,
-              border: "1px solid #cbd5e1",
+              border: "1px solid var(--bs-border-color)",
+              background: "var(--bs-body-bg)",
             }}
           />
           {errors.host ? (
-            <p style={{ margin: "8px 0 0", color: "#b91c1c" }}>
+            <p className="text-danger" style={{ margin: "8px 0 0" }}>
               {errors.host}
             </p>
           ) : null}
         </div>
 
         <div
+          className="bg-body border"
           style={{
             padding: 16,
             borderRadius: 18,
-            background: "#fff",
-            border: "1px solid rgba(15, 23, 42, 0.1)",
           }}
         >
-          <label style={{ fontSize: 12, color: "#64748b" }}>User</label>
+          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+            User
+          </label>
           <input
             value={activeServer?.user ?? ""}
             onChange={(e) => update({ user: e.target.value })}
@@ -293,11 +297,12 @@ export default function DeploymentCredentialsForm({
               marginTop: 8,
               padding: "10px 12px",
               borderRadius: 12,
-              border: "1px solid #cbd5e1",
+              border: "1px solid var(--bs-border-color)",
+              background: "var(--bs-body-bg)",
             }}
           />
           {errors.user ? (
-            <p style={{ margin: "8px 0 0", color: "#b91c1c" }}>
+            <p className="text-danger" style={{ margin: "8px 0 0" }}>
               {errors.user}
             </p>
           ) : null}
@@ -305,15 +310,16 @@ export default function DeploymentCredentialsForm({
       </div>
 
       <div
+        className="bg-body border"
         style={{
           marginTop: 16,
           padding: 16,
           borderRadius: 18,
-          background: "#fff",
-          border: "1px solid rgba(15, 23, 42, 0.1)",
         }}
       >
-        <label style={{ fontSize: 12, color: "#64748b" }}>Auth method</label>
+        <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+          Auth method
+        </label>
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           {AUTH_METHODS.map((method) => (
             <button
@@ -324,12 +330,16 @@ export default function DeploymentCredentialsForm({
                 borderRadius: 999,
                 border:
                   activeServer?.authMethod === method
-                    ? "1px solid #0f172a"
-                    : "1px solid #cbd5e1",
+                    ? "1px solid var(--bs-body-color)"
+                    : "1px solid var(--bs-border-color)",
                 background:
-                  activeServer?.authMethod === method ? "#0f172a" : "#fff",
+                  activeServer?.authMethod === method
+                    ? "var(--bs-body-color)"
+                    : "var(--bs-body-bg)",
                 color:
-                  activeServer?.authMethod === method ? "#fff" : "#334155",
+                  activeServer?.authMethod === method
+                    ? "var(--bs-body-bg)"
+                    : "var(--deployer-muted-ink)",
                 fontSize: 12,
                 cursor: "pointer",
               }}
@@ -339,7 +349,7 @@ export default function DeploymentCredentialsForm({
           ))}
         </div>
         {errors.authMethod ? (
-          <p style={{ margin: "8px 0 0", color: "#b91c1c" }}>
+          <p className="text-danger" style={{ margin: "8px 0 0" }}>
             {errors.authMethod}
           </p>
         ) : null}
@@ -353,7 +363,9 @@ export default function DeploymentCredentialsForm({
           }}
         >
           <div>
-            <label style={{ fontSize: 12, color: "#64748b" }}>Password</label>
+            <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+              Password
+            </label>
             <input
               type="password"
               value={activeServer?.password ?? ""}
@@ -370,20 +382,22 @@ export default function DeploymentCredentialsForm({
                 marginTop: 8,
                 padding: "10px 12px",
                 borderRadius: 12,
-                border: "1px solid #cbd5e1",
+                border: "1px solid var(--bs-border-color)",
                 background:
-                  activeServer?.authMethod === "password" ? "#fff" : "#f8fafc",
+                  activeServer?.authMethod === "password"
+                    ? "var(--bs-body-bg)"
+                    : "var(--deployer-input-disabled-bg)",
               }}
             />
             {errors.password ? (
-              <p style={{ margin: "8px 0 0", color: "#b91c1c" }}>
+              <p className="text-danger" style={{ margin: "8px 0 0" }}>
                 {errors.password}
               </p>
             ) : null}
           </div>
 
           <div>
-            <label style={{ fontSize: 12, color: "#64748b" }}>
+            <label className="text-body-tertiary" style={{ fontSize: 12 }}>
               Private key
             </label>
             <textarea
@@ -403,11 +417,11 @@ export default function DeploymentCredentialsForm({
                 marginTop: 8,
                 padding: "10px 12px",
                 borderRadius: 12,
-                border: "1px solid #cbd5e1",
+                border: "1px solid var(--bs-border-color)",
                 background:
                   activeServer?.authMethod === "private_key"
-                    ? "#fff"
-                    : "#f8fafc",
+                    ? "var(--bs-body-bg)"
+                    : "var(--deployer-input-disabled-bg)",
                 resize: "vertical",
                 fontFamily:
                   "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
@@ -415,7 +429,7 @@ export default function DeploymentCredentialsForm({
               }}
             />
             {errors.privateKey ? (
-              <p style={{ margin: "8px 0 0", color: "#b91c1c" }}>
+              <p className="text-danger" style={{ margin: "8px 0 0" }}>
                 {errors.privateKey}
               </p>
             ) : null}
@@ -429,16 +443,20 @@ export default function DeploymentCredentialsForm({
           style={{
             padding: "10px 16px",
             borderRadius: 999,
-            border: "1px solid #0f172a",
-            background: isValid ? "#0f172a" : "#e2e8f0",
-            color: isValid ? "#fff" : "#64748b",
+            border: "1px solid var(--bs-body-color)",
+            background: isValid
+              ? "var(--bs-body-color)"
+              : "var(--deployer-disabled-bg)",
+            color: isValid
+              ? "var(--bs-body-bg)"
+              : "var(--deployer-disabled-text)",
             cursor: isValid ? "pointer" : "not-allowed",
           }}
         >
           Save credentials
         </button>
         {!isValid ? (
-          <span style={{ alignSelf: "center", color: "#b91c1c" }}>
+          <span className="text-danger" style={{ alignSelf: "center" }}>
             Fix the fields highlighted below.
           </span>
         ) : null}
@@ -450,8 +468,8 @@ export default function DeploymentCredentialsForm({
             marginTop: 12,
             padding: 12,
             borderRadius: 12,
-            background: "#fef2f2",
-            color: "#991b1b",
+            background: "var(--bs-danger-bg-subtle)",
+            color: "var(--bs-danger-text-emphasis)",
             fontSize: 12,
           }}
         >

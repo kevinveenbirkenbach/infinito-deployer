@@ -7,11 +7,31 @@ const STATUS_LABELS = {
 };
 
 const STATUS_COLORS = {
-  queued: { bg: "#e2e8f0", fg: "#1f2937", border: "#cbd5e1" },
-  running: { bg: "#dbeafe", fg: "#1e3a8a", border: "#93c5fd" },
-  succeeded: { bg: "#dcfce7", fg: "#166534", border: "#86efac" },
-  failed: { bg: "#fee2e2", fg: "#991b1b", border: "#fecaca" },
-  canceled: { bg: "#fef9c3", fg: "#92400e", border: "#fde68a" },
+  queued: {
+    bg: "var(--bs-secondary-bg-subtle)",
+    fg: "var(--bs-secondary-text-emphasis)",
+    border: "var(--bs-secondary-border-subtle)",
+  },
+  running: {
+    bg: "var(--bs-info-bg-subtle)",
+    fg: "var(--bs-info-text-emphasis)",
+    border: "var(--bs-info-border-subtle)",
+  },
+  succeeded: {
+    bg: "var(--bs-success-bg-subtle)",
+    fg: "var(--bs-success-text-emphasis)",
+    border: "var(--bs-success-border-subtle)",
+  },
+  failed: {
+    bg: "var(--bs-danger-bg-subtle)",
+    fg: "var(--bs-danger-text-emphasis)",
+    border: "var(--bs-danger-border-subtle)",
+  },
+  canceled: {
+    bg: "var(--bs-warning-bg-subtle)",
+    fg: "var(--bs-warning-text-emphasis)",
+    border: "var(--bs-warning-border-subtle)",
+  },
 };
 
 const TERMINAL_STATUSES = new Set(["succeeded", "failed", "canceled"]);
@@ -25,9 +45,9 @@ export function statusColors(status) {
   const key = status ?? "unknown";
   return (
     STATUS_COLORS[key] || {
-      bg: "#e2e8f0",
-      fg: "#1f2937",
-      border: "#cbd5e1",
+      bg: "var(--bs-secondary-bg-subtle)",
+      fg: "var(--bs-secondary-text-emphasis)",
+      border: "var(--bs-secondary-border-subtle)",
     }
   );
 }

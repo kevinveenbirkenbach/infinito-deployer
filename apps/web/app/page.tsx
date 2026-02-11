@@ -28,28 +28,27 @@ export default async function Page() {
         style={{
           padding: 28,
           borderRadius: 28,
-          background:
-            "radial-gradient(circle at top, rgba(255, 255, 255, 0.9), rgba(226, 232, 240, 0.9))",
-          border: "1px solid rgba(15, 23, 42, 0.08)",
+          background: "var(--deployer-hero-bg)",
+          border: "1px solid var(--bs-border-color-translucent)",
         }}
       >
         <div style={{ display: "flex", flexWrap: "wrap", gap: 24 }}>
           <div style={{ flex: "1 1 320px" }}>
             <h1
+              className="text-body"
               style={{
                 margin: 0,
                 fontFamily: "var(--font-display)",
                 fontSize: 38,
                 letterSpacing: "-0.03em",
-                color: "#0f172a",
               }}
             >
               Infinito Deployer
             </h1>
             <p
+              className="text-body-secondary"
               style={{
                 marginTop: 12,
-                color: "#475569",
                 fontSize: 15,
               }}
             >
@@ -58,16 +57,17 @@ export default async function Page() {
             </p>
           </div>
           <div
+            className="bg-body border"
             style={{
               flex: "1 1 260px",
               alignSelf: "center",
-              background: "#fff",
               borderRadius: 18,
               padding: 16,
-              border: "1px solid rgba(15, 23, 42, 0.08)",
             }}
           >
-            <h2 style={{ marginTop: 0, fontSize: 16 }}>API Health</h2>
+            <h2 className="text-body" style={{ marginTop: 0, fontSize: 16 }}>
+              API Health
+            </h2>
             <p style={{ margin: "8px 0 0" }}>
               API Base URL: <code>{baseUrl}</code>
             </p>

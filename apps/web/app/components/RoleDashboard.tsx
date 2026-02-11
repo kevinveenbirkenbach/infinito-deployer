@@ -30,11 +30,31 @@ const STATUS_COLORS: Record<
   string,
   { bg: string; fg: string; border: string }
 > = {
-  stable: { bg: "#dcfce7", fg: "#166534", border: "#86efac" },
-  beta: { bg: "#dbeafe", fg: "#1e3a8a", border: "#93c5fd" },
-  alpha: { bg: "#fde68a", fg: "#92400e", border: "#fcd34d" },
-  "pre-alpha": { bg: "#fee2e2", fg: "#991b1b", border: "#fecaca" },
-  deprecated: { bg: "#e5e7eb", fg: "#374151", border: "#d1d5db" },
+  stable: {
+    bg: "var(--bs-success-bg-subtle)",
+    fg: "var(--bs-success-text-emphasis)",
+    border: "var(--bs-success-border-subtle)",
+  },
+  beta: {
+    bg: "var(--bs-info-bg-subtle)",
+    fg: "var(--bs-info-text-emphasis)",
+    border: "var(--bs-info-border-subtle)",
+  },
+  alpha: {
+    bg: "var(--bs-warning-bg-subtle)",
+    fg: "var(--bs-warning-text-emphasis)",
+    border: "var(--bs-warning-border-subtle)",
+  },
+  "pre-alpha": {
+    bg: "var(--bs-danger-bg-subtle)",
+    fg: "var(--bs-danger-text-emphasis)",
+    border: "var(--bs-danger-border-subtle)",
+  },
+  deprecated: {
+    bg: "var(--bs-secondary-bg-subtle)",
+    fg: "var(--bs-secondary-text-emphasis)",
+    border: "var(--bs-secondary-border-subtle)",
+  },
 };
 
 const PAGE_SIZE = 12;
@@ -164,36 +184,35 @@ export default function RoleDashboard({
         marginTop: 28,
         padding: 24,
         borderRadius: 24,
-        background:
-          "linear-gradient(120deg, rgba(250, 245, 255, 0.9), rgba(236, 253, 245, 0.85))",
-        border: "1px solid rgba(15, 23, 42, 0.08)",
-        boxShadow: "0 20px 60px rgba(15, 23, 42, 0.08)",
+        background: "var(--deployer-panel-catalog-bg)",
+        border: "1px solid var(--bs-border-color-translucent)",
+        boxShadow: "var(--deployer-shadow)",
       }}
     >
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
         <div style={{ flex: "1 1 320px" }}>
           <h2
+            className="text-body"
             style={{
               margin: 0,
               fontFamily: "var(--font-display)",
               fontSize: 28,
               letterSpacing: "-0.02em",
-              color: "#0f172a",
             }}
           >
             Deployment Catalog
           </h2>
-          <p style={{ margin: "8px 0 0", color: "#475569" }}>
+          <p className="text-body-secondary" style={{ margin: "8px 0 0" }}>
             Browse roles, filter fast, and keep your selections locked in
             while you explore.
           </p>
         </div>
         <div
+          className="text-body-secondary"
           style={{
             flex: "1 1 240px",
             alignSelf: "center",
             textAlign: "right",
-            color: "#475569",
             fontSize: 13,
           }}
         >
@@ -227,11 +246,13 @@ export default function RoleDashboard({
           style={{
             padding: 16,
             borderRadius: 18,
-            border: "1px solid rgba(15, 23, 42, 0.1)",
-            background: "rgba(255,255,255,0.9)",
+            border: "1px solid var(--bs-border-color-translucent)",
+            background: "var(--deployer-card-bg-soft)",
           }}
         >
-          <label style={{ fontSize: 12, color: "#64748b" }}>Search</label>
+          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+            Search
+          </label>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -241,8 +262,8 @@ export default function RoleDashboard({
               marginTop: 6,
               padding: "10px 12px",
               borderRadius: 12,
-              border: "1px solid #cbd5f5",
-              background: "#fff",
+              border: "1px solid var(--bs-border-color)",
+              background: "var(--bs-body-bg)",
               fontSize: 14,
             }}
           />
@@ -251,11 +272,13 @@ export default function RoleDashboard({
           style={{
             padding: 16,
             borderRadius: 18,
-            border: "1px solid rgba(15, 23, 42, 0.1)",
-            background: "rgba(255,255,255,0.9)",
+            border: "1px solid var(--bs-border-color-translucent)",
+            background: "var(--deployer-card-bg-soft)",
           }}
         >
-          <label style={{ fontSize: 12, color: "#64748b" }}>Deploy target</label>
+          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+            Deploy target
+          </label>
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             {["all", "server", "workstation"].map((target) => (
               <button
@@ -266,12 +289,16 @@ export default function RoleDashboard({
                   borderRadius: 999,
                   border:
                     targetFilter === target
-                      ? "1px solid #0f172a"
-                      : "1px solid #cbd5e1",
+                      ? "1px solid var(--bs-body-color)"
+                      : "1px solid var(--bs-border-color)",
                   background:
-                    targetFilter === target ? "#0f172a" : "#fff",
+                    targetFilter === target
+                      ? "var(--bs-body-color)"
+                      : "var(--bs-body-bg)",
                   color:
-                    targetFilter === target ? "#fff" : "#334155",
+                    targetFilter === target
+                      ? "var(--bs-body-bg)"
+                      : "var(--deployer-muted-ink)",
                   fontSize: 12,
                   cursor: "pointer",
                 }}
@@ -285,11 +312,11 @@ export default function RoleDashboard({
           style={{
             padding: 16,
             borderRadius: 18,
-            border: "1px solid rgba(15, 23, 42, 0.1)",
-            background: "rgba(255,255,255,0.9)",
+            border: "1px solid var(--bs-border-color-translucent)",
+            background: "var(--deployer-card-bg-soft)",
           }}
         >
-          <label style={{ fontSize: 12, color: "#64748b" }}>
+          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
             Status filter
           </label>
           <div
@@ -304,7 +331,11 @@ export default function RoleDashboard({
               const active = statusFilter.has(status);
               const colors =
                 STATUS_COLORS[status] ??
-                ({ bg: "#e2e8f0", fg: "#1f2937", border: "#cbd5e1" } as const);
+                ({
+                  bg: "var(--bs-secondary-bg-subtle)",
+                  fg: "var(--bs-secondary-text-emphasis)",
+                  border: "var(--bs-secondary-border-subtle)",
+                } as const);
               return (
                 <button
                   key={status}
@@ -313,10 +344,10 @@ export default function RoleDashboard({
                     padding: "6px 10px",
                     borderRadius: 999,
                     border: `1px solid ${
-                      active ? "#0f172a" : colors.border
+                      active ? "var(--bs-body-color)" : colors.border
                     }`,
-                    background: active ? "#0f172a" : colors.bg,
-                    color: active ? "#fff" : colors.fg,
+                    background: active ? "var(--bs-body-color)" : colors.bg,
+                    color: active ? "var(--bs-body-bg)" : colors.fg,
                     fontSize: 12,
                     cursor: "pointer",
                   }}
@@ -331,11 +362,11 @@ export default function RoleDashboard({
           style={{
             padding: 16,
             borderRadius: 18,
-            border: "1px solid rgba(15, 23, 42, 0.1)",
-            background: "rgba(255,255,255,0.9)",
+            border: "1px solid var(--bs-border-color-translucent)",
+            background: "var(--deployer-card-bg-soft)",
           }}
         >
-          <label style={{ fontSize: 12, color: "#64748b" }}>
+          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
             Selection filter
           </label>
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
@@ -352,10 +383,14 @@ export default function RoleDashboard({
                   padding: "6px 10px",
                   borderRadius: 999,
                   border: item.active
-                    ? "1px solid #0f172a"
-                    : "1px solid #cbd5e1",
-                  background: item.active ? "#0f172a" : "#fff",
-                  color: item.active ? "#fff" : "#334155",
+                    ? "1px solid var(--bs-body-color)"
+                    : "1px solid var(--bs-border-color)",
+                  background: item.active
+                    ? "var(--bs-body-color)"
+                    : "var(--bs-body-bg)",
+                  color: item.active
+                    ? "var(--bs-body-bg)"
+                    : "var(--deployer-muted-ink)",
                   fontSize: 12,
                   cursor: "pointer",
                 }}
@@ -368,7 +403,9 @@ export default function RoleDashboard({
       </div>
 
       {error ? (
-        <div style={{ marginTop: 16, color: "#b91c1c" }}>{error}</div>
+        <div className="text-danger" style={{ marginTop: 16 }}>
+          {error}
+        </div>
       ) : null}
 
       <div
@@ -386,7 +423,11 @@ export default function RoleDashboard({
           const selectedState = selected.has(role.id);
           const statusColors =
             STATUS_COLORS[role.status] ??
-            ({ bg: "#e2e8f0", fg: "#1f2937", border: "#cbd5e1" } as const);
+            ({
+              bg: "var(--bs-secondary-bg-subtle)",
+              fg: "var(--bs-secondary-text-emphasis)",
+              border: "var(--bs-secondary-border-subtle)",
+            } as const);
           return (
             <article
               key={role.id}
@@ -394,11 +435,10 @@ export default function RoleDashboard({
                 padding: 18,
                 borderRadius: 18,
                 border: selectedState
-                  ? "2px solid #0f172a"
-                  : "1px solid rgba(15, 23, 42, 0.12)",
-                background: "#fff",
-                boxShadow:
-                  "0 10px 25px rgba(15, 23, 42, 0.08)",
+                  ? "2px solid var(--bs-body-color)"
+                  : "1px solid var(--bs-border-color-translucent)",
+                background: "var(--bs-body-bg)",
+                boxShadow: "var(--deployer-shadow)",
                 display: "flex",
                 flexDirection: "column",
                 gap: 12,
@@ -418,7 +458,7 @@ export default function RoleDashboard({
                     width: 46,
                     height: 46,
                     borderRadius: 16,
-                    background: "rgba(15, 23, 42, 0.08)",
+                    background: "var(--bs-secondary-bg)",
                     display: "grid",
                     placeItems: "center",
                     overflow: "hidden",
@@ -435,7 +475,7 @@ export default function RoleDashboard({
                       style={{
                         fontSize: 14,
                         fontWeight: 700,
-                        color: "#0f172a",
+                        color: "var(--bs-body-color)",
                       }}
                     >
                       {initials(role.display_name)}
@@ -448,10 +488,14 @@ export default function RoleDashboard({
                     padding: "6px 10px",
                     borderRadius: 999,
                     border: selectedState
-                      ? "1px solid #0f172a"
-                      : "1px solid #cbd5e1",
-                    background: selectedState ? "#0f172a" : "#fff",
-                    color: selectedState ? "#fff" : "#334155",
+                      ? "1px solid var(--bs-body-color)"
+                      : "1px solid var(--bs-border-color)",
+                    background: selectedState
+                      ? "var(--bs-body-color)"
+                      : "var(--bs-body-bg)",
+                    color: selectedState
+                      ? "var(--bs-body-bg)"
+                      : "var(--deployer-muted-ink)",
                     fontSize: 12,
                     cursor: "pointer",
                   }}
@@ -486,9 +530,9 @@ export default function RoleDashboard({
                   </span>
                 </div>
                 <p
+                  className="text-body-secondary"
                   style={{
                     margin: "8px 0 0",
-                    color: "#475569",
                     fontSize: 13,
                     lineHeight: 1.4,
                   }}
@@ -505,9 +549,9 @@ export default function RoleDashboard({
                       fontSize: 11,
                       padding: "4px 8px",
                       borderRadius: 999,
-                      background: "#f1f5f9",
-                      color: "#0f172a",
-                      border: "1px solid #e2e8f0",
+                      background: "var(--bs-tertiary-bg)",
+                      color: "var(--bs-body-color)",
+                      border: "1px solid var(--bs-border-color)",
                     }}
                   >
                     {target}
@@ -519,13 +563,13 @@ export default function RoleDashboard({
         })}
       </div>
       <div
+        className="text-body-secondary"
         style={{
           marginTop: 14,
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
           gap: 12,
-          color: "#475569",
           fontSize: 12,
         }}
       >
@@ -535,9 +579,15 @@ export default function RoleDashboard({
           style={{
             padding: "6px 10px",
             borderRadius: 999,
-            border: "1px solid #cbd5e1",
-            background: currentPage <= 1 ? "#e2e8f0" : "#fff",
-            color: currentPage <= 1 ? "#94a3b8" : "#334155",
+            border: "1px solid var(--bs-border-color)",
+            background:
+              currentPage <= 1
+                ? "var(--deployer-disabled-bg)"
+                : "var(--bs-body-bg)",
+            color:
+              currentPage <= 1
+                ? "var(--deployer-disabled-text)"
+                : "var(--deployer-muted-ink)",
             cursor: currentPage <= 1 ? "not-allowed" : "pointer",
           }}
         >
@@ -554,9 +604,15 @@ export default function RoleDashboard({
           style={{
             padding: "6px 10px",
             borderRadius: 999,
-            border: "1px solid #cbd5e1",
-            background: currentPage >= pageCount ? "#e2e8f0" : "#fff",
-            color: currentPage >= pageCount ? "#94a3b8" : "#334155",
+            border: "1px solid var(--bs-border-color)",
+            background:
+              currentPage >= pageCount
+                ? "var(--deployer-disabled-bg)"
+                : "var(--bs-body-bg)",
+            color:
+              currentPage >= pageCount
+                ? "var(--deployer-disabled-text)"
+                : "var(--deployer-muted-ink)",
             cursor:
               currentPage >= pageCount ? "not-allowed" : "pointer",
           }}

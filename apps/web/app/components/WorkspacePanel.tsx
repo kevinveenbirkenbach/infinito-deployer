@@ -1497,36 +1497,35 @@ export default function WorkspacePanel({
           marginTop: 28,
           padding: 24,
           borderRadius: 24,
-          background:
-            "linear-gradient(120deg, rgba(244, 244, 255, 0.92), rgba(236, 253, 245, 0.9))",
-          border: "1px solid rgba(15, 23, 42, 0.08)",
-          boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+          background: "var(--deployer-panel-workspace-bg)",
+          border: "1px solid var(--bs-border-color-translucent)",
+          boxShadow: "var(--deployer-shadow)",
         }}
       >
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
         <div style={{ flex: "1 1 320px" }}>
           <h2
+            className="text-body"
             style={{
               margin: 0,
               fontFamily: "var(--font-display)",
               fontSize: 26,
               letterSpacing: "-0.02em",
-              color: "#0f172a",
             }}
           >
             Workspace & Files
           </h2>
-          <p style={{ margin: "8px 0 0", color: "#475569" }}>
+          <p className="text-body-secondary" style={{ margin: "8px 0 0" }}>
             Step-by-step: select roles → edit files → generate credentials →
             export ZIP or deploy.
           </p>
         </div>
         <div
+          className="text-body-secondary"
           style={{
             flex: "1 1 240px",
             alignSelf: "center",
             textAlign: "right",
-            color: "#475569",
             fontSize: 13,
           }}
         >
@@ -1539,12 +1538,12 @@ export default function WorkspacePanel({
       </div>
 
       {workspaceError ? (
-        <div style={{ marginTop: 12, color: "#b91c1c", fontSize: 12 }}>
+        <div className="text-danger" style={{ marginTop: 12, fontSize: 12 }}>
           {workspaceError}
         </div>
       ) : null}
       {inventorySyncError ? (
-        <div style={{ marginTop: 8, color: "#b91c1c", fontSize: 12 }}>
+        <div className="text-danger" style={{ marginTop: 8, fontSize: 12 }}>
           {inventorySyncError}
         </div>
       ) : null}
@@ -1558,14 +1557,15 @@ export default function WorkspacePanel({
         }}
       >
         <div
+          className="bg-body border"
           style={{
             padding: 16,
             borderRadius: 18,
-            background: "#fff",
-            border: "1px solid rgba(15, 23, 42, 0.1)",
           }}
         >
-          <label style={{ fontSize: 12, color: "#64748b" }}>Credentials</label>
+          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+            Credentials
+          </label>
           <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
             <button
               onClick={generateCredentials}
@@ -1573,11 +1573,13 @@ export default function WorkspacePanel({
               style={{
                 padding: "8px 12px",
                 borderRadius: 999,
-                border: "1px solid #0f172a",
-                background:
-                  canGenerateCredentials ? "#0f172a" : "#e2e8f0",
-                color:
-                  canGenerateCredentials ? "#fff" : "#64748b",
+                border: "1px solid var(--bs-body-color)",
+                background: canGenerateCredentials
+                  ? "var(--bs-body-color)"
+                  : "var(--deployer-disabled-bg)",
+                color: canGenerateCredentials
+                  ? "var(--bs-body-bg)"
+                  : "var(--deployer-disabled-text)",
                 cursor:
                   canGenerateCredentials ? "pointer" : "not-allowed",
                 fontSize: 12,
@@ -1595,7 +1597,8 @@ export default function WorkspacePanel({
               style={{
                 padding: "8px 10px",
                 borderRadius: 10,
-                border: "1px solid #cbd5e1",
+                border: "1px solid var(--bs-border-color)",
+                background: "var(--bs-body-bg)",
                 fontSize: 12,
               }}
             />
@@ -1607,13 +1610,14 @@ export default function WorkspacePanel({
                 style={{
                   padding: "8px 10px",
                   borderRadius: 10,
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid var(--bs-border-color)",
+                  background: "var(--bs-body-bg)",
                   fontSize: 12,
                 }}
               />
             ) : null}
             <div style={{ display: "grid", gap: 6 }}>
-              <span style={{ fontSize: 12, color: "#64748b" }}>
+              <span className="text-body-tertiary" style={{ fontSize: 12 }}>
                 Generate for
               </span>
               <label
@@ -1622,8 +1626,8 @@ export default function WorkspacePanel({
                   alignItems: "center",
                   gap: 8,
                   fontSize: 12,
-                  color: "#475569",
                 }}
+                className="text-body-secondary"
               >
                 <input
                   type="radio"
@@ -1639,8 +1643,8 @@ export default function WorkspacePanel({
                   alignItems: "center",
                   gap: 8,
                   fontSize: 12,
-                  color: "#475569",
                 }}
+                className="text-body-secondary"
               >
                 <input
                   type="radio"
@@ -1658,10 +1662,14 @@ export default function WorkspacePanel({
                   style={{
                     padding: "8px 10px",
                     borderRadius: 10,
-                    border: "1px solid #cbd5e1",
+                    border: "1px solid var(--bs-border-color)",
                     fontSize: 12,
-                    background: activeRoles.length ? "#fff" : "#f1f5f9",
-                    color: activeRoles.length ? "#0f172a" : "#94a3b8",
+                    background: activeRoles.length
+                      ? "var(--bs-body-bg)"
+                      : "var(--deployer-disabled-bg)",
+                    color: activeRoles.length
+                      ? "var(--bs-body-color)"
+                      : "var(--deployer-disabled-text)",
                   }}
                 >
                   {activeRoles.length === 0 ? (
@@ -1681,8 +1689,8 @@ export default function WorkspacePanel({
                 alignItems: "center",
                 gap: 8,
                 fontSize: 12,
-                color: "#475569",
               }}
+              className="text-body-secondary"
             >
               <input
                 type="checkbox"
@@ -1697,8 +1705,8 @@ export default function WorkspacePanel({
                 alignItems: "center",
                 gap: 8,
                 fontSize: 12,
-                color: "#475569",
               }}
+              className="text-body-secondary"
             >
               <input
                 type="checkbox"
@@ -1707,32 +1715,31 @@ export default function WorkspacePanel({
               />
               Overwrite existing credentials
             </label>
-            <span style={{ fontSize: 11, color: "#64748b" }}>
+            <span className="text-body-tertiary" style={{ fontSize: 11 }}>
               Auto sync runs when a vault password is set. Overwrite applies to
               both auto and manual runs.
             </span>
           </div>
           {credentialsError ? (
-            <p style={{ margin: "8px 0 0", color: "#b91c1c", fontSize: 12 }}>
+            <p className="text-danger" style={{ margin: "8px 0 0", fontSize: 12 }}>
               {credentialsError}
             </p>
           ) : null}
           {credentialsStatus ? (
-            <p style={{ margin: "8px 0 0", color: "#0f766e", fontSize: 12 }}>
+            <p className="text-success" style={{ margin: "8px 0 0", fontSize: 12 }}>
               {credentialsStatus}
             </p>
           ) : null}
         </div>
 
         <div
+          className="bg-body border"
           style={{
             padding: 16,
             borderRadius: 18,
-            background: "#fff",
-            border: "1px solid rgba(15, 23, 42, 0.1)",
           }}
         >
-          <label style={{ fontSize: 12, color: "#64748b" }}>
+          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
             Workspace import/export
           </label>
           <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
@@ -1742,9 +1749,9 @@ export default function WorkspacePanel({
               style={{
                 padding: "8px 12px",
                 borderRadius: 999,
-                border: "1px solid #cbd5e1",
-                background: "#fff",
-                color: "#334155",
+                border: "1px solid var(--bs-border-color)",
+                background: "var(--bs-body-bg)",
+                color: "var(--deployer-muted-ink)",
                 cursor: workspaceId ? "pointer" : "not-allowed",
                 fontSize: 12,
               }}
@@ -1757,9 +1764,13 @@ export default function WorkspacePanel({
               style={{
                 padding: "8px 12px",
                 borderRadius: 999,
-                border: "1px solid #0f172a",
-                background: workspaceId ? "#0f172a" : "#e2e8f0",
-                color: workspaceId ? "#fff" : "#64748b",
+                border: "1px solid var(--bs-body-color)",
+                background: workspaceId
+                  ? "var(--bs-body-color)"
+                  : "var(--deployer-disabled-bg)",
+                color: workspaceId
+                  ? "var(--bs-body-bg)"
+                  : "var(--deployer-disabled-text)",
                 cursor: workspaceId ? "pointer" : "not-allowed",
                 fontSize: 12,
               }}
@@ -1775,17 +1786,17 @@ export default function WorkspacePanel({
             />
           </div>
           {uploadError ? (
-            <p style={{ margin: "8px 0 0", color: "#b91c1c", fontSize: 12 }}>
+            <p className="text-danger" style={{ margin: "8px 0 0", fontSize: 12 }}>
               {uploadError}
             </p>
           ) : null}
           {zipError ? (
-            <p style={{ margin: "8px 0 0", color: "#b91c1c", fontSize: 12 }}>
+            <p className="text-danger" style={{ margin: "8px 0 0", fontSize: 12 }}>
               {zipError}
             </p>
           ) : null}
           {uploadStatus ? (
-            <p style={{ margin: "8px 0 0", color: "#0f766e", fontSize: 12 }}>
+            <p className="text-success" style={{ margin: "8px 0 0", fontSize: 12 }}>
               {uploadStatus}
             </p>
           ) : null}
@@ -1801,16 +1812,17 @@ export default function WorkspacePanel({
         }}
       >
         <div
+          className="bg-body border"
           style={{
             padding: 16,
             borderRadius: 18,
-            background: "#fff",
-            border: "1px solid rgba(15, 23, 42, 0.1)",
             minHeight: 320,
           }}
         >
-          <label style={{ fontSize: 12, color: "#64748b" }}>Files</label>
-          <div style={{ marginTop: 8, fontSize: 12, color: "#64748b" }}>
+          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+            Files
+          </label>
+          <div className="text-body-tertiary" style={{ marginTop: 8, fontSize: 12 }}>
             Right-click to create files or folders.
           </div>
           <div
@@ -1818,7 +1830,7 @@ export default function WorkspacePanel({
             onContextMenu={(event) => openContextMenu(event, null, false)}
           >
             {treeItems.length === 0 ? (
-              <p style={{ color: "#64748b", fontSize: 12 }}>
+              <p className="text-body-tertiary" style={{ fontSize: 12 }}>
                 No files yet. Inventory will appear once roles and host/user
                 are set.
               </p>
@@ -1842,12 +1854,12 @@ export default function WorkspacePanel({
                     cursor: "pointer",
                     background:
                       !item.isDir && item.path === activePath
-                        ? "#0f172a"
+                        ? "var(--bs-body-color)"
                         : "transparent",
                     color:
                       !item.isDir && item.path === activePath
-                        ? "#fff"
-                        : "#0f172a",
+                        ? "var(--bs-body-bg)"
+                        : "var(--bs-body-color)",
                     fontSize: 12,
                   }}
                 >
@@ -1860,37 +1872,38 @@ export default function WorkspacePanel({
             )}
           </div>
           {fileOpError ? (
-            <p style={{ marginTop: 8, color: "#b91c1c", fontSize: 12 }}>
+            <p className="text-danger" style={{ marginTop: 8, fontSize: 12 }}>
               {fileOpError}
             </p>
           ) : null}
         </div>
 
         <div
+          className="bg-body border"
           style={{
             padding: 16,
             borderRadius: 18,
-            background: "#fff",
-            border: "1px solid rgba(15, 23, 42, 0.1)",
             minHeight: 320,
           }}
         >
-          <label style={{ fontSize: 12, color: "#64748b" }}>Editor</label>
+          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+            Editor
+          </label>
           <div style={{ marginTop: 8 }}>
             {!activePath ? (
-              <p style={{ color: "#64748b", fontSize: 12 }}>
+              <p className="text-body-tertiary" style={{ fontSize: 12 }}>
                 Select a file from the workspace to edit it.
               </p>
             ) : (
               <>
                 <div
+                  className="text-body-secondary"
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
                     marginBottom: 8,
                     fontSize: 12,
-                    color: "#475569",
                   }}
                 >
                   <span>
@@ -1903,9 +1916,13 @@ export default function WorkspacePanel({
                       style={{
                         padding: "6px 10px",
                         borderRadius: 999,
-                        border: "1px solid #0f172a",
-                        background: editorDirty ? "#0f172a" : "#e2e8f0",
-                        color: editorDirty ? "#fff" : "#64748b",
+                        border: "1px solid var(--bs-body-color)",
+                        background: editorDirty
+                          ? "var(--bs-body-color)"
+                          : "var(--deployer-disabled-bg)",
+                        color: editorDirty
+                          ? "var(--bs-body-bg)"
+                          : "var(--deployer-disabled-text)",
                         cursor: editorDirty ? "pointer" : "not-allowed",
                         fontSize: 12,
                       }}
@@ -1918,9 +1935,9 @@ export default function WorkspacePanel({
                       style={{
                         padding: "6px 10px",
                         borderRadius: 999,
-                        border: "1px solid #cbd5e1",
-                        background: "#fff",
-                        color: "#334155",
+                        border: "1px solid var(--bs-border-color)",
+                        background: "var(--bs-body-bg)",
+                        color: "var(--deployer-muted-ink)",
                         cursor: "pointer",
                         fontSize: 12,
                       }}
@@ -1934,8 +1951,8 @@ export default function WorkspacePanel({
                     style={{
                       minHeight: 360,
                       borderRadius: 12,
-                      border: "1px solid #e2e8f0",
-                      background: "#fff",
+                      border: "1px solid var(--bs-border-color)",
+                      background: "var(--bs-body-bg)",
                     }}
                   >
                     <ReactQuill
@@ -1969,9 +1986,9 @@ export default function WorkspacePanel({
                 )}
                 {editorError ? (
                   <p
+                    className="text-danger"
                     style={{
                       marginTop: 8,
-                      color: "#b91c1c",
                       fontSize: 12,
                     }}
                   >
@@ -1980,9 +1997,9 @@ export default function WorkspacePanel({
                 ) : null}
                 {editorStatus ? (
                   <p
+                    className="text-success"
                     style={{
                       marginTop: 8,
-                      color: "#0f766e",
                       fontSize: 12,
                     }}
                   >
@@ -2012,10 +2029,10 @@ export default function WorkspacePanel({
               typeof window !== "undefined"
                 ? Math.min(contextMenu.x, window.innerWidth - 180)
                 : contextMenu.x,
-            background: "#fff",
+            background: "var(--bs-body-bg)",
             borderRadius: 12,
-            border: "1px solid rgba(15, 23, 42, 0.15)",
-            boxShadow: "0 10px 30px rgba(15, 23, 42, 0.15)",
+            border: "1px solid var(--bs-border-color-translucent)",
+            boxShadow: "var(--deployer-shadow)",
             padding: 8,
             zIndex: 50,
             minWidth: 160,
@@ -2073,7 +2090,7 @@ export default function WorkspacePanel({
             <div
               style={{
                 height: 1,
-                background: "rgba(15, 23, 42, 0.08)",
+                background: "var(--bs-border-color-translucent)",
                 margin: "6px 0",
               }}
             />
@@ -2108,6 +2125,7 @@ export default function WorkspacePanel({
                 setContextMenu(null);
                 deleteFile(path, contextMenu.isDir);
               }}
+              className="text-danger"
               style={{
                 width: "100%",
                 textAlign: "left",
@@ -2117,7 +2135,6 @@ export default function WorkspacePanel({
                 background: "transparent",
                 cursor: "pointer",
                 fontSize: 12,
-                color: "#b91c1c",
               }}
             >
               Delete{contextMenu.isDir ? " folder" : ""}

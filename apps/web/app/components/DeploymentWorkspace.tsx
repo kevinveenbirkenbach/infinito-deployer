@@ -411,11 +411,10 @@ export default function DeploymentWorkspace({
           marginTop: 28,
           padding: 24,
           borderRadius: 24,
-          background:
-            "linear-gradient(120deg, rgba(15, 23, 42, 0.95), rgba(2, 6, 23, 0.95))",
-          border: "1px solid rgba(148, 163, 184, 0.3)",
-          color: "#e2e8f0",
-          boxShadow: "0 18px 40px rgba(15, 23, 42, 0.25)",
+          background: "var(--deployer-panel-dark-bg)",
+          border: "1px solid var(--deployer-panel-dark-border)",
+          color: "var(--deployer-panel-dark-text)",
+          boxShadow: "var(--deployer-shadow-strong)",
         }}
       >
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
@@ -426,12 +425,16 @@ export default function DeploymentWorkspace({
                 fontFamily: "var(--font-display)",
                 fontSize: 26,
                 letterSpacing: "-0.02em",
-                color: "#f8fafc",
               }}
             >
               Launch Deployment
             </h2>
-            <p style={{ margin: "8px 0 0", color: "#cbd5f5" }}>
+            <p
+              style={{
+                margin: "8px 0 0",
+                color: "var(--deployer-panel-dark-muted)",
+              }}
+            >
               Kick off a real run using the selected roles, credentials, and
               the workspace inventory. The job ID streams live logs below.
             </p>
@@ -441,7 +444,6 @@ export default function DeploymentWorkspace({
               flex: "1 1 240px",
               alignSelf: "center",
               textAlign: "right",
-              color: "#e2e8f0",
               fontSize: 13,
             }}
           >
@@ -461,7 +463,12 @@ export default function DeploymentWorkspace({
           }}
         >
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span style={{ fontSize: 12, color: "#cbd5f5" }}>
+            <span
+              style={{
+                fontSize: 12,
+                color: "var(--deployer-panel-dark-muted)",
+              }}
+            >
               Deploy scope:
             </span>
             {["active", "all"].map((scope) => {
@@ -474,11 +481,13 @@ export default function DeploymentWorkspace({
                   style={{
                     padding: "6px 12px",
                     borderRadius: 999,
-                    border: "1px solid rgba(248, 250, 252, 0.4)",
+                    border: "1px solid var(--deployer-panel-dark-border)",
                     background: isActive
-                      ? "#38bdf8"
-                      : "rgba(15, 23, 42, 0.6)",
-                    color: isActive ? "#0f172a" : "#e2e8f0",
+                      ? "var(--deployer-accent)"
+                      : "var(--deployer-panel-dark-pill-bg)",
+                    color: isActive
+                      ? "var(--deployer-accent-contrast)"
+                      : "var(--deployer-panel-dark-text)",
                     cursor: disabled ? "not-allowed" : "pointer",
                     fontSize: 12,
                     opacity: disabled ? 0.5 : 1,
@@ -495,9 +504,13 @@ export default function DeploymentWorkspace({
             style={{
               padding: "10px 18px",
               borderRadius: 999,
-              border: "1px solid rgba(248, 250, 252, 0.4)",
-              background: canDeploy ? "#38bdf8" : "#1e293b",
-              color: canDeploy ? "#0f172a" : "#94a3b8",
+              border: "1px solid var(--deployer-panel-dark-border)",
+              background: canDeploy
+                ? "var(--deployer-accent)"
+                : "var(--deployer-disabled-bg)",
+              color: canDeploy
+                ? "var(--deployer-accent-contrast)"
+                : "var(--deployer-disabled-text)",
               cursor: canDeploy ? "pointer" : "not-allowed",
               fontWeight: 600,
             }}
@@ -505,7 +518,7 @@ export default function DeploymentWorkspace({
             {deploying ? "Starting..." : "Start deployment"}
           </button>
           {jobId ? (
-            <div style={{ fontSize: 12, color: "#e2e8f0" }}>
+            <div style={{ fontSize: 12 }}>
               Job ID: <code>{jobId}</code>
             </div>
           ) : null}
@@ -517,10 +530,9 @@ export default function DeploymentWorkspace({
               marginTop: 12,
               padding: 12,
               borderRadius: 12,
-              background: "rgba(248, 250, 252, 0.1)",
-              border: "1px solid rgba(148, 163, 184, 0.3)",
+              background: "var(--deployer-panel-dark-subtle-bg)",
+              border: "1px solid var(--deployer-panel-dark-border)",
               fontSize: 12,
-              color: "#f8fafc",
             }}
           >
             {Object.values(deploymentErrors).map((message, idx) => (
@@ -530,7 +542,13 @@ export default function DeploymentWorkspace({
         ) : null}
 
         {deployError ? (
-          <div style={{ marginTop: 8, color: "#fca5a5", fontSize: 12 }}>
+          <div
+            style={{
+              marginTop: 8,
+              color: "var(--bs-danger-text-emphasis)",
+              fontSize: 12,
+            }}
+          >
             {deployError}
           </div>
         ) : null}

@@ -42,6 +42,22 @@ export default function LiveDeploymentView({
   useEffect(() => {
     let disposed = false;
     let onResize: (() => void) | null = null;
+    let onSchemeChange: (() => void) | null = null;
+    let mediaQuery: MediaQueryList | null = null;
+
+    const readCssVar = (name: string, fallback: string) => {
+      if (typeof window === "undefined") return fallback;
+      const value = getComputedStyle(document.documentElement)
+        .getPropertyValue(name)
+        .trim();
+      return value || fallback;
+    };
+
+    const buildTheme = () => ({
+      background: readCssVar("--deployer-terminal-bg", "#0b0f19"),
+      foreground: readCssVar("--deployer-terminal-text", "#e2e8f0"),
+      cursor: readCssVar("--deployer-accent", "#38bdf8"),
+    });
 
     const setupTerminal = async () => {
       if (!containerRef.current) return;
@@ -55,11 +71,7 @@ export default function LiveDeploymentView({
         fontFamily:
           "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
         fontSize: 12,
-        theme: {
-          background: "#0b0f19",
-          foreground: "#e2e8f0",
-          cursor: "#38bdf8",
-        },
+        theme: buildTheme(),
         convertEol: true,
         cursorBlink: true,
         scrollback: 2000,
@@ -76,6 +88,24 @@ export default function LiveDeploymentView({
 
       onResize = () => fit.fit();
       window.addEventListener("resize", onResize);
+
+      if (typeof window !== "undefined") {
+        mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+        onSchemeChange = () => {
+          const nextTheme = buildTheme();
+          term.options.theme = nextTheme;
+          term.refresh(0, Math.max(0, term.rows - 1));
+        };
+        const legacyMediaQuery = mediaQuery as MediaQueryList & {
+          addListener?: (listener: () => void) => void;
+          removeListener?: (listener: () => void) => void;
+        };
+        if (legacyMediaQuery.addEventListener) {
+          legacyMediaQuery.addEventListener("change", onSchemeChange);
+        } else if (legacyMediaQuery.addListener) {
+          legacyMediaQuery.addListener(onSchemeChange);
+        }
+      }
     };
 
     setupTerminal().catch((err) => {
@@ -85,6 +115,17 @@ export default function LiveDeploymentView({
     return () => {
       disposed = true;
       if (onResize) window.removeEventListener("resize", onResize);
+      if (mediaQuery && onSchemeChange) {
+        const legacyMediaQuery = mediaQuery as MediaQueryList & {
+          addListener?: (listener: () => void) => void;
+          removeListener?: (listener: () => void) => void;
+        };
+        if (legacyMediaQuery.removeEventListener) {
+          legacyMediaQuery.removeEventListener("change", onSchemeChange);
+        } else if (legacyMediaQuery.removeListener) {
+          legacyMediaQuery.removeListener(onSchemeChange);
+        }
+      }
       termRef.current?.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -205,35 +246,34 @@ export default function LiveDeploymentView({
         marginTop: 28,
         padding: 24,
         borderRadius: 24,
-        background:
-          "linear-gradient(120deg, rgba(226, 232, 240, 0.9), rgba(240, 253, 250, 0.9))",
-        border: "1px solid rgba(15, 23, 42, 0.08)",
-        boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+        background: "var(--deployer-panel-live-bg)",
+        border: "1px solid var(--bs-border-color-translucent)",
+        boxShadow: "var(--deployer-shadow)",
       }}
     >
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
         <div style={{ flex: "1 1 320px" }}>
           <h2
+            className="text-body"
             style={{
               margin: 0,
               fontFamily: "var(--font-display)",
               fontSize: 26,
               letterSpacing: "-0.02em",
-              color: "#0f172a",
             }}
           >
             Live Deployment View
           </h2>
-          <p style={{ margin: "8px 0 0", color: "#475569" }}>
+          <p className="text-body-secondary" style={{ margin: "8px 0 0" }}>
             Docker-like terminal output via SSE, with real-time status updates.
           </p>
         </div>
         <div
+          className="text-body-secondary"
           style={{
             flex: "1 1 240px",
             alignSelf: "center",
             textAlign: "right",
-            color: "#475569",
             fontSize: 13,
           }}
         >
@@ -269,7 +309,8 @@ export default function LiveDeploymentView({
             flex: "1 1 240px",
             padding: "10px 12px",
             borderRadius: 12,
-            border: "1px solid #cbd5e1",
+            border: "1px solid var(--bs-border-color)",
+            background: "var(--bs-body-bg)",
           }}
         />
         <button
@@ -278,9 +319,13 @@ export default function LiveDeploymentView({
           style={{
             padding: "10px 16px",
             borderRadius: 999,
-            border: "1px solid #0f172a",
-            background: connected ? "#e2e8f0" : "#0f172a",
-            color: connected ? "#64748b" : "#fff",
+            border: "1px solid var(--bs-body-color)",
+            background: connected
+              ? "var(--deployer-disabled-bg)"
+              : "var(--bs-body-color)",
+            color: connected
+              ? "var(--deployer-disabled-text)"
+              : "var(--bs-body-bg)",
             cursor: connected ? "not-allowed" : "pointer",
           }}
         >
@@ -292,9 +337,9 @@ export default function LiveDeploymentView({
           style={{
             padding: "10px 16px",
             borderRadius: 999,
-            border: "1px solid #cbd5e1",
-            background: "#fff",
-            color: "#0f172a",
+            border: "1px solid var(--bs-border-color)",
+            background: "var(--bs-body-bg)",
+            color: "var(--bs-body-color)",
             cursor:
               !jobId.trim() || canceling || isTerminalStatus(status?.status)
                 ? "not-allowed"
@@ -306,15 +351,17 @@ export default function LiveDeploymentView({
       </div>
 
       {error ? (
-        <div style={{ marginTop: 8, color: "#b91c1c" }}>{error}</div>
+        <div className="text-danger" style={{ marginTop: 8 }}>
+          {error}
+        </div>
       ) : null}
 
       <div
         style={{
           marginTop: 16,
           borderRadius: 18,
-          border: "1px solid #111827",
-          background: "#0b0f19",
+          border: "1px solid var(--deployer-terminal-border)",
+          background: "var(--deployer-terminal-bg)",
           height: 320,
           overflow: "hidden",
         }}
