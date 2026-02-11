@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { filterRoles } from "../lib/role_filter";
 
@@ -64,8 +64,51 @@ const STATUS_COLORS: Record<
   },
 };
 
-const PAGE_SIZE = 8;
 const LAYOUT_MAX_WIDTH = 960;
+
+const VIEW_MODES = ["detail", "list", "mini"] as const;
+type ViewMode = (typeof VIEW_MODES)[number];
+
+const VIEW_CONFIG: Record<
+  ViewMode,
+  {
+    minWidth: number;
+    minHeight: number;
+    iconSize: number;
+    showDescription: boolean;
+    showTargets: boolean;
+    showLinks: boolean;
+    horizontal: boolean;
+  }
+> = {
+  detail: {
+    minWidth: 260,
+    minHeight: 240,
+    iconSize: 46,
+    showDescription: true,
+    showTargets: true,
+    showLinks: true,
+    horizontal: false,
+  },
+  list: {
+    minWidth: 520,
+    minHeight: 120,
+    iconSize: 40,
+    showDescription: true,
+    showTargets: true,
+    showLinks: true,
+    horizontal: true,
+  },
+  mini: {
+    minWidth: 170,
+    minHeight: 150,
+    iconSize: 56,
+    showDescription: false,
+    showTargets: false,
+    showLinks: false,
+    horizontal: false,
+  },
+};
 
 function sortStatuses(statuses: string[]): string[] {
   const order = new Map(STATUS_ORDER.map((s, idx) => [s, idx]));
@@ -174,6 +217,10 @@ export default function RoleDashboard({
   const [targetFilter, setTargetFilter] = useState("all");
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
   const [page, setPage] = useState(1);
+  const [viewMode, setViewMode] = useState<ViewMode>("detail");
+  const [rowsOverride, setRowsOverride] = useState<number | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
   const [activeVideo, setActiveVideo] = useState<{
     url: string;
     title: string;
@@ -189,6 +236,25 @@ export default function RoleDashboard({
     window.addEventListener("keydown", handle);
     return () => window.removeEventListener("keydown", handle);
   }, [activeVideo]);
+
+  useEffect(() => {
+    const node = gridRef.current;
+    if (!node) return;
+    const update = () => {
+      setGridSize({
+        width: node.clientWidth || 0,
+        height: node.clientHeight || 0,
+      });
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", update);
+      return () => window.removeEventListener("resize", update);
+    }
+    const observer = new ResizeObserver(() => update());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   const statusOptions = useMemo(() => {
     const set = new Set<string>();
@@ -211,15 +277,39 @@ export default function RoleDashboard({
     return baseFilteredRoles.filter((role) => selected.has(role.id));
   }, [baseFilteredRoles, selected, showSelectedOnly]);
 
+  const viewConfig = VIEW_CONFIG[viewMode];
+  const gridGap = 16;
+  const minCardWidth = Math.max(
+    viewConfig.minWidth,
+    viewConfig.iconSize + (viewConfig.horizontal ? 360 : 140)
+  );
+  const computedColumns =
+    viewMode === "list"
+      ? 1
+      : Math.max(
+          1,
+          Math.floor(
+            (gridSize.width + gridGap) / (minCardWidth + gridGap)
+          )
+        );
+  const computedRows = Math.max(
+    1,
+    Math.floor(
+      (gridSize.height + gridGap) / (viewConfig.minHeight + gridGap)
+    )
+  );
+  const rows = Math.max(1, rowsOverride ?? computedRows);
+  const pageSize = Math.max(1, rows * computedColumns);
+
   const pageCount = Math.max(
     1,
-    Math.ceil(filteredRoles.length / PAGE_SIZE)
+    Math.ceil(filteredRoles.length / pageSize)
   );
   const currentPage = Math.min(page, pageCount);
   const paginatedRoles = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredRoles.slice(start, start + PAGE_SIZE);
-  }, [filteredRoles, currentPage]);
+    const start = (currentPage - 1) * pageSize;
+    return filteredRoles.slice(start, start + pageSize);
+  }, [filteredRoles, currentPage, pageSize]);
 
   const selectedCount = selected.size;
   const filteredSelectedCount = filteredRoles.filter((role) =>
@@ -244,7 +334,7 @@ export default function RoleDashboard({
 
   useEffect(() => {
     setPage(1);
-  }, [query, statusFilter, targetFilter, showSelectedOnly]);
+  }, [query, statusFilter, targetFilter, showSelectedOnly, viewMode, rowsOverride]);
 
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
@@ -299,136 +389,6 @@ export default function RoleDashboard({
         </div>
       ) : null}
 
-      <div
-        style={{
-          marginTop: 20,
-          maxWidth: LAYOUT_MAX_WIDTH,
-          marginLeft: "auto",
-          marginRight: "auto",
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: 14,
-          alignItems: "end",
-        }}
-      >
-        <div>
-          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
-            Search
-          </label>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search roles"
-            className="form-control"
-            style={{
-              marginTop: 6,
-              borderRadius: 12,
-              background: "var(--bs-body-bg)",
-              fontSize: 14,
-            }}
-          />
-        </div>
-        <div>
-          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
-            Deploy target
-          </label>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-            {["all", "server", "workstation"].map((target) => (
-              <button
-                key={target}
-                onClick={() => setTargetFilter(target)}
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: 999,
-                  border:
-                    targetFilter === target
-                      ? "1px solid var(--bs-body-color)"
-                      : "1px solid var(--bs-border-color)",
-                  background:
-                    targetFilter === target
-                      ? "var(--bs-body-color)"
-                      : "var(--bs-body-bg)",
-                  color:
-                    targetFilter === target
-                      ? "var(--bs-body-bg)"
-                      : "var(--deployer-muted-ink)",
-                  fontSize: 12,
-                }}
-              >
-                {target}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
-            Status filter
-          </label>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-            {statusOptions.map((status) => {
-              const active = statusFilter.has(status);
-              const colors =
-                STATUS_COLORS[status] ??
-                ({
-                  bg: "var(--bs-secondary-bg-subtle)",
-                  fg: "var(--bs-secondary-text-emphasis)",
-                  border: "var(--bs-secondary-border-subtle)",
-                } as const);
-              return (
-                <button
-                  key={status}
-                  onClick={() => toggleStatus(status)}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: 999,
-                    border: `1px solid ${
-                      active ? "var(--bs-body-color)" : colors.border
-                    }`,
-                    background: active ? "var(--bs-body-color)" : colors.bg,
-                    color: active ? "var(--bs-body-bg)" : colors.fg,
-                    fontSize: 12,
-                  }}
-                >
-                  {status}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div>
-          <label className="text-body-tertiary" style={{ fontSize: 12 }}>
-            Selection filter
-          </label>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-            {[
-              { key: "all", label: "all", active: !showSelectedOnly },
-              { key: "selected", label: "selected", active: showSelectedOnly },
-            ].map((item) => (
-              <button
-                key={item.key}
-                onClick={() => setShowSelectedOnly(item.key === "selected")}
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: 999,
-                  border: item.active
-                    ? "1px solid var(--bs-body-color)"
-                    : "1px solid var(--bs-border-color)",
-                  background: item.active
-                    ? "var(--bs-body-color)"
-                    : "var(--bs-body-bg)",
-                  color: item.active
-                    ? "var(--bs-body-bg)"
-                    : "var(--deployer-muted-ink)",
-                  fontSize: 12,
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
       {error ? (
         <div className="text-danger" style={{ marginTop: 16 }}>
           {error}
@@ -437,53 +397,92 @@ export default function RoleDashboard({
 
       <div
         style={{
-          marginTop: 22,
-          maxWidth: LAYOUT_MAX_WIDTH,
-          marginLeft: "auto",
-          marginRight: "auto",
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-          gap: 16,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          flex: 1,
+          minHeight: 0,
         }}
       >
-        {paginatedRoles.map((role) => {
-          const selectedState = selected.has(role.id);
-          const statusColors =
-            STATUS_COLORS[role.status] ??
-            ({
-              bg: "var(--bs-secondary-bg-subtle)",
-              fg: "var(--bs-secondary-text-emphasis)",
-              border: "var(--bs-secondary-border-subtle)",
-            } as const);
-          return (
-            <article
-              key={role.id}
-              style={{
-                padding: 18,
-                borderRadius: 18,
-                border: selectedState
-                  ? "2px solid var(--bs-body-color)"
-                  : "1px solid var(--bs-border-color-translucent)",
-                background: "var(--bs-body-bg)",
-                boxShadow: "var(--deployer-shadow)",
-                display: "flex",
-                flexDirection: "column",
-                gap: 12,
-                minHeight: 200,
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                }}
-              >
+        <div
+          ref={gridRef}
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflow: "auto",
+            maxWidth: LAYOUT_MAX_WIDTH,
+            width: "100%",
+            margin: "0 auto",
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: `repeat(${computedColumns}, minmax(0, 1fr))`,
+              gridAutoRows: viewConfig.minHeight,
+              gap: gridGap,
+              alignContent: "start",
+            }}
+          >
+            {paginatedRoles.map((role) => {
+              const selectedState = selected.has(role.id);
+              const statusColors =
+                STATUS_COLORS[role.status] ??
+                ({
+                  bg: "var(--bs-secondary-bg-subtle)",
+                  fg: "var(--bs-secondary-text-emphasis)",
+                  border: "var(--bs-secondary-border-subtle)",
+                } as const);
+              const quickLinks = [
+                {
+                  key: "documentation",
+                  label: "Documentation",
+                  url: role.documentation,
+                  type: "link",
+                  iconClass: "fa-solid fa-book",
+                },
+                {
+                  key: "video",
+                  label: "Video",
+                  url: role.video,
+                  type: "video",
+                  iconClass: "fa-solid fa-circle-play",
+                },
+                {
+                  key: "forum",
+                  label: "Forum",
+                  url: role.forum,
+                  type: "link",
+                  iconClass: "fa-solid fa-comments",
+                },
+                {
+                  key: "homepage",
+                  label: "Homepage",
+                  url: role.homepage,
+                  type: "link",
+                  iconClass: "fa-solid fa-house",
+                },
+                {
+                  key: "issues",
+                  label: "Issues",
+                  url: role.issue_tracker_url,
+                  type: "link",
+                  iconClass: "fa-solid fa-bug",
+                },
+                {
+                  key: "license",
+                  label: "License",
+                  url: role.license_url,
+                  type: "link",
+                  iconClass: "fa-solid fa-scale-balanced",
+                },
+              ].filter((item) => !!item.url);
+
+              const logo = (
                 <div
                   style={{
-                    width: 46,
-                    height: 46,
+                    width: viewConfig.iconSize,
+                    height: viewConfig.iconSize,
                     borderRadius: 16,
                     background: "var(--bs-secondary-bg)",
                     display: "grid",
@@ -515,252 +514,727 @@ export default function RoleDashboard({
                     </span>
                   )}
                 </div>
-                <button
-                  onClick={() => onToggleSelected(role.id)}
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    border: selectedState
-                      ? "1px solid var(--bs-body-color)"
-                      : "1px solid var(--bs-border-color)",
-                    background: selectedState
-                      ? "var(--bs-body-color)"
-                      : "var(--bs-body-bg)",
-                    color: selectedState
-                      ? "var(--bs-body-bg)"
-                      : "var(--deployer-muted-ink)",
-                    fontSize: 12,
-                    cursor: "pointer",
-                  }}
-                >
-                  {selectedState ? "Selected" : "Select"}
-                </button>
-              </div>
+              );
 
-              <div>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <h3 style={{ margin: 0, fontSize: 16 }}>
-                    {role.display_name}
-                  </h3>
-                  <span
+              if (viewConfig.horizontal) {
+                return (
+                    <article
+                      key={role.id}
+                      style={{
+                        padding: 16,
+                        borderRadius: 18,
+                      border: selectedState
+                        ? "2px solid var(--bs-body-color)"
+                        : "1px solid var(--bs-border-color-translucent)",
+                        background: "var(--bs-body-bg)",
+                        boxShadow: "var(--deployer-shadow)",
+                        minHeight: viewConfig.minHeight,
+                        height: "100%",
+                        display: "grid",
+                        gap: 12,
+                      }}
+                    >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 16,
+                      }}
+                    >
+                      {logo}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <h3 style={{ margin: 0, fontSize: 16 }}>
+                            {role.display_name}
+                          </h3>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              padding: "4px 8px",
+                              borderRadius: 999,
+                              background: statusColors.bg,
+                              color: statusColors.fg,
+                              border: `1px solid ${statusColors.border}`,
+                            }}
+                          >
+                            {role.status}
+                          </span>
+                        </div>
+                        {viewConfig.showDescription ? (
+                          <p
+                            className="text-body-secondary"
+                            style={{
+                              margin: "6px 0 0",
+                              fontSize: 13,
+                              lineHeight: 1.4,
+                              display: "-webkit-box",
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                            }}
+                          >
+                            {role.description || "No description provided."}
+                          </p>
+                        ) : null}
+                        {viewConfig.showTargets ? (
+                          <div
+                            style={{
+                              marginTop: 6,
+                              display: "flex",
+                              gap: 6,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            {displayTargets(role.deployment_targets ?? []).map(
+                              (target) => (
+                                <span
+                                  key={`${role.id}-${target}`}
+                                  style={{
+                                    fontSize: 11,
+                                    padding: "4px 8px",
+                                    borderRadius: 999,
+                                    background: "var(--bs-tertiary-bg)",
+                                    color: "var(--bs-body-color)",
+                                    border: "1px solid var(--bs-border-color)",
+                                  }}
+                                >
+                                  {target}
+                                </span>
+                              )
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                      <button
+                        onClick={() => onToggleSelected(role.id)}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          border: selectedState
+                            ? "1px solid var(--bs-body-color)"
+                            : "1px solid var(--bs-border-color)",
+                          background: selectedState
+                            ? "var(--bs-body-color)"
+                            : "var(--bs-body-bg)",
+                          color: selectedState
+                            ? "var(--bs-body-bg)"
+                            : "var(--deployer-muted-ink)",
+                          fontSize: 12,
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {selectedState ? "Selected" : "Select"}
+                      </button>
+                    </div>
+
+                    {viewConfig.showLinks && quickLinks.length > 0 ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 6,
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                        }}
+                      >
+                        {quickLinks.map((link) =>
+                          link.type === "video" ? (
+                            <button
+                              key={link.key}
+                              onClick={() =>
+                                setActiveVideo({
+                                  url: toEmbedUrl(link.url || ""),
+                                  title: `${role.display_name} video`,
+                                })
+                              }
+                              title={link.label}
+                              aria-label={link.label}
+                              style={{
+                                ...QUICK_LINK_ICON_STYLE,
+                                cursor: "pointer",
+                              }}
+                            >
+                              <i
+                                className={link.iconClass}
+                                aria-hidden="true"
+                                style={{ fontSize: 12 }}
+                              />
+                            </button>
+                          ) : (
+                            <a
+                              key={link.key}
+                              href={link.url || "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={link.label}
+                              aria-label={link.label}
+                              style={{
+                                ...QUICK_LINK_ICON_STYLE,
+                                color: "inherit",
+                                textDecoration: "none",
+                              }}
+                            >
+                              <i
+                                className={link.iconClass}
+                                aria-hidden="true"
+                                style={{ fontSize: 12 }}
+                              />
+                            </a>
+                          )
+                        )}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              }
+
+              if (viewMode === "mini") {
+                return (
+                  <article
+                    key={role.id}
                     style={{
-                      fontSize: 11,
-                      padding: "4px 8px",
-                      borderRadius: 999,
-                      background: statusColors.bg,
-                      color: statusColors.fg,
-                      border: `1px solid ${statusColors.border}`,
+                      padding: 14,
+                      borderRadius: 18,
+                      border: selectedState
+                        ? "2px solid var(--bs-body-color)"
+                        : "1px solid var(--bs-border-color-translucent)",
+                      background: "var(--bs-body-bg)",
+                      boxShadow: "var(--deployer-shadow)",
+                      minHeight: viewConfig.minHeight,
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      textAlign: "center",
+                      gap: 8,
                     }}
                   >
-                    {role.status}
-                  </span>
-                </div>
-                <p
-                  className="text-body-secondary"
+                    {logo}
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {role.display_name}
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        padding: "4px 8px",
+                        borderRadius: 999,
+                        background: statusColors.bg,
+                        color: statusColors.fg,
+                        border: `1px solid ${statusColors.border}`,
+                      }}
+                    >
+                      {role.status}
+                    </span>
+                    <button
+                      onClick={() => onToggleSelected(role.id)}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        border: selectedState
+                          ? "1px solid var(--bs-body-color)"
+                          : "1px solid var(--bs-border-color)",
+                        background: selectedState
+                          ? "var(--bs-body-color)"
+                          : "var(--bs-body-bg)",
+                        color: selectedState
+                          ? "var(--bs-body-bg)"
+                          : "var(--deployer-muted-ink)",
+                        fontSize: 11,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {selectedState ? "Selected" : "Select"}
+                    </button>
+                  </article>
+                );
+              }
+
+              return (
+                <article
+                  key={role.id}
                   style={{
-                    margin: "8px 0 0",
-                    fontSize: 13,
-                    lineHeight: 1.4,
+                    padding: 18,
+                    borderRadius: 18,
+                    border: selectedState
+                      ? "2px solid var(--bs-body-color)"
+                      : "1px solid var(--bs-border-color-translucent)",
+                    background: "var(--bs-body-bg)",
+                    boxShadow: "var(--deployer-shadow)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                    minHeight: viewConfig.minHeight,
+                    height: "100%",
                   }}
                 >
-                  {role.description || "No description provided."}
-                </p>
-              </div>
-
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {displayTargets(role.deployment_targets ?? []).map((target) => (
-                  <span
-                    key={`${role.id}-${target}`}
+                  <div
                     style={{
-                      fontSize: 11,
-                      padding: "4px 8px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                    }}
+                  >
+                    {logo}
+                    <button
+                      onClick={() => onToggleSelected(role.id)}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        border: selectedState
+                          ? "1px solid var(--bs-body-color)"
+                          : "1px solid var(--bs-border-color)",
+                        background: selectedState
+                          ? "var(--bs-body-color)"
+                          : "var(--bs-body-bg)",
+                        color: selectedState
+                          ? "var(--bs-body-bg)"
+                          : "var(--deployer-muted-ink)",
+                        fontSize: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {selectedState ? "Selected" : "Select"}
+                    </button>
+                  </div>
+
+                  <div>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <h3 style={{ margin: 0, fontSize: 16 }}>
+                        {role.display_name}
+                      </h3>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          padding: "4px 8px",
+                          borderRadius: 999,
+                          background: statusColors.bg,
+                          color: statusColors.fg,
+                          border: `1px solid ${statusColors.border}`,
+                        }}
+                      >
+                        {role.status}
+                      </span>
+                    </div>
+                    {viewConfig.showDescription ? (
+                      <p
+                        className="text-body-secondary"
+                        style={{
+                          margin: "8px 0 0",
+                          fontSize: 13,
+                          lineHeight: 1.4,
+                          display: "-webkit-box",
+                          WebkitLineClamp: 4,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {role.description || "No description provided."}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {viewConfig.showTargets ? (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {displayTargets(role.deployment_targets ?? []).map(
+                        (target) => (
+                          <span
+                            key={`${role.id}-${target}`}
+                            style={{
+                              fontSize: 11,
+                              padding: "4px 8px",
+                              borderRadius: 999,
+                              background: "var(--bs-tertiary-bg)",
+                              color: "var(--bs-body-color)",
+                              border: "1px solid var(--bs-border-color)",
+                            }}
+                          >
+                            {target}
+                          </span>
+                        )
+                      )}
+                    </div>
+                  ) : null}
+
+                  {viewConfig.showLinks && quickLinks.length > 0 ? (
+                    <div
+                      style={{
+                        marginTop: "auto",
+                        display: "flex",
+                        gap: 6,
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                      }}
+                    >
+                      {quickLinks.map((link) =>
+                        link.type === "video" ? (
+                          <button
+                            key={link.key}
+                            onClick={() =>
+                              setActiveVideo({
+                                url: toEmbedUrl(link.url || ""),
+                                title: `${role.display_name} video`,
+                              })
+                            }
+                            title={link.label}
+                            aria-label={link.label}
+                            style={{
+                              ...QUICK_LINK_ICON_STYLE,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <i
+                              className={link.iconClass}
+                              aria-hidden="true"
+                              style={{ fontSize: 12 }}
+                            />
+                          </button>
+                        ) : (
+                          <a
+                            key={link.key}
+                            href={link.url || "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={link.label}
+                            aria-label={link.label}
+                            style={{
+                              ...QUICK_LINK_ICON_STYLE,
+                              color: "inherit",
+                              textDecoration: "none",
+                            }}
+                          >
+                            <i
+                              className={link.iconClass}
+                              aria-hidden="true"
+                              style={{ fontSize: 12 }}
+                            />
+                          </a>
+                        )
+                      )}
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: "auto",
+            paddingTop: 12,
+            display: "grid",
+            gap: 12,
+            maxWidth: LAYOUT_MAX_WIDTH,
+            margin: "0 auto",
+            width: "100%",
+          }}
+        >
+          <div
+            className="text-body-secondary"
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: 12,
+              fontSize: 12,
+            }}
+          >
+            <button
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage <= 1}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid var(--bs-border-color)",
+                background:
+                  currentPage <= 1
+                    ? "var(--deployer-disabled-bg)"
+                    : "var(--bs-body-bg)",
+                color:
+                  currentPage <= 1
+                    ? "var(--deployer-disabled-text)"
+                    : "var(--deployer-muted-ink)",
+                fontSize: 12,
+              }}
+            >
+              Prev
+            </button>
+            <span>
+              Page {currentPage} / {pageCount}
+            </span>
+            <button
+              onClick={() =>
+                setPage((prev) => Math.min(pageCount, prev + 1))
+              }
+              disabled={currentPage >= pageCount}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid var(--bs-border-color)",
+                background:
+                  currentPage >= pageCount
+                    ? "var(--deployer-disabled-bg)"
+                    : "var(--bs-body-bg)",
+                color:
+                  currentPage >= pageCount
+                    ? "var(--deployer-disabled-text)"
+                    : "var(--deployer-muted-ink)",
+                fontSize: 12,
+              }}
+            >
+              Next
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 12,
+              alignItems: "end",
+            }}
+          >
+            <div style={{ flex: "1 1 200px", minWidth: 180 }}>
+              <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                Search
+              </label>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search roles"
+                className="form-control"
+                style={{
+                  marginTop: 6,
+                  borderRadius: 12,
+                  background: "var(--bs-body-bg)",
+                  fontSize: 14,
+                }}
+              />
+            </div>
+            <div style={{ flex: "1 1 200px", minWidth: 170 }}>
+              <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                Deploy target
+              </label>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  marginTop: 8,
+                }}
+              >
+                {["all", "server", "workstation"].map((target) => (
+                  <button
+                    key={target}
+                    onClick={() => setTargetFilter(target)}
+                    style={{
+                      padding: "6px 12px",
                       borderRadius: 999,
-                      background: "var(--bs-tertiary-bg)",
-                      color: "var(--bs-body-color)",
-                      border: "1px solid var(--bs-border-color)",
+                      border:
+                        targetFilter === target
+                          ? "1px solid var(--bs-body-color)"
+                          : "1px solid var(--bs-border-color)",
+                      background:
+                        targetFilter === target
+                          ? "var(--bs-body-color)"
+                          : "var(--bs-body-bg)",
+                      color:
+                        targetFilter === target
+                          ? "var(--bs-body-bg)"
+                          : "var(--deployer-muted-ink)",
+                      fontSize: 12,
                     }}
                   >
                     {target}
-                  </span>
+                  </button>
                 ))}
               </div>
-
-              {(() => {
-                const quickLinks = [
+            </div>
+            <div style={{ flex: "1 1 200px", minWidth: 170 }}>
+              <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                Status filter
+              </label>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  marginTop: 8,
+                }}
+              >
+                {statusOptions.map((status) => {
+                  const active = statusFilter.has(status);
+                  const colors =
+                    STATUS_COLORS[status] ??
+                    ({
+                      bg: "var(--bs-secondary-bg-subtle)",
+                      fg: "var(--bs-secondary-text-emphasis)",
+                      border: "var(--bs-secondary-border-subtle)",
+                    } as const);
+                  return (
+                    <button
+                      key={status}
+                      onClick={() => toggleStatus(status)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: 999,
+                        border: `1px solid ${
+                          active ? "var(--bs-body-color)" : colors.border
+                        }`,
+                        background: active ? "var(--bs-body-color)" : colors.bg,
+                        color: active ? "var(--bs-body-bg)" : colors.fg,
+                        fontSize: 12,
+                      }}
+                    >
+                      {status}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{ flex: "1 1 200px", minWidth: 170 }}>
+              <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                Selection filter
+              </label>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  marginTop: 8,
+                }}
+              >
+                {[
+                  { key: "all", label: "all", active: !showSelectedOnly },
                   {
-                    key: "documentation",
-                    label: "Documentation",
-                    url: role.documentation,
-                    type: "link",
-                    iconClass: "fa-solid fa-book",
+                    key: "selected",
+                    label: "selected",
+                    active: showSelectedOnly,
                   },
-                  {
-                    key: "video",
-                    label: "Video",
-                    url: role.video,
-                    type: "video",
-                    iconClass: "fa-solid fa-circle-play",
-                  },
-                  {
-                    key: "forum",
-                    label: "Forum",
-                    url: role.forum,
-                    type: "link",
-                    iconClass: "fa-solid fa-comments",
-                  },
-                  {
-                    key: "homepage",
-                    label: "Homepage",
-                    url: role.homepage,
-                    type: "link",
-                    iconClass: "fa-solid fa-house",
-                  },
-                  {
-                    key: "issues",
-                    label: "Issues",
-                    url: role.issue_tracker_url,
-                    type: "link",
-                    iconClass: "fa-solid fa-bug",
-                  },
-                  {
-                    key: "license",
-                    label: "License",
-                    url: role.license_url,
-                    type: "link",
-                    iconClass: "fa-solid fa-scale-balanced",
-                  },
-                ].filter((item) => !!item.url);
-
-                if (quickLinks.length === 0) {
-                  return null;
-                }
-
-                return (
-                  <div
+                ].map((item) => (
+                  <button
+                    key={item.key}
+                    onClick={() =>
+                      setShowSelectedOnly(item.key === "selected")
+                    }
                     style={{
-                      marginTop: "auto",
-                      display: "flex",
-                      gap: 6,
-                      flexWrap: "wrap",
-                      alignItems: "center",
+                      padding: "6px 12px",
+                      borderRadius: 999,
+                      border: item.active
+                        ? "1px solid var(--bs-body-color)"
+                        : "1px solid var(--bs-border-color)",
+                      background: item.active
+                        ? "var(--bs-body-color)"
+                        : "var(--bs-body-bg)",
+                      color: item.active
+                        ? "var(--bs-body-bg)"
+                        : "var(--deployer-muted-ink)",
+                      fontSize: 12,
                     }}
                   >
-                    {quickLinks.map((link) =>
-                      link.type === "video" ? (
-                        <button
-                          key={link.key}
-                          onClick={() =>
-                            setActiveVideo({
-                              url: toEmbedUrl(link.url || ""),
-                              title: `${role.display_name} video`,
-                            })
-                          }
-                          title={link.label}
-                          aria-label={link.label}
-                          style={{
-                            ...QUICK_LINK_ICON_STYLE,
-                            cursor: "pointer",
-                          }}
-                        >
-                          <i
-                            className={link.iconClass}
-                            aria-hidden="true"
-                            style={{ fontSize: 12 }}
-                          />
-                        </button>
-                      ) : (
-                        <a
-                          key={link.key}
-                          href={link.url || "#"}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={link.label}
-                          aria-label={link.label}
-                          style={{
-                            ...QUICK_LINK_ICON_STYLE,
-                            color: "inherit",
-                            textDecoration: "none",
-                          }}
-                        >
-                          <i
-                            className={link.iconClass}
-                            aria-hidden="true"
-                            style={{ fontSize: 12 }}
-                          />
-                        </a>
-                      )
-                    )}
-                  </div>
-                );
-              })()}
-              </article>
-          );
-        })}
-      </div>
-      <div
-        className="text-body-secondary"
-        style={{
-          marginTop: 14,
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: 12,
-          fontSize: 12,
-          maxWidth: LAYOUT_MAX_WIDTH,
-          marginLeft: "auto",
-          marginRight: "auto",
-        }}
-      >
-        <button
-          onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-          disabled={currentPage <= 1}
-          className="btn btn-sm"
-          style={{
-            borderRadius: 999,
-            border: "1px solid var(--bs-border-color)",
-            background:
-              currentPage <= 1
-                ? "var(--deployer-disabled-bg)"
-                : "var(--bs-body-bg)",
-            color:
-              currentPage <= 1
-                ? "var(--deployer-disabled-text)"
-                : "var(--deployer-muted-ink)",
-          }}
-        >
-          Prev
-        </button>
-        <span>
-          Page {currentPage} / {pageCount}
-        </span>
-        <button
-          onClick={() =>
-            setPage((prev) => Math.min(pageCount, prev + 1))
-          }
-          disabled={currentPage >= pageCount}
-          className="btn btn-sm"
-          style={{
-            borderRadius: 999,
-            border: "1px solid var(--bs-border-color)",
-            background:
-              currentPage >= pageCount
-                ? "var(--deployer-disabled-bg)"
-                : "var(--bs-body-bg)",
-            color:
-              currentPage >= pageCount
-                ? "var(--deployer-disabled-text)"
-                : "var(--deployer-muted-ink)",
-          }}
-        >
-          Next
-        </button>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ flex: "1 1 160px", minWidth: 150 }}>
+              <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                View
+              </label>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  marginTop: 8,
+                }}
+              >
+                {VIEW_MODES.map((mode) => {
+                  const active = viewMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => setViewMode(mode)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: 999,
+                        border: active
+                          ? "1px solid var(--bs-body-color)"
+                          : "1px solid var(--bs-border-color)",
+                        background: active
+                          ? "var(--bs-body-color)"
+                          : "var(--bs-body-bg)",
+                        color: active
+                          ? "var(--bs-body-bg)"
+                          : "var(--deployer-muted-ink)",
+                        fontSize: 12,
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      {mode}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{ flex: "0 1 140px", minWidth: 120 }}>
+              <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                Rows
+              </label>
+              <select
+                value={rowsOverride ? String(rowsOverride) : "auto"}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === "auto") {
+                    setRowsOverride(null);
+                  } else {
+                    const parsed = Number(value);
+                    setRowsOverride(Number.isFinite(parsed) ? parsed : null);
+                  }
+                }}
+                className="form-select"
+                style={{
+                  marginTop: 6,
+                  borderRadius: 12,
+                  background: "var(--bs-body-bg)",
+                  fontSize: 13,
+                }}
+              >
+                <option value="auto">Auto ({computedRows})</option>
+                {Array.from(
+                  new Set([1, 2, 3, 4, 5, 6, computedRows])
+                )
+                  .sort((a, b) => a - b)
+                  .map((value) => (
+                    <option key={value} value={String(value)}>
+                      {value} rows
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
       {activeVideo ? (
         <div
