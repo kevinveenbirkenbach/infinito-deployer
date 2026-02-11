@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  ssh-password:
+    build:
+      context: ./apps/test/ssh-password
+    container_name: infinito-deployer-ssh-password
+    ports:
+      - "${TEST_SSH_PASSWORD_PORT:-2222}:22"
+
+  ssh-key:
+    build:
+      context: ./apps/test/ssh-key
+    container_name: infinito-deployer-ssh-key
+    ports:
+      - "${TEST_SSH_KEY_PORT:-2223}:22"

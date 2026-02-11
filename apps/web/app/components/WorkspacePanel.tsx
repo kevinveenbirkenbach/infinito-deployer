@@ -6,10 +6,12 @@ import CodeMirror from "@uiw/react-codemirror";
 import { json as jsonLang } from "@codemirror/lang-json";
 import { yaml as yamlLang } from "@codemirror/lang-yaml";
 import { python as pythonLang } from "@codemirror/lang-python";
+import { EditorView } from "@codemirror/view";
 import YAML from "yaml";
 import { marked } from "marked";
 import TurndownService from "turndown";
 import dynamic from "next/dynamic";
+import VaultPasswordModal from "./VaultPasswordModal";
 
 const ReactQuill = dynamic(() => import("react-quill"), { ssr: false });
 
@@ -23,6 +25,7 @@ type FileEntry = {
 type CredentialsState = {
   alias: string;
   host: string;
+  port: string;
   user: string;
   authMethod: string;
 };
@@ -37,6 +40,8 @@ type WorkspacePanelProps = {
   onWorkspaceIdChange?: (id: string | null) => void;
   aliasRenames?: { from: string; to: string }[];
   onAliasRenamesHandled?: (count: number) => void;
+  aliasDeletes?: string[];
+  onAliasDeletesHandled?: (count: number) => void;
   selectionTouched?: boolean;
 };
 
@@ -54,6 +59,13 @@ type TreeItem = {
   isDir: boolean;
   depth: number;
   size?: number | null;
+};
+
+type VaultBlock = {
+  key: string;
+  start: number;
+  end: number;
+  indent: string;
 };
 
 const WORKSPACE_STORAGE_KEY = "infinito.workspace_id";
@@ -216,6 +228,72 @@ function extractRolesByAlias(content: string): Record<string, string[]> {
   return out;
 }
 
+function findVaultBlock(lines: string[], lineIndex: number): VaultBlock | null {
+  for (let i = lineIndex; i >= 0; i -= 1) {
+    const line = lines[i];
+    const match = line.match(/^(\s*)([A-Za-z0-9_.-]+):\s*!vault\s*\|/);
+    if (!match) continue;
+    let indent = "";
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const next = lines[j];
+      if (!next.trim()) continue;
+      const indentMatch = next.match(/^(\s+)/);
+      indent = indentMatch ? indentMatch[1] : "";
+      break;
+    }
+    if (!indent) {
+      indent = `${match[1]}  `;
+    }
+    let end = i;
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const next = lines[j];
+      if (!next.trim()) {
+        end = j;
+        continue;
+      }
+      if (indent && next.startsWith(indent)) {
+        end = j;
+        continue;
+      }
+      break;
+    }
+    return {
+      key: match[2],
+      start: i,
+      end,
+      indent,
+    };
+  }
+  return null;
+}
+
+function extractVaultText(lines: string[], block: VaultBlock): string {
+  const payload = lines.slice(block.start + 1, block.end + 1);
+  const cleaned = payload.map((line) => {
+    if (block.indent && line.startsWith(block.indent)) {
+      return line.slice(block.indent.length);
+    }
+    return line.trimStart();
+  });
+  return cleaned.join("\n").trim();
+}
+
+function replaceVaultBlock(
+  lines: string[],
+  block: VaultBlock,
+  vaultText: string
+): string {
+  const payloadLines = (vaultText || "").split("\n");
+  const indent = block.indent || "  ";
+  const indentedPayload = payloadLines.map((line) => `${indent}${line}`);
+  const nextLines = [
+    ...lines.slice(0, block.start + 1),
+    ...indentedPayload,
+    ...lines.slice(block.end + 1),
+  ];
+  return nextLines.join("\n");
+}
+
 export default function WorkspacePanel({
   baseUrl,
   selectedRolesByAlias,
@@ -226,6 +304,8 @@ export default function WorkspacePanel({
   onWorkspaceIdChange,
   aliasRenames,
   onAliasRenamesHandled,
+  aliasDeletes,
+  onAliasDeletesHandled,
   selectionTouched,
 }: WorkspacePanelProps) {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
@@ -244,7 +324,20 @@ export default function WorkspacePanel({
 
   const [openDirs, setOpenDirs] = useState<Set<string>>(new Set());
 
-  const [vaultPassword, setVaultPassword] = useState("");
+  const [vaultPasswordDraft, setVaultPasswordDraft] = useState("");
+  const [vaultPasswordConfirm, setVaultPasswordConfirm] = useState("");
+  const [vaultStatus, setVaultStatus] = useState<string | null>(null);
+  const [vaultError, setVaultError] = useState<string | null>(null);
+  const [vaultPromptOpen, setVaultPromptOpen] = useState(false);
+  const [vaultPromptMode, setVaultPromptMode] = useState<
+    "generate" | "save-vault" | null
+  >(null);
+  const [vaultPromptConfirm, setVaultPromptConfirm] = useState(false);
+  const [pendingCredentials, setPendingCredentials] = useState<{
+    roles: string[];
+    force: boolean;
+    setValues: string[];
+  } | null>(null);
   const [allowEmptyPlain, setAllowEmptyPlain] = useState(false);
   const [forceOverwrite, setForceOverwrite] = useState(false);
   const [setValuesText, setSetValuesText] = useState("");
@@ -263,10 +356,11 @@ export default function WorkspacePanel({
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const autoSyncRef = useRef(false);
-  const autoCredentialsKeyRef = useRef("");
   const hostVarsSyncRef = useRef(false);
+  const lastPortRef = useRef<string>("");
   const inventorySeededRef = useRef(false);
   const markdownSyncRef = useRef(false);
+  const deleteSyncRef = useRef(false);
 
   const [generateBusy, setGenerateBusy] = useState(false);
   const [inventorySyncError, setInventorySyncError] = useState<string | null>(
@@ -280,6 +374,47 @@ export default function WorkspacePanel({
     path?: string;
     isDir: boolean;
   } | null>(null);
+  const [editorMenu, setEditorMenu] = useState<{
+    x: number;
+    y: number;
+    block: VaultBlock;
+  } | null>(null);
+  const editorViewRef = useRef<EditorView | null>(null);
+
+  const [masterChangeOpen, setMasterChangeOpen] = useState(false);
+  const [masterChangeError, setMasterChangeError] = useState<string | null>(null);
+  const [masterChangeBusy, setMasterChangeBusy] = useState(false);
+  const [masterChangeValues, setMasterChangeValues] = useState({
+    current: "",
+    next: "",
+    confirm: "",
+  });
+
+  const [keyPassphraseModal, setKeyPassphraseModal] = useState<{
+    alias: string;
+  } | null>(null);
+  const [keyPassphraseError, setKeyPassphraseError] = useState<string | null>(
+    null
+  );
+  const [keyPassphraseBusy, setKeyPassphraseBusy] = useState(false);
+  const [keyPassphraseValues, setKeyPassphraseValues] = useState({
+    master: "",
+    next: "",
+    confirm: "",
+  });
+
+  const [vaultValueModal, setVaultValueModal] = useState<{
+    mode: "show" | "change";
+    block: VaultBlock;
+    plaintext?: string;
+    loading: boolean;
+    error?: string | null;
+  } | null>(null);
+  const [vaultValueInputs, setVaultValueInputs] = useState({
+    master: "",
+    next: "",
+    confirm: "",
+  });
 
   const activeAlias = (credentials.alias || "").trim();
 
@@ -405,6 +540,24 @@ export default function WorkspacePanel({
   }, [contextMenu]);
 
   useEffect(() => {
+    if (!editorMenu) return;
+    const close = () => setEditorMenu(null);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setEditorMenu(null);
+      }
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("contextmenu", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("contextmenu", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [editorMenu]);
+
+  useEffect(() => {
     if (credentialsScope !== "single") return;
     setCredentialsRole((prev) =>
       activeRoles.includes(prev) ? prev : activeRoles[0] ?? ""
@@ -440,14 +593,6 @@ export default function WorkspacePanel({
     }
   }, [selectionTouched]);
 
-  useEffect(() => {
-    if (!onSelectedRolesByAliasChange) return;
-    if (hostVarsAliases.length === 0) return;
-    const merged = mergeRolesByAlias(selectedRolesByAlias);
-    if (rolesByAliasKey(merged) !== rolesByAliasKey(selectedRolesByAlias)) {
-      onSelectedRolesByAliasChange(merged);
-    }
-  }, [hostVarsAliases, onSelectedRolesByAliasChange, selectedRolesByAlias]);
 
   const syncInventoryReady = (nextFiles: FileEntry[]) => {
     const ready = nextFiles.some((f) => f.path === "inventory.yml");
@@ -459,22 +604,16 @@ export default function WorkspacePanel({
     incoming: Record<string, string[]>
   ): Record<string, string[]> => {
     const merged: Record<string, string[]> = {};
-    Object.keys(selectedRolesByAlias || {}).forEach((alias) => {
-      merged[alias] = incoming?.[alias] ? normalizeRoles(incoming[alias]) : [];
-    });
     Object.entries(incoming || {}).forEach(([alias, roles]) => {
-      if (!merged[alias]) {
-        merged[alias] = normalizeRoles(roles || []);
-      }
+      const key = (alias || "").trim();
+      if (!key) return;
+      merged[key] = normalizeRoles(roles || []);
     });
     hostVarsAliases.forEach((alias) => {
       if (!merged[alias]) {
         merged[alias] = [];
       }
     });
-    if (activeAlias && !merged[activeAlias]) {
-      merged[activeAlias] = [];
-    }
     return merged;
   };
 
@@ -724,9 +863,12 @@ export default function WorkspacePanel({
     setGenerateBusy(true);
     setInventorySyncError(null);
     try {
+      const portRaw = credentials.port?.trim() || "";
+      const portNum = portRaw ? Number(portRaw) : null;
       const payload = {
         alias: activeAlias,
         host: credentials.host,
+        port: Number.isInteger(portNum) ? portNum : undefined,
         user: credentials.user,
         auth_method: credentials.authMethod || null,
         selected_roles: activeRoles,
@@ -797,6 +939,52 @@ export default function WorkspacePanel({
       entry.hosts = hosts;
       nextChildren[roleId] = entry;
       changed = true;
+    });
+
+    if (!changed) return;
+
+    const nextAll = { ...allNode, children: nextChildren };
+    const nextData = { ...data, all: nextAll };
+    const nextYaml = YAML.stringify(nextData);
+    await writeWorkspaceFile("inventory.yml", nextYaml);
+    if (activePath === "inventory.yml") {
+      setEditorValue(nextYaml);
+      setEditorDirty(false);
+    }
+  };
+
+  const removeAliasFromInventory = async (alias: string) => {
+    if (!workspaceId || !inventoryReady) return;
+    const content = await readWorkspaceFile("inventory.yml");
+    const data = (YAML.parse(content) ?? {}) as Record<string, any>;
+    const allNode = data.all && typeof data.all === "object" ? data.all : {};
+    const childrenNode =
+      allNode.children && typeof allNode.children === "object"
+        ? allNode.children
+        : {};
+
+    let changed = false;
+    const nextChildren: Record<string, any> = { ...childrenNode };
+
+    Object.entries(childrenNode).forEach(([roleId, entryValue]) => {
+      if (!entryValue || typeof entryValue !== "object") return;
+      const entry = { ...(entryValue as Record<string, any>) };
+      const hosts =
+        entry.hosts && typeof entry.hosts === "object"
+          ? { ...entry.hosts }
+          : null;
+      if (!hosts) return;
+      if (Object.prototype.hasOwnProperty.call(hosts, alias)) {
+        delete hosts[alias];
+        changed = true;
+      }
+      if (Object.keys(hosts).length === 0) {
+        delete nextChildren[roleId];
+        changed = true;
+      } else {
+        entry.hosts = hosts;
+        nextChildren[roleId] = entry;
+      }
     });
 
     if (!changed) return;
@@ -917,6 +1105,7 @@ export default function WorkspacePanel({
     if (hostVarsSyncRef.current) return;
     if (!activeAlias) return;
     const host = credentials.host?.trim() || "";
+    const portRaw = credentials.port?.trim() || "";
     const user = credentials.user?.trim() || "";
     const targetPath =
       hostVarsPath ||
@@ -942,6 +1131,26 @@ export default function WorkspacePanel({
       }
       if (user && data.ansible_user !== user) {
         data.ansible_user = user;
+        changed = true;
+      }
+      const prevPort = lastPortRef.current;
+      lastPortRef.current = portRaw;
+      if (portRaw) {
+        const portNum = Number(portRaw);
+        if (Number.isInteger(portNum) && portNum >= 1 && portNum <= 65535) {
+          const existing =
+            typeof data.ansible_port === "number"
+              ? data.ansible_port
+              : Number.isInteger(Number(data.ansible_port))
+                ? Number(data.ansible_port)
+                : null;
+          if (existing !== portNum) {
+            data.ansible_port = portNum;
+            changed = true;
+          }
+        }
+      } else if (prevPort && Object.prototype.hasOwnProperty.call(data, "ansible_port")) {
+        delete data.ansible_port;
         changed = true;
       }
       if (!changed) return;
@@ -972,12 +1181,30 @@ export default function WorkspacePanel({
         typeof data.ansible_host === "string" ? data.ansible_host : "";
       const nextUser =
         typeof data.ansible_user === "string" ? data.ansible_user : "";
+      let nextPort = "";
+      if (typeof data.ansible_port === "number") {
+        nextPort = Number.isFinite(data.ansible_port)
+          ? String(data.ansible_port)
+          : "";
+      } else if (typeof data.ansible_port === "string") {
+        const parsed = Number(data.ansible_port);
+        if (Number.isInteger(parsed)) {
+          nextPort = String(parsed);
+        }
+      }
       const patch: Partial<CredentialsState> = {};
       if (nextHost && nextHost !== credentials.host) {
         patch.host = nextHost;
       }
       if (nextUser && nextUser !== credentials.user) {
         patch.user = nextUser;
+      }
+      if (nextPort) {
+        if (nextPort !== credentials.port) {
+          patch.port = nextPort;
+        }
+      } else if (credentials.port) {
+        patch.port = "";
       }
       if (Object.keys(patch).length > 0) {
         onCredentialsPatch(patch);
@@ -990,9 +1217,10 @@ export default function WorkspacePanel({
   const postCredentials = async (
     targetRoles: string[],
     force: boolean,
-    setValues: string[]
+    setValues: string[],
+    masterPassword: string
   ) => {
-    if (!workspaceId || !vaultPassword || credentialsBusy) return;
+    if (!workspaceId || !masterPassword || credentialsBusy) return;
     setCredentialsBusy(true);
     setCredentialsError(null);
     setCredentialsStatus(null);
@@ -1003,7 +1231,7 @@ export default function WorkspacePanel({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            vault_password: vaultPassword,
+            master_password: masterPassword,
             selected_roles: targetRoles,
             allow_empty_plain: allowEmptyPlain,
             set_values: setValues.length > 0 ? setValues : undefined,
@@ -1032,7 +1260,7 @@ export default function WorkspacePanel({
   };
 
   const generateCredentials = async () => {
-    if (!workspaceId || !vaultPassword || credentialsBusy) return;
+    if (!workspaceId || credentialsBusy) return;
     const targetRoles = resolveTargetRoles();
     if (targetRoles.length === 0) {
       setCredentialsError("Select a role to generate credentials.");
@@ -1045,15 +1273,244 @@ export default function WorkspacePanel({
             .map((value) => value.trim())
             .filter(Boolean)
         : [];
-    autoCredentialsKeyRef.current = [
-      "auto",
-      activeAlias || "",
-      rolesKey(targetRoles),
-      allowEmptyPlain ? "1" : "0",
-      forceOverwrite ? "1" : "0",
-      setValues.join(","),
-    ].join("|");
-    await postCredentials(targetRoles, forceOverwrite, setValues);
+    setPendingCredentials({
+      roles: targetRoles,
+      force: forceOverwrite,
+      setValues,
+    });
+    setVaultPromptMode("generate");
+    setVaultPromptConfirm(false);
+    setVaultPromptOpen(true);
+  };
+
+  const storeVaultPassword = async (
+    masterPassword: string,
+    masterConfirm: string | null
+  ) => {
+    if (!workspaceId) return;
+    if (!vaultPasswordDraft) {
+      setVaultError("Enter a vault password to store.");
+      return;
+    }
+    if (vaultPasswordDraft !== vaultPasswordConfirm) {
+      setVaultError("Vault passwords do not match.");
+      return;
+    }
+    setVaultError(null);
+    setVaultStatus(null);
+    try {
+      const res = await fetch(
+        `${baseUrl}/api/workspaces/${workspaceId}/vault/entries`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            master_password: masterPassword,
+            master_password_confirm: masterConfirm || undefined,
+            create_if_missing: true,
+            vault_password: vaultPasswordDraft,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      setVaultStatus("Vault password stored in credentials.kdbx.");
+      setVaultPasswordDraft("");
+      setVaultPasswordConfirm("");
+    } catch (err: any) {
+      setVaultError(err?.message ?? "failed to store vault password");
+    }
+  };
+
+  const handleVaultPromptSubmit = (
+    masterPassword: string,
+    confirmPassword: string | null
+  ) => {
+    setVaultPromptOpen(false);
+    const mode = vaultPromptMode;
+    setVaultPromptMode(null);
+    if (mode === "generate" && pendingCredentials) {
+      void postCredentials(
+        pendingCredentials.roles,
+        pendingCredentials.force,
+        pendingCredentials.setValues,
+        masterPassword
+      );
+      setPendingCredentials(null);
+      return;
+    }
+    if (mode === "save-vault") {
+      void storeVaultPassword(masterPassword, confirmPassword);
+    }
+  };
+
+  const submitMasterChange = async () => {
+    if (!workspaceId) return;
+    setMasterChangeBusy(true);
+    setMasterChangeError(null);
+    try {
+      const res = await fetch(
+        `${baseUrl}/api/workspaces/${workspaceId}/vault/change-master`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            master_password: masterChangeValues.current,
+            new_master_password: masterChangeValues.next,
+            new_master_password_confirm: masterChangeValues.confirm,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      setMasterChangeOpen(false);
+      setMasterChangeValues({ current: "", next: "", confirm: "" });
+    } catch (err: any) {
+      setMasterChangeError(err?.message ?? "failed to change master password");
+    } finally {
+      setMasterChangeBusy(false);
+    }
+  };
+
+  const submitKeyPassphraseChange = async () => {
+    if (!workspaceId || !keyPassphraseModal) return;
+    setKeyPassphraseBusy(true);
+    setKeyPassphraseError(null);
+    try {
+      const res = await fetch(
+        `${baseUrl}/api/workspaces/${workspaceId}/ssh-keys/change-passphrase`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            alias: keyPassphraseModal.alias,
+            master_password: keyPassphraseValues.master,
+            new_passphrase: keyPassphraseValues.next,
+            new_passphrase_confirm: keyPassphraseValues.confirm,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      setKeyPassphraseModal(null);
+      setKeyPassphraseValues({ master: "", next: "", confirm: "" });
+    } catch (err: any) {
+      setKeyPassphraseError(err?.message ?? "failed to change passphrase");
+    } finally {
+      setKeyPassphraseBusy(false);
+    }
+  };
+
+  const openVaultValueModal = (mode: "show" | "change", block: VaultBlock) => {
+    setEditorMenu(null);
+    setVaultValueInputs({ master: "", next: "", confirm: "" });
+    setVaultValueModal({ mode, block, loading: false, plaintext: "" });
+  };
+
+  const submitVaultValue = async () => {
+    if (!workspaceId || !vaultValueModal) return;
+    const lines = editorValue.split("\n");
+    const vaultText = extractVaultText(lines, vaultValueModal.block);
+    if (!vaultText) {
+      setVaultValueModal({
+        ...vaultValueModal,
+        error: "No vault block found.",
+        loading: false,
+      });
+      return;
+    }
+    if (!vaultValueInputs.master) {
+      setVaultValueModal({
+        ...vaultValueModal,
+        error: "Master password is required.",
+        loading: false,
+      });
+      return;
+    }
+
+    if (vaultValueModal.mode === "change") {
+      if (!vaultValueInputs.next || !vaultValueInputs.confirm) {
+        setVaultValueModal({
+          ...vaultValueModal,
+          error: "Enter the new value twice.",
+          loading: false,
+        });
+        return;
+      }
+      if (vaultValueInputs.next !== vaultValueInputs.confirm) {
+        setVaultValueModal({
+          ...vaultValueModal,
+          error: "Values do not match.",
+          loading: false,
+        });
+        return;
+      }
+    }
+
+    setVaultValueModal({ ...vaultValueModal, loading: true, error: null });
+    try {
+      if (vaultValueModal.mode === "show") {
+        const res = await fetch(
+          `${baseUrl}/api/workspaces/${workspaceId}/vault/decrypt`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              master_password: vaultValueInputs.master,
+              vault_text: vaultText,
+            }),
+          }
+        );
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        setVaultValueModal({
+          ...vaultValueModal,
+          plaintext: String(data?.plaintext ?? ""),
+          loading: false,
+        });
+        return;
+      }
+
+      const res = await fetch(
+        `${baseUrl}/api/workspaces/${workspaceId}/vault/encrypt`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            master_password: vaultValueInputs.master,
+            plaintext: vaultValueInputs.next,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const nextContent = replaceVaultBlock(
+        lines,
+        vaultValueModal.block,
+        String(data?.vault_text ?? "")
+      );
+      setEditorValue(nextContent);
+      setEditorDirty(true);
+      setVaultValueModal(null);
+    } catch (err: any) {
+      setVaultValueModal({
+        ...vaultValueModal,
+        loading: false,
+        error: err?.message ?? "vault operation failed",
+      });
+    }
   };
 
   useEffect(() => {
@@ -1113,6 +1570,7 @@ export default function WorkspacePanel({
     workspaceId,
     inventoryReady,
     inventoryModifiedAt,
+    hostVarsAliases,
     onSelectedRolesByAliasChange,
     activeAlias,
     activePath,
@@ -1171,10 +1629,73 @@ export default function WorkspacePanel({
 
   useEffect(() => {
     if (!workspaceId) return;
+    if (!aliasDeletes || aliasDeletes.length === 0) return;
+    if (deleteSyncRef.current) return;
+
+    const alias = aliasDeletes[0];
+    if (!alias) {
+      onAliasDeletesHandled?.(1);
+      return;
+    }
+
+    const run = async () => {
+      deleteSyncRef.current = true;
+      try {
+        if (inventoryReady) {
+          await removeAliasFromInventory(alias);
+        }
+        const hostVarsPath = `host_vars/${sanitizeAliasFilename(alias)}.yml`;
+        if (files.some((entry) => entry.path === hostVarsPath)) {
+          const res = await fetch(
+            `${baseUrl}/api/workspaces/${workspaceId}/files/${encodePath(
+              hostVarsPath
+            )}`,
+            { method: "DELETE" }
+          );
+          if (!res.ok) {
+            let message = `HTTP ${res.status}`;
+            try {
+              const data = await res.json();
+              if (data?.detail) message = data.detail;
+            } catch {
+              // ignore
+            }
+            throw new Error(message);
+          }
+          if (activePath === hostVarsPath) {
+            setActivePath(null);
+            setEditorValue("");
+            setEditorDirty(false);
+          }
+        }
+        await refreshFiles(workspaceId);
+      } catch (err: any) {
+        setInventorySyncError(
+          err?.message ? `Server delete failed: ${err.message}` : "Server delete failed."
+        );
+      } finally {
+        deleteSyncRef.current = false;
+        onAliasDeletesHandled?.(1);
+      }
+    };
+
+    void run();
+  }, [
+    workspaceId,
+    inventoryReady,
+    aliasDeletes,
+    files,
+    activePath,
+    onAliasDeletesHandled,
+  ]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
     void syncHostVarsFromCredentials();
   }, [
     workspaceId,
     credentials.host,
+    credentials.port,
     credentials.user,
     hostVarsPath,
     activePath,
@@ -1192,51 +1713,9 @@ export default function WorkspacePanel({
     editorDirty,
   ]);
 
-  useEffect(() => {
-    if (!inventoryReady || !workspaceId || credentialsBusy) return;
-    if (!vaultPassword) return;
-
-    const targetRoles = resolveTargetRoles();
-    if (targetRoles.length === 0) return;
-
-    const setValues =
-      credentialsScope === "single"
-        ? setValuesText
-            .split(/[\n,]+/)
-            .map((value) => value.trim())
-            .filter(Boolean)
-        : [];
-
-    const key = [
-      "auto",
-      activeAlias || "",
-      rolesKey(targetRoles),
-      allowEmptyPlain ? "1" : "0",
-      forceOverwrite ? "1" : "0",
-      setValues.join(","),
-    ].join("|");
-
-    if (autoCredentialsKeyRef.current === key) return;
-    autoCredentialsKeyRef.current = key;
-
-    void postCredentials(targetRoles, forceOverwrite, setValues);
-  }, [
-    inventoryReady,
-    workspaceId,
-    vaultPassword,
-    credentialsBusy,
-    activeRoles,
-    activeAlias,
-    credentialsScope,
-    credentialsRole,
-    allowEmptyPlain,
-    forceOverwrite,
-    setValuesText,
-  ]);
-
   const canGenerateCredentials =
     inventoryReady &&
-    !!vaultPassword &&
+    !!workspaceId &&
     !credentialsBusy &&
     (credentialsScope === "all"
       ? activeRoles.length > 0
@@ -1266,6 +1745,31 @@ export default function WorkspacePanel({
       setZipError(err?.message ?? "failed to download zip");
     } finally {
       setZipBusy(false);
+    }
+  };
+
+  const downloadFile = async (path: string) => {
+    if (!workspaceId) return;
+    setWorkspaceError(null);
+    try {
+      const res = await fetch(
+        `${baseUrl}/api/workspaces/${workspaceId}/download/${encodePath(path)}`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = path.split("/").pop() || "file";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (err: any) {
+      setWorkspaceError(err?.message ?? "failed to download file");
     }
   };
 
@@ -1482,6 +1986,7 @@ export default function WorkspacePanel({
   ) => {
     event.preventDefault();
     event.stopPropagation();
+    setEditorMenu(null);
     setContextMenu({
       x: event.clientX,
       y: event.clientY,
@@ -1591,9 +2096,9 @@ export default function WorkspacePanel({
           <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
             <input
               type="password"
-              value={vaultPassword}
-              onChange={(e) => setVaultPassword(e.target.value)}
-              placeholder="Vault password (never stored)"
+              value={vaultPasswordDraft}
+              onChange={(e) => setVaultPasswordDraft(e.target.value)}
+              placeholder="Vault password (stored in credentials.kdbx)"
               style={{
                 padding: "8px 10px",
                 borderRadius: 10,
@@ -1602,6 +2107,39 @@ export default function WorkspacePanel({
                 fontSize: 12,
               }}
             />
+            <input
+              type="password"
+              value={vaultPasswordConfirm}
+              onChange={(e) => setVaultPasswordConfirm(e.target.value)}
+              placeholder="Confirm vault password"
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: "1px solid var(--bs-border-color)",
+                background: "var(--bs-body-bg)",
+                fontSize: 12,
+              }}
+            />
+            <button
+              onClick={() => {
+                setVaultPromptMode("save-vault");
+                setVaultPromptConfirm(true);
+                setVaultPromptOpen(true);
+              }}
+              disabled={!workspaceId || !vaultPasswordDraft}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid var(--bs-border-color)",
+                background: "var(--bs-body-bg)",
+                color: "var(--deployer-muted-ink)",
+                fontSize: 12,
+                cursor: "pointer",
+                width: "fit-content",
+              }}
+            >
+              Save vault password
+            </button>
             {credentialsScope === "single" ? (
               <input
                 value={setValuesText}
@@ -1716,13 +2254,26 @@ export default function WorkspacePanel({
               Overwrite existing credentials
             </label>
             <span className="text-body-tertiary" style={{ fontSize: 11 }}>
-              Auto sync runs when a vault password is set. Overwrite applies to
-              both auto and manual runs.
+              Vault password is stored in credentials.kdbx. Master password is
+              required for each write.
             </span>
           </div>
           {credentialsError ? (
             <p className="text-danger" style={{ margin: "8px 0 0", fontSize: 12 }}>
               {credentialsError}
+            </p>
+          ) : null}
+          {vaultError ? (
+            <p className="text-danger" style={{ margin: "8px 0 0", fontSize: 12 }}>
+              {vaultError}
+            </p>
+          ) : null}
+          {vaultStatus ? (
+            <p
+              className="text-success"
+              style={{ margin: "8px 0 0", fontSize: 12 }}
+            >
+              {vaultStatus}
             </p>
           ) : null}
           {credentialsStatus ? (
@@ -1976,6 +2527,30 @@ export default function WorkspacePanel({
                     value={editorValue}
                     height="360px"
                     extensions={editorExtensions}
+                    onCreateEditor={(view) => {
+                      editorViewRef.current = view;
+                    }}
+                    onContextMenu={(event) => {
+                      const view = editorViewRef.current;
+                      if (!view) return;
+                      const pos = view.posAtCoords({
+                        x: event.clientX,
+                        y: event.clientY,
+                      });
+                      if (pos == null) return;
+                      const line = view.state.doc.lineAt(pos).number;
+                      const lines = editorValue.split("\n");
+                      const block = findVaultBlock(lines, line - 1);
+                      if (!block) return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setContextMenu(null);
+                      setEditorMenu({
+                        x: event.clientX,
+                        y: event.clientY,
+                        block,
+                      });
+                    }}
                     onChange={(value) => {
                       setEditorValue(value);
                       setEditorDirty(true);
@@ -2117,6 +2692,28 @@ export default function WorkspacePanel({
               Rename{contextMenu.isDir ? " folder" : ""}
             </button>
           ) : null}
+          {contextMenu.path && !contextMenu.isDir ? (
+            <button
+              onClick={() => {
+                const path = contextMenu.path;
+                if (!path) return;
+                setContextMenu(null);
+                downloadFile(path);
+              }}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                padding: "6px 10px",
+                borderRadius: 8,
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                fontSize: 12,
+              }}
+            >
+              Download file
+            </button>
+          ) : null}
           {contextMenu.path ? (
             <button
               onClick={() => {
@@ -2140,6 +2737,577 @@ export default function WorkspacePanel({
               Delete{contextMenu.isDir ? " folder" : ""}
             </button>
           ) : null}
+          {contextMenu.path ? (
+            (() => {
+              const isVault =
+                contextMenu.path === "secrets/credentials.kdbx";
+              const keyAlias =
+                contextMenu.path.startsWith("secrets/keys/") &&
+                !contextMenu.path.endsWith(".pub")
+                  ? contextMenu.path.split("/").pop() || ""
+                  : "";
+              if (!isVault && !keyAlias) return null;
+              return (
+                <>
+                  <div
+                    style={{
+                      height: 1,
+                      background: "var(--bs-border-color-translucent)",
+                      margin: "6px 0",
+                    }}
+                  />
+                  {isVault ? (
+                    <button
+                      onClick={() => {
+                        setContextMenu(null);
+                        setMasterChangeOpen(true);
+                        setMasterChangeError(null);
+                      }}
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "6px 10px",
+                        borderRadius: 8,
+                        border: "none",
+                        background: "transparent",
+                        cursor: "pointer",
+                        fontSize: 12,
+                      }}
+                    >
+                      Change master password…
+                    </button>
+                  ) : null}
+                  {keyAlias ? (
+                    <button
+                      onClick={() => {
+                        setContextMenu(null);
+                        setKeyPassphraseModal({ alias: keyAlias });
+                        setKeyPassphraseError(null);
+                      }}
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "6px 10px",
+                        borderRadius: 8,
+                        border: "none",
+                        background: "transparent",
+                        cursor: "pointer",
+                        fontSize: 12,
+                      }}
+                    >
+                      Change key passphrase…
+                    </button>
+                  ) : null}
+                </>
+              );
+            })()
+          ) : null}
+        </div>
+      ) : null}
+      {editorMenu ? (
+        <div
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          style={{
+            position: "fixed",
+            top:
+              typeof window !== "undefined"
+                ? Math.min(editorMenu.y, window.innerHeight - 120)
+                : editorMenu.y,
+            left:
+              typeof window !== "undefined"
+                ? Math.min(editorMenu.x, window.innerWidth - 180)
+                : editorMenu.x,
+            background: "var(--bs-body-bg)",
+            borderRadius: 12,
+            border: "1px solid var(--bs-border-color-translucent)",
+            boxShadow: "var(--deployer-shadow)",
+            padding: 8,
+            zIndex: 60,
+            minWidth: 160,
+          }}
+        >
+          <button
+            onClick={() => openVaultValueModal("show", editorMenu.block)}
+            style={{
+              width: "100%",
+              textAlign: "left",
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              fontSize: 12,
+            }}
+          >
+            Show plaintext…
+          </button>
+          <button
+            onClick={() => openVaultValueModal("change", editorMenu.block)}
+            style={{
+              width: "100%",
+              textAlign: "left",
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              fontSize: 12,
+            }}
+          >
+            Change value…
+          </button>
+        </div>
+      ) : null}
+      <VaultPasswordModal
+        open={vaultPromptOpen}
+        title={
+          vaultPromptMode === "save-vault"
+            ? "Store vault password"
+            : "Unlock credentials vault"
+        }
+        requireConfirm={vaultPromptConfirm}
+        confirmLabel="Confirm master password"
+        helperText="Master password is required for each vault action."
+        onSubmit={handleVaultPromptSubmit}
+        onClose={() => {
+          setVaultPromptOpen(false);
+          setVaultPromptMode(null);
+          setPendingCredentials(null);
+        }}
+      />
+      {masterChangeOpen ? (
+        <div
+          onClick={() => setMasterChangeOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(8, 12, 20, 0.65)",
+            backdropFilter: "blur(6px)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 90,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: "min(460px, 92vw)",
+              background: "var(--bs-body-bg)",
+              borderRadius: 18,
+              border: "1px solid var(--bs-border-color-translucent)",
+              boxShadow: "var(--deployer-shadow)",
+              padding: 18,
+              display: "grid",
+              gap: 12,
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: 18 }}>
+              Change master password
+            </h3>
+            <div style={{ display: "grid", gap: 8 }}>
+              <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                Current master password
+              </label>
+              <input
+                type="password"
+                value={masterChangeValues.current}
+                onChange={(event) =>
+                  setMasterChangeValues((prev) => ({
+                    ...prev,
+                    current: event.target.value,
+                  }))
+                }
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  border: "1px solid var(--bs-border-color)",
+                  background: "var(--bs-body-bg)",
+                  fontSize: 12,
+                }}
+              />
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                New master password
+              </label>
+              <input
+                type="password"
+                value={masterChangeValues.next}
+                onChange={(event) =>
+                  setMasterChangeValues((prev) => ({
+                    ...prev,
+                    next: event.target.value,
+                  }))
+                }
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  border: "1px solid var(--bs-border-color)",
+                  background: "var(--bs-body-bg)",
+                  fontSize: 12,
+                }}
+              />
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                Confirm new master password
+              </label>
+              <input
+                type="password"
+                value={masterChangeValues.confirm}
+                onChange={(event) =>
+                  setMasterChangeValues((prev) => ({
+                    ...prev,
+                    confirm: event.target.value,
+                  }))
+                }
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  border: "1px solid var(--bs-border-color)",
+                  background: "var(--bs-body-bg)",
+                  fontSize: 12,
+                }}
+              />
+            </div>
+            {masterChangeError ? (
+              <p className="text-danger" style={{ margin: 0, fontSize: 12 }}>
+                {masterChangeError}
+              </p>
+            ) : null}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                onClick={() => setMasterChangeOpen(false)}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  border: "1px solid var(--bs-border-color)",
+                  background: "var(--bs-body-bg)",
+                  color: "var(--deployer-muted-ink)",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitMasterChange}
+                disabled={masterChangeBusy}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  border: "1px solid var(--bs-body-color)",
+                  background: "var(--bs-body-color)",
+                  color: "var(--bs-body-bg)",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                {masterChangeBusy ? "Saving..." : "Change password"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {keyPassphraseModal ? (
+        <div
+          onClick={() => setKeyPassphraseModal(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(8, 12, 20, 0.65)",
+            backdropFilter: "blur(6px)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 90,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: "min(460px, 92vw)",
+              background: "var(--bs-body-bg)",
+              borderRadius: 18,
+              border: "1px solid var(--bs-border-color-translucent)",
+              boxShadow: "var(--deployer-shadow)",
+              padding: 18,
+              display: "grid",
+              gap: 12,
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: 18 }}>
+              Change key passphrase
+            </h3>
+            <div style={{ display: "grid", gap: 8 }}>
+              <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                Master password
+              </label>
+              <input
+                type="password"
+                value={keyPassphraseValues.master}
+                onChange={(event) =>
+                  setKeyPassphraseValues((prev) => ({
+                    ...prev,
+                    master: event.target.value,
+                  }))
+                }
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  border: "1px solid var(--bs-border-color)",
+                  background: "var(--bs-body-bg)",
+                  fontSize: 12,
+                }}
+              />
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                New passphrase
+              </label>
+              <input
+                type="password"
+                value={keyPassphraseValues.next}
+                onChange={(event) =>
+                  setKeyPassphraseValues((prev) => ({
+                    ...prev,
+                    next: event.target.value,
+                  }))
+                }
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  border: "1px solid var(--bs-border-color)",
+                  background: "var(--bs-body-bg)",
+                  fontSize: 12,
+                }}
+              />
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                Confirm new passphrase
+              </label>
+              <input
+                type="password"
+                value={keyPassphraseValues.confirm}
+                onChange={(event) =>
+                  setKeyPassphraseValues((prev) => ({
+                    ...prev,
+                    confirm: event.target.value,
+                  }))
+                }
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  border: "1px solid var(--bs-border-color)",
+                  background: "var(--bs-body-bg)",
+                  fontSize: 12,
+                }}
+              />
+            </div>
+            {keyPassphraseError ? (
+              <p className="text-danger" style={{ margin: 0, fontSize: 12 }}>
+                {keyPassphraseError}
+              </p>
+            ) : null}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                onClick={() => setKeyPassphraseModal(null)}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  border: "1px solid var(--bs-border-color)",
+                  background: "var(--bs-body-bg)",
+                  color: "var(--deployer-muted-ink)",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitKeyPassphraseChange}
+                disabled={keyPassphraseBusy}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  border: "1px solid var(--bs-body-color)",
+                  background: "var(--bs-body-color)",
+                  color: "var(--bs-body-bg)",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                {keyPassphraseBusy ? "Saving..." : "Change passphrase"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {vaultValueModal ? (
+        <div
+          onClick={() => setVaultValueModal(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(8, 12, 20, 0.65)",
+            backdropFilter: "blur(6px)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 90,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: "min(520px, 92vw)",
+              background: "var(--bs-body-bg)",
+              borderRadius: 18,
+              border: "1px solid var(--bs-border-color-translucent)",
+              boxShadow: "var(--deployer-shadow)",
+              padding: 18,
+              display: "grid",
+              gap: 12,
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: 18 }}>
+              {vaultValueModal.mode === "show"
+                ? `Reveal ${vaultValueModal.block.key}`
+                : `Change ${vaultValueModal.block.key}`}
+            </h3>
+            <div style={{ display: "grid", gap: 8 }}>
+              <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                Master password
+              </label>
+              <input
+                type="password"
+                value={vaultValueInputs.master}
+                onChange={(event) =>
+                  setVaultValueInputs((prev) => ({
+                    ...prev,
+                    master: event.target.value,
+                  }))
+                }
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  border: "1px solid var(--bs-border-color)",
+                  background: "var(--bs-body-bg)",
+                  fontSize: 12,
+                }}
+              />
+            </div>
+            {vaultValueModal.mode === "change" ? (
+              <>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                    New value
+                  </label>
+                  <textarea
+                    value={vaultValueInputs.next}
+                    onChange={(event) =>
+                      setVaultValueInputs((prev) => ({
+                        ...prev,
+                        next: event.target.value,
+                      }))
+                    }
+                    rows={4}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid var(--bs-border-color)",
+                      background: "var(--bs-body-bg)",
+                      fontSize: 12,
+                    }}
+                  />
+                </div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                    Confirm new value
+                  </label>
+                  <textarea
+                    value={vaultValueInputs.confirm}
+                    onChange={(event) =>
+                      setVaultValueInputs((prev) => ({
+                        ...prev,
+                        confirm: event.target.value,
+                      }))
+                    }
+                    rows={4}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid var(--bs-border-color)",
+                      background: "var(--bs-body-bg)",
+                      fontSize: 12,
+                    }}
+                  />
+                </div>
+              </>
+            ) : null}
+            {vaultValueModal.mode === "show" && vaultValueModal.plaintext ? (
+              <div style={{ display: "grid", gap: 8 }}>
+                <label className="text-body-tertiary" style={{ fontSize: 12 }}>
+                  Plaintext
+                </label>
+                <textarea
+                  readOnly
+                  value={vaultValueModal.plaintext}
+                  rows={4}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid var(--bs-border-color)",
+                    background: "var(--deployer-input-disabled-bg)",
+                    fontSize: 12,
+                  }}
+                />
+              </div>
+            ) : null}
+            {vaultValueModal.error ? (
+              <p className="text-danger" style={{ margin: 0, fontSize: 12 }}>
+                {vaultValueModal.error}
+              </p>
+            ) : null}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                onClick={() => setVaultValueModal(null)}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  border: "1px solid var(--bs-border-color)",
+                  background: "var(--bs-body-bg)",
+                  color: "var(--deployer-muted-ink)",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Close
+              </button>
+              <button
+                onClick={submitVaultValue}
+                disabled={vaultValueModal.loading}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  border: "1px solid var(--bs-body-color)",
+                  background: "var(--bs-body-color)",
+                  color: "var(--bs-body-bg)",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                {vaultValueModal.loading
+                  ? "Working..."
+                  : vaultValueModal.mode === "show"
+                  ? "Reveal"
+                  : "Encrypt & replace"}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </>

@@ -67,37 +67,37 @@ Interactive creation, editing, and export of a complete inventory including cred
 
 ## 4.1 Vault & Key UX (Context Actions)
 
-- [ ] Context menu on `secrets/credentials.kdbx` allows changing master password
-- [ ] Context menu on private key file allows changing key passphrase
-- [ ] Hover on vault-encrypted values enables right-click show plaintext (explicit action)
-- [ ] Hover on vault-encrypted values enables right-click change value (re-encrypt)
-- [ ] Any password change requires double entry
-- [ ] Vault encrypt/decrypt uses the vault password from `secrets/credentials.kdbx`
+- [x] Context menu on `secrets/credentials.kdbx` allows changing master password
+- [x] Context menu on private key file allows changing key passphrase
+- [x] Hover on vault-encrypted values enables right-click show plaintext (explicit action)
+- [x] Hover on vault-encrypted values enables right-click change value (re-encrypt)
+- [x] Any password change requires double entry
+- [x] Vault encrypt/decrypt uses the vault password from `secrets/credentials.kdbx`
 
 **Acceptance Criteria**
-- [ ] Master password is required on each vault access (read/write)
-- [ ] Plaintext is only shown after explicit action
-- [ ] No plaintext or passwords appear in logs or SSE streams
+- [x] Master password is required on each vault access (read/write)
+- [x] Plaintext is only shown after explicit action
+- [x] No plaintext or passwords appear in logs or SSE streams
 
 ---
 
 ## 4.2 Credentials Dialog & Server Selection
 
-- [ ] One credentials box per server (all servers visible)
-- [ ] Active server marked via radio button
-- [ ] Each server has its own **Credentials** button and box
-- [ ] Only one credentials dialog/box can be open at a time
-- [ ] Credentials dialog opens via a **Credentials** button
-- [ ] Dialog appears as a JS popup/modal
-- [ ] Dialog contains all key and password configuration options
-- [ ] Each server row has a **Test connection** button to verify credentials
-- [ ] Test flow: probe ping first, then SSH login; show results separately
+- [x] One credentials box per server (all servers visible)
+- [x] Active server marked via radio button
+- [x] Each server has its own **Credentials** button and box
+- [x] Only one credentials dialog/box can be open at a time
+- [x] Credentials dialog opens via a **Credentials** button
+- [x] Dialog appears as a JS popup/modal
+- [x] Dialog contains all key and password configuration options
+- [x] Each server row has a **Test connection** button to verify credentials
+- [x] Test flow: probe ping first, then SSH login; show results separately
 
 **Acceptance Criteria**
-- [ ] Active server selection is unambiguous and persists
-- [ ] Test connection uses the selected server’s credentials
-- [ ] Ping and SSH results are shown independently (e.g. ping OK / SSH failed)
-- [ ] No credentials are logged or streamed over SSE during testing
+- [x] Active server selection is unambiguous and persists
+- [x] Test connection uses the selected server’s credentials
+- [x] Ping and SSH results are shown independently (e.g. ping OK / SSH failed)
+- [x] No credentials are logged or streamed over SSE during testing
 
 ---
 

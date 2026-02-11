@@ -7,8 +7,6 @@ from pydantic import BaseModel
 
 class RoleLogoOut(BaseModel):
     # "meta" if css_class was defined in meta/main.yml
-    # "simpleicons" if resolved via CDN
-    # "placeholder" if data-url fallback
     source: str
     css_class: Optional[str] = None
     url: Optional[str] = None
@@ -28,6 +26,9 @@ class RoleOut(BaseModel):
     company: Optional[str] = None
     license: Optional[str] = None
     license_url: Optional[str] = None
+    homepage: Optional[str] = None
+    forum: Optional[str] = None
+    video: Optional[str] = None
     repository: Optional[str] = None
     issue_tracker_url: Optional[str] = None
     documentation: Optional[str] = None

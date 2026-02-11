@@ -24,6 +24,9 @@ class RoleGalaxyInfo:
     description: Optional[str] = None
     license: Optional[str] = None
     license_url: Optional[str] = None
+    homepage: Optional[str] = None
+    forum: Optional[str] = None
+    video: Optional[str] = None
     company: Optional[str] = None
     galaxy_tags: List[str] = field(default_factory=list)
     repository: Optional[str] = None
@@ -73,6 +76,9 @@ class RoleMetadata:
     company: Optional[str]
     license: Optional[str]
     license_url: Optional[str]
+    homepage: Optional[str]
+    forum: Optional[str]
+    video: Optional[str]
     repository: Optional[str]
     issue_tracker_url: Optional[str]
     documentation: Optional[str]

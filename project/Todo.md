@@ -314,83 +314,83 @@ For each job:
 
 ### 4.2.1 SSH Key Generation
 
-* [ ] Generate SSH keypair via backend (triggered from UI)
-  * [ ] Generate key via explicit user action (button)
-  * [ ] Algorithm is selectable; default is best-practice (`ed25519`)
-  * [ ] Optional passphrase; generated server-side
-  * [ ] Generated private key is inserted into the Key field
-  * [ ] Generated public key is displayed in a read-only field
-  * [ ] Public key can be copied to clipboard
-  * [ ] Regeneration requires confirmation
-  * [ ] Both keys are stored in the workspace (e.g. `ssh_key`, `ssh_key.pub`)
+* [x] Generate SSH keypair via backend (triggered from UI)
+  * [x] Generate key via explicit user action (button)
+  * [x] Algorithm is selectable; default is best-practice (`ed25519`)
+  * [x] Optional passphrase; generated server-side
+  * [x] Generated private key is inserted into the Key field
+  * [x] Generated public key is displayed in a read-only field
+  * [x] Public key can be copied to clipboard
+  * [x] Regeneration requires confirmation
+  * [x] Both keys are stored in the workspace (e.g. `ssh_key`, `ssh_key.pub`)
 
 **A/C**
 
-* [ ] Public key is valid for `authorized_keys` (e.g. `ssh-ed25519 ...`)
-* [ ] Private key and optional passphrase never appear in logs or SSE streams
-* [ ] Key material is persisted only in workspace files and returned to the UI only on explicit user action
+* [x] Public key is valid for `authorized_keys` (e.g. `ssh-ed25519 ...`)
+* [x] Private key and optional passphrase never appear in logs or SSE streams
+* [x] Key material is persisted only in workspace files and returned to the UI only on explicit user action
 
 ---
 
 ### 4.2.2 KeePassXC Credentials Vault (Workspace)
 
-* [ ] Store all generated passwords **only** in `secrets/credentials.kdbx`
-  * [ ] **No** `secrets/passwords/` directory exists
-  * [ ] Entries include: server password, vault password, SSH key passphrase (if set)
-  * [ ] File is created server-side inside the workspace
-  * [ ] Whenever reading/writing the KDBX, prompt for master password
-  * [ ] If KDBX does not exist, create it and require master password twice
-  * [ ] Master password is never stored or logged
-  * [ ] UI uses a smooth JS modal/popup for password entry
-  * [ ] User can download the KDBX file explicitly
-  * [ ] ZIP export includes `secrets/` by default (including the KDBX)
+* [x] Store all generated passwords **only** in `secrets/credentials.kdbx`
+  * [x] **No** `secrets/passwords/` directory exists
+  * [x] Entries include: server password, vault password, SSH key passphrase (if set)
+  * [x] File is created server-side inside the workspace
+  * [x] Whenever reading/writing the KDBX, prompt for master password
+  * [x] If KDBX does not exist, create it and require master password twice
+  * [x] Master password is never stored or logged
+  * [x] UI uses a smooth JS modal/popup for password entry
+  * [x] User can download the KDBX file explicitly
+  * [x] ZIP export includes `secrets/` by default (including the KDBX)
 
 **A/C**
 
-* [ ] Only KDBX contains passwords (no plaintext password files)
-* [ ] Master password is required on each access (read/write)
-* [ ] KDBX creation requires matching double-entry
-* [ ] No KDBX contents or master password appear in logs or SSE streams
-* [ ] ZIP export contains all workspace files by default (including `secrets/`)
+* [x] Only KDBX contains passwords (no plaintext password files)
+* [x] Master password is required on each access (read/write)
+* [x] KDBX creation requires matching double-entry
+* [x] No KDBX contents or master password appear in logs or SSE streams
+* [x] ZIP export contains all workspace files by default (including `secrets/`)
 
 ---
 
 ### 4.2.3 Vault & Key UX (Context Actions)
 
-* [ ] Context menu on `secrets/credentials.kdbx` allows **change master password**
-* [ ] Context menu on private key file allows **change key passphrase**
-* [ ] Hover on vault-encrypted values enables **right-click → show plaintext** (explicit action)
-* [ ] Hover on vault-encrypted values enables **right-click → change value** (re-encrypt)
-* [ ] Any password change requires **double entry**
-* [ ] Vault encrypt/decrypt uses the **vault password from `secrets/credentials.kdbx`**
+* [x] Context menu on `secrets/credentials.kdbx` allows **change master password**
+* [x] Context menu on private key file allows **change key passphrase**
+* [x] Hover on vault-encrypted values enables **right-click → show plaintext** (explicit action)
+* [x] Hover on vault-encrypted values enables **right-click → change value** (re-encrypt)
+* [x] Any password change requires **double entry**
+* [x] Vault encrypt/decrypt uses the **vault password from `secrets/credentials.kdbx`**
 
 **A/C**
 
-* [ ] Master password change updates the KDBX and reuses new password immediately
-* [ ] Key passphrase change rewrites the private key and preserves public key
-* [ ] Vault decrypt/show only works after explicit action and does not auto-reveal
-* [ ] Plaintext is never logged or streamed over SSE
+* [x] Master password change updates the KDBX and reuses new password immediately
+* [x] Key passphrase change rewrites the private key and preserves public key
+* [x] Vault decrypt/show only works after explicit action and does not auto-reveal
+* [x] Plaintext is never logged or streamed over SSE
 
 ---
 
 ### 4.2.4 Credentials Dialog & Server Selection
 
-* [ ] One “credentials box” per server (all servers visible)
-* [ ] Active server is marked via radio button
-* [ ] Each server has its own **Credentials** button and box
-* [ ] Only one credentials dialog/box can be open at a time
-* [ ] Credentials dialog opens via a **Credentials** button
-* [ ] Dialog appears as a JS popup/modal
-* [ ] Dialog contains all key and password configuration options
-* [ ] Each server row has a **Test connection** button to verify credentials
-* [ ] Test flow: probe ping first, then SSH login; show results separately
+* [x] One “credentials box” per server (all servers visible)
+* [x] Active server is marked via radio button
+* [x] Each server has its own **Credentials** button and box
+* [x] Only one credentials dialog/box can be open at a time
+* [x] Credentials dialog opens via a **Credentials** button
+* [x] Dialog appears as a JS popup/modal
+* [x] Dialog contains all key and password configuration options
+* [x] Each server row has a **Test connection** button to verify credentials
+* [x] Test flow: probe ping first, then SSH login; show results separately
 
 **A/C**
 
-* [ ] Active server selection is unambiguous and persists
-* [ ] Test connection uses the selected server’s credentials
-* [ ] Ping and SSH results are shown independently (e.g. ping OK / SSH failed)
-* [ ] No credentials are logged or streamed over SSE during testing
+* [x] Active server selection is unambiguous and persists
+* [x] Test connection uses the selected server’s credentials
+* [x] Ping and SSH results are shown independently (e.g. ping OK / SSH failed)
+* [x] No credentials are logged or streamed over SSE during testing
 
 ### 4.3 Workspace Inventory (SPOT)
 

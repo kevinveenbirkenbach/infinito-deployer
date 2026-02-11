@@ -38,6 +38,10 @@ def build_inventory_preview(req: DeploymentRequest) -> Tuple[str, List[str]]:
         warnings.append(
             "Private key is not shown in preview. During deployment it must be written to a temporary file (chmod 600) and referenced via ansible_ssh_private_key_file."
         )
+        if req.auth.passphrase:
+            warnings.append(
+                "Private key passphrase is provided and will be supplied at runtime."
+            )
 
     # Build vars (system vars only)
     merged_vars: Dict[str, Any] = {}
@@ -53,6 +57,8 @@ def build_inventory_preview(req: DeploymentRequest) -> Tuple[str, List[str]]:
         # The actual deployment runner should write the provided key into a file and set:
         #   ansible_ssh_private_key_file: /state/jobs/<job_id>/id_rsa
         merged_vars["ansible_ssh_private_key_file"] = "<provided_at_runtime>"
+        if req.auth.passphrase:
+            merged_vars["ansible_ssh_pass"] = _mask_secret(req.auth.passphrase)
 
     if req.workspace_id:
         root = WorkspaceService().ensure(req.workspace_id)
@@ -75,6 +81,8 @@ def build_inventory_preview(req: DeploymentRequest) -> Tuple[str, List[str]]:
             "vars": merged_vars,
         }
     }
+    if req.port:
+        inventory["all"]["hosts"]["target"]["ansible_port"] = req.port
 
     # Encode deploy_target also as group (useful for playbook/group_vars later)
     inventory["all"]["children"] = {req.deploy_target: {"hosts": {"target": {}}}}

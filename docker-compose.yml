@@ -150,7 +150,36 @@ services:
     container_name: infinito-deployer-test-arch
 
     ports:
-      - "${TEST_ARCH_SSH_PORT:-2222}:22"
+      - "${TEST_ARCH_SSH_PORT:-2224}:22"
+
+    restart: ${RESTART_POLICY}
+
+  # ---------------------------------------------------------
+  # Test targets (password/key SSH)
+  # ---------------------------------------------------------
+  ssh-password:
+    profiles: ["test"]
+    build:
+      context: ./apps/test/ssh-password
+      dockerfile: Dockerfile
+
+    container_name: infinito-deployer-ssh-password
+
+    ports:
+      - "${TEST_SSH_PASSWORD_PORT:-2222}:22"
+
+    restart: ${RESTART_POLICY}
+
+  ssh-key:
+    profiles: ["test"]
+    build:
+      context: ./apps/test/ssh-key
+      dockerfile: Dockerfile
+
+    container_name: infinito-deployer-ssh-key
+
+    ports:
+      - "${TEST_SSH_KEY_PORT:-2223}:22"
 
     restart: ${RESTART_POLICY}
 

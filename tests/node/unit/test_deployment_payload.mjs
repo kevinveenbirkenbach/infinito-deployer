@@ -9,6 +9,7 @@ test("builds payload for password auth", () => {
     activeServer: {
       alias: "server-1",
       host: " example.com ",
+      port: "",
       user: "root",
       authMethod: "password",
       password: "secret",
@@ -27,6 +28,7 @@ test("builds payload for password auth", () => {
   assert.equal(result.payload.auth.method, "password");
   assert.equal(result.payload.auth.password, "secret");
   assert.equal(result.payload.auth.private_key, undefined);
+  assert.equal(result.payload.port, undefined);
   assert.equal(result.payload.limit, "server-1");
 });
 
@@ -36,6 +38,7 @@ test("requires at least one role", () => {
     activeServer: {
       alias: "server-1",
       host: "example.com",
+      port: "",
       user: "root",
       authMethod: "password",
       password: "secret",
@@ -57,6 +60,7 @@ test("requires inventory ready", () => {
     activeServer: {
       alias: "server-1",
       host: "example.com",
+      port: "",
       user: "root",
       authMethod: "password",
       password: "secret",
@@ -78,6 +82,7 @@ test("builds payload for key auth", () => {
     activeServer: {
       alias: "server-1",
       host: "127.0.0.1",
+      port: "2222",
       user: "dev",
       authMethod: "private_key",
       password: "",
@@ -93,4 +98,27 @@ test("builds payload for key auth", () => {
   assert.equal(result.payload.auth.method, "private_key");
   assert.equal(result.payload.auth.private_key, "KEYDATA");
   assert.equal(result.payload.auth.password, undefined);
+  assert.equal(result.payload.port, 2222);
+});
+
+test("includes key passphrase when provided", () => {
+  const result = buildDeploymentPayload({
+    deployScope: "active",
+    activeServer: {
+      alias: "server-1",
+      host: "127.0.0.1",
+      port: "",
+      user: "dev",
+      authMethod: "private_key",
+      password: "",
+      privateKey: "KEYDATA",
+      keyPassphrase: "pass123",
+    },
+    selectedRolesByAlias: { "server-1": ["role-a"] },
+    activeAlias: "server-1",
+    workspaceId: "ws1",
+    inventoryReady: true,
+  });
+
+  assert.equal(result.payload.auth.passphrase, "pass123");
 });

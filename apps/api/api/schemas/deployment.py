@@ -21,6 +21,7 @@ class DeploymentAuth(BaseModel):
     # Secrets (never echoed back in responses)
     password: Optional[str] = Field(default=None, min_length=1)
     private_key: Optional[str] = Field(default=None, min_length=1)
+    passphrase: Optional[str] = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def _validate_auth(self) -> "DeploymentAuth":
@@ -30,6 +31,10 @@ class DeploymentAuth(BaseModel):
             if self.private_key:
                 raise ValueError(
                     "auth.private_key must not be set when auth.method=password"
+                )
+            if self.passphrase:
+                raise ValueError(
+                    "auth.passphrase must not be set when auth.method=password"
                 )
 
         if self.method == "private_key":
@@ -51,6 +56,7 @@ class DeploymentRequest(BaseModel):
     )
     deploy_target: DeployTarget
     host: str = Field(..., min_length=1, description="localhost / IP / domain")
+    port: Optional[int] = Field(default=None, ge=1, le=65535)
     user: str = Field(..., min_length=1, description="SSH user")
     auth: DeploymentAuth
     limit: Optional[str] = Field(

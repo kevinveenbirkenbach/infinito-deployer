@@ -4,10 +4,14 @@ export function createInitialState() {
   return {
     alias: "main",
     host: "",
+    port: "",
     user: "",
     authMethod: "password",
     password: "",
     privateKey: "",
+    publicKey: "",
+    keyAlgorithm: "ed25519",
+    keyPassphrase: "",
   };
 }
 
@@ -15,6 +19,7 @@ export function validateForm(state) {
   const errors = {};
   const alias = String(state?.alias ?? "").trim();
   const host = String(state?.host ?? "").trim();
+  const portRaw = String(state?.port ?? "").trim();
   const user = String(state?.user ?? "").trim();
   const authMethod = state?.authMethod ?? "";
   const password = String(state?.password ?? "");
@@ -28,6 +33,12 @@ export function validateForm(state) {
   }
   if (!user) {
     errors.user = "User is required.";
+  }
+  if (portRaw) {
+    const portNum = Number(portRaw);
+    if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+      errors.port = "Port must be an integer between 1 and 65535.";
+    }
   }
 
   if (!AUTH_METHODS.includes(authMethod)) {

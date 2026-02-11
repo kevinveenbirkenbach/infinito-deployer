@@ -29,7 +29,7 @@ from .secrets import collect_secrets
 from .util import atomic_write_json, atomic_write_text, safe_mkdir, utc_iso
 from .log_hub import LogHub
 
-_WORKSPACE_SKIP_FILES = {"workspace.json", ".vault_pass"}
+_WORKSPACE_SKIP_FILES = {"workspace.json", "credentials.kdbx"}
 
 
 class JobRunnerService:
@@ -66,7 +66,9 @@ class JobRunnerService:
             safe_mkdir(target_dir)
 
             # Skip hidden/system folders if they show up in the workspace root
-            dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+            dirnames[:] = [
+                d for d in dirnames if not d.startswith(".") and d != "secrets"
+            ]
 
             for fname in filenames:
                 if fname in _WORKSPACE_SKIP_FILES:
@@ -307,6 +309,8 @@ class JobRunnerService:
             atomic_write_text(paths.ssh_key_path, req.auth.private_key)
             paths.ssh_key_path.chmod(0o600)
             merged_vars["ansible_ssh_private_key_file"] = str(paths.ssh_key_path)
+            if req.auth.passphrase:
+                merged_vars["ansible_ssh_pass"] = "<provided_at_runtime>"
         elif req.auth.method == "password":
             merged_vars["ansible_password"] = "<provided_at_runtime>"
 

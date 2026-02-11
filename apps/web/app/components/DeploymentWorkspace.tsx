@@ -14,15 +14,25 @@ type Role = {
   description: string;
   deployment_targets: string[];
   logo?: { source: string; css_class?: string | null; url?: string | null };
+  documentation?: string | null;
+  video?: string | null;
+  forum?: string | null;
+  homepage?: string | null;
+  issue_tracker_url?: string | null;
+  license_url?: string | null;
 };
 
 type ServerState = {
   alias: string;
   host: string;
+  port: string;
   user: string;
   authMethod: string;
   password: string;
   privateKey: string;
+  publicKey: string;
+  keyAlgorithm: string;
+  keyPassphrase: string;
 };
 
 type AliasRename = { from: string; to: string };
@@ -37,7 +47,6 @@ export default function DeploymentWorkspace({
   onJobCreated,
 }: DeploymentWorkspaceProps) {
   const initial = useMemo(() => createInitialState(), []);
-  const defaultAlias = initial.alias;
   const [roles, setRoles] = useState<Role[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [rolesError, setRolesError] = useState<string | null>(null);
@@ -46,10 +55,14 @@ export default function DeploymentWorkspace({
     {
       alias: initial.alias,
       host: initial.host,
+      port: initial.port,
       user: initial.user,
       authMethod: initial.authMethod,
       password: initial.password,
       privateKey: initial.privateKey,
+      publicKey: initial.publicKey,
+      keyAlgorithm: initial.keyAlgorithm,
+      keyPassphrase: initial.keyPassphrase,
     },
   ]);
   const [activeAlias, setActiveAlias] = useState(initial.alias);
@@ -57,6 +70,7 @@ export default function DeploymentWorkspace({
     Record<string, Set<string>>
   >(() => ({ [initial.alias]: new Set<string>() }));
   const [aliasRenames, setAliasRenames] = useState<AliasRename[]>([]);
+  const [aliasDeletes, setAliasDeletes] = useState<string[]>([]);
   const [selectionTouched, setSelectionTouched] = useState(false);
 
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
@@ -125,10 +139,14 @@ export default function DeploymentWorkspace({
     (alias: string): ServerState => ({
       alias,
       host: "",
+      port: "",
       user: "",
       authMethod: "password",
       password: "",
       privateKey: "",
+      publicKey: "",
+      keyAlgorithm: "ed25519",
+      keyPassphrase: "",
     }),
     []
   );
@@ -156,29 +174,18 @@ export default function DeploymentWorkspace({
 
   const applySelectedRolesByAlias = useCallback(
     (rolesByAlias: Record<string, string[]>) => {
-      const rawAliases = Object.keys(rolesByAlias || {}).filter(Boolean);
-      const hasRealAliases = rawAliases.some((alias) => alias !== defaultAlias);
-      const placeholderRoles = rolesByAlias?.[defaultAlias] ?? [];
-      const placeholderServer = servers.find(
-        (server) => server.alias === defaultAlias
-      );
-      const placeholderHasData = !!(
-        placeholderServer &&
-        (placeholderServer.host ||
-          placeholderServer.user ||
-          placeholderServer.password ||
-          placeholderServer.privateKey)
-      );
+      const aliases = Object.keys(rolesByAlias || {})
+        .map((alias) => alias.trim())
+        .filter(Boolean);
 
-      let aliases = rawAliases;
-      if (hasRealAliases && !placeholderHasData && placeholderRoles.length === 0) {
-        aliases = rawAliases.filter((alias) => alias !== defaultAlias);
-      }
       if (aliases.length === 0) {
-        aliases = [defaultAlias];
+        setSelectedByAlias({});
+        setServers([]);
+        setActiveAlias("");
+        return;
       }
 
-      setSelectedByAlias((prev) => {
+      setSelectedByAlias(() => {
         const next: Record<string, Set<string>> = {};
         aliases.forEach((alias) => {
           next[alias] = new Set<string>(rolesByAlias?.[alias] ?? []);
@@ -204,15 +211,11 @@ export default function DeploymentWorkspace({
         return ordered.map((alias) => byAlias.get(alias) ?? createServer(alias));
       });
 
-      if (
-        !activeAlias ||
-        !aliases.includes(activeAlias) ||
-        (activeAlias === defaultAlias && aliases[0] !== defaultAlias)
-      ) {
+      if (!activeAlias || !aliases.includes(activeAlias)) {
         setActiveAlias(aliases[0] ?? "");
       }
     },
-    [activeAlias, createServer, defaultAlias, servers]
+    [activeAlias, createServer]
   );
 
   const updateServer = useCallback(
@@ -276,6 +279,30 @@ export default function DeploymentWorkspace({
     setSelectedByAlias((prev) => ({ ...prev, [alias]: new Set<string>() }));
     setActiveAlias(alias);
   }, [servers, createServer]);
+
+  const removeServer = useCallback(
+    async (alias: string) => {
+      if (!alias) return;
+      if (!workspaceId || !inventoryReady) {
+        throw new Error("Workspace inventory is not ready yet.");
+      }
+      setAliasDeletes((prev) => [...prev, alias]);
+      setServers((prev) => {
+        const next = prev.filter((server) => server.alias !== alias);
+        if (activeAlias === alias) {
+          setActiveAlias(next[0]?.alias ?? "");
+        }
+        return next;
+      });
+      setSelectedByAlias((prev) => {
+        const next: Record<string, Set<string>> = { ...prev };
+        delete next[alias];
+        return next;
+      });
+      setSelectionTouched(true);
+    },
+    [activeAlias, inventoryReady, workspaceId]
+  );
 
   const toggleSelected = (id: string) => {
     if (!activeAlias) return;
@@ -363,6 +390,7 @@ export default function DeploymentWorkspace({
     return {
       alias: activeServer?.alias ?? "",
       host: activeServer?.host ?? "",
+      port: activeServer?.port ?? "",
       user: activeServer?.user ?? "",
       authMethod: activeServer?.authMethod ?? "password",
     };
@@ -379,14 +407,16 @@ export default function DeploymentWorkspace({
         activeAlias={activeAlias}
       />
 
-      <DeploymentCredentialsForm
-        baseUrl={baseUrl}
-        servers={servers}
-        activeAlias={activeAlias}
-        onActiveAliasChange={setActiveAlias}
-        onUpdateServer={updateServer}
-        onAddServer={addServer}
-      />
+        <DeploymentCredentialsForm
+          baseUrl={baseUrl}
+          workspaceId={workspaceId}
+          servers={servers}
+          activeAlias={activeAlias}
+          onActiveAliasChange={setActiveAlias}
+          onUpdateServer={updateServer}
+          onRemoveServer={removeServer}
+          onAddServer={addServer}
+        />
 
       <WorkspacePanel
         baseUrl={baseUrl}
@@ -402,6 +432,10 @@ export default function DeploymentWorkspace({
         aliasRenames={aliasRenames}
         onAliasRenamesHandled={(count) =>
           setAliasRenames((prev) => prev.slice(count))
+        }
+        aliasDeletes={aliasDeletes}
+        onAliasDeletesHandled={(count) =>
+          setAliasDeletes((prev) => prev.slice(count))
         }
         selectionTouched={selectionTouched}
       />

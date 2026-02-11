@@ -13,6 +13,12 @@
  * @property {string} description
  * @property {string[]} deployment_targets
  * @property {RoleLogo | null | undefined} [logo]
+ * @property {string | null | undefined} [documentation]
+ * @property {string | null | undefined} [video]
+ * @property {string | null | undefined} [forum]
+ * @property {string | null | undefined} [homepage]
+ * @property {string | null | undefined} [issue_tracker_url]
+ * @property {string | null | undefined} [license_url]
  */
 
 /**

@@ -21,10 +21,12 @@ export function buildDeploymentPayload({
   const credentials = {
     alias: server.alias || "",
     host: server.host || "",
+    port: server.port || "",
     user: server.user || "",
     authMethod: server.authMethod || "password",
     password: server.password || "",
     privateKey: server.privateKey || "",
+    keyPassphrase: server.keyPassphrase || "",
   };
 
   const errors = { ...validateForm(credentials) };
@@ -76,6 +78,9 @@ export function buildDeploymentPayload({
   }
   if (credentials.authMethod === "private_key") {
     auth.private_key = String(credentials.privateKey ?? "");
+    if (credentials.keyPassphrase) {
+      auth.passphrase = String(credentials.keyPassphrase ?? "");
+    }
   }
 
   const payload = {
@@ -85,6 +90,14 @@ export function buildDeploymentPayload({
     auth,
     selected_roles: roles,
   };
+
+  const portRaw = String(credentials.port ?? "").trim();
+  if (portRaw) {
+    const portNum = Number(portRaw);
+    if (Number.isInteger(portNum)) {
+      payload.port = portNum;
+    }
+  }
 
   if (deployScope === "active") {
     payload.limit = String(activeAlias || "").trim();

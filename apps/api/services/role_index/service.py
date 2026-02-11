@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 from typing import Dict, Iterable, List, Set, Tuple
+from urllib.parse import urlparse
 
 from fastapi import HTTPException
 
 from api.schemas.role import RoleLogoOut, RoleOut
 from roles.role_metadata_extractor import extract_role_metadata
-from services.logo_resolver import SimpleIconsResolver
 from services.role_catalog import RoleCatalogError, RoleCatalogService
 
 from .categories import load_categories
@@ -27,6 +28,20 @@ def _matches_any(haystack: Iterable[str], needles: Set[str]) -> bool:
     return bool(hs.intersection({safe_lower(n) for n in needles}))
 
 
+LOGGER = logging.getLogger(__name__)
+
+
+def _normalize_url(value: str | None, role_id: str, field: str) -> str | None:
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    parsed = urlparse(raw)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        LOGGER.warning("role %s: invalid %s url ignored: %s", role_id, field, raw)
+        return None
+    return raw
+
+
 class RoleIndexService:
     """
     Cached role index for fast /api/roles queries.
@@ -42,7 +57,6 @@ class RoleIndexService:
 
     def __init__(self) -> None:
         self._catalog = RoleCatalogService()
-        self._logo_resolver = SimpleIconsResolver()
 
         self._cache_ttl_seconds = int(os.getenv("ROLE_INDEX_TTL_SECONDS", "30") or "30")
         self._cached_at: float = 0.0
@@ -70,7 +84,6 @@ class RoleIndexService:
 
         roles_root = repo_roles_root()
         categories = load_categories()
-
         out: List[RoleOut] = []
         by_id: Dict[str, RoleOut] = {}
 
@@ -83,14 +96,22 @@ class RoleIndexService:
 
             md = extract_role_metadata(role_dir)
 
-            if md.logo and md.logo.css_class:
-                logo = RoleLogoOut(source="meta", css_class=md.logo.css_class)
-            else:
-                resolved = self._logo_resolver.resolve_logo_url(
-                    md.id,
-                    display_hint=md.display_name,
-                )
-                logo = RoleLogoOut(source=resolved.source, url=resolved.url)
+            logo = (
+                RoleLogoOut(source="meta", css_class=md.logo.css_class)
+                if md.logo and md.logo.css_class
+                else None
+            )
+
+            documentation = _normalize_url(
+                md.documentation, md.id, "documentation"
+            )
+            video = _normalize_url(md.video, md.id, "video")
+            homepage = _normalize_url(md.homepage, md.id, "homepage")
+            issue_tracker_url = _normalize_url(
+                md.issue_tracker_url, md.id, "issue_tracker_url"
+            )
+            license_url = _normalize_url(md.license_url, md.id, "license_url")
+            forum = _normalize_url(md.forum, md.id, "forum") if md.forum else None
 
             ro = RoleOut(
                 id=md.id,
@@ -101,10 +122,13 @@ class RoleIndexService:
                 author=md.author,
                 company=md.company,
                 license=md.license,
-                license_url=md.license_url,
+                license_url=license_url,
+                homepage=homepage,
+                forum=forum,
+                video=video,
                 repository=md.repository,
-                issue_tracker_url=md.issue_tracker_url,
-                documentation=md.documentation,
+                issue_tracker_url=issue_tracker_url,
+                documentation=documentation,
                 min_ansible_version=md.min_ansible_version,
                 galaxy_tags=md.galaxy_tags,
                 dependencies=md.dependencies,

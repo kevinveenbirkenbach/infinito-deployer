@@ -1,4 +1,4 @@
-.PHONY: setup env dirs up down logs ps refresh-catalog test-arch web-sync venv install test clean
+.PHONY: setup env dirs up down logs ps refresh-catalog test-arch test-env-up test-env-down web-sync venv install test clean
 
 # Use docker compose v2 by default; override via env if needed:
 #   make setup DOCKER_COMPOSE="docker-compose"
@@ -62,6 +62,12 @@ web-sync:
 
 test-arch:
 	@COMPOSE_PROFILES=test $(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" up -d --build test-arch
+
+test-env-up:
+	@COMPOSE_PROFILES=test $(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" up -d --build
+
+test-env-down:
+	@COMPOSE_PROFILES=test $(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" down
 
 venv:
 	@test -d "$(VENV_DIR)" || python -m venv "$(VENV_DIR)"

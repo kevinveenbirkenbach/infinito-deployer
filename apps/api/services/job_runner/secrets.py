@@ -10,6 +10,7 @@ MASK = "********"
 _SECRET_KEYWORDS = (
     "password",
     "passwd",
+    "passphrase",
     "secret",
     "token",
     "private_key",
@@ -21,7 +22,7 @@ _SECRET_KEYWORDS = (
 
 _INLINE_VALUE_PATTERNS = [
     re.compile(
-        r"(?i)((?:password|passwd|secret|token|apikey|api_key|access_key|private_key)\s*[:=]\s*)([^\s]+)"
+        r"(?i)((?:password|passwd|passphrase|secret|token|apikey|api_key|access_key|private_key)\s*[:=]\s*)([^\s]+)"
     ),
     re.compile(r"(?i)((?:sshpass\s+-p\s+))([^\s]+)"),
     re.compile(r"(?i)((?:--password\s+))([^\s]+)"),
@@ -66,6 +67,8 @@ def collect_secrets(req: DeploymentRequest) -> List[str]:
             s = line.strip()
             if s:
                 secrets.append(s)
+    if req.auth.passphrase:
+        secrets.append(req.auth.passphrase)
 
     return _dedupe(secrets)
 

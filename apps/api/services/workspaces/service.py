@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
+import tempfile
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional
 
 import yaml
 from fastapi import HTTPException
@@ -23,10 +25,12 @@ from services.role_index.paths import repo_roles_root
 from .paths import workspace_dir, workspaces_root
 
 WORKSPACE_META_FILENAME = "workspace.json"
-VAULT_PASS_FILENAME = ".vault_pass"
 INVENTORY_FILENAME = "inventory.yml"
+SECRETS_DIRNAME = "secrets"
+KDBX_FILENAME = "credentials.kdbx"
+KEYS_DIRNAME = "keys"
 
-_HIDDEN_FILES = {WORKSPACE_META_FILENAME, VAULT_PASS_FILENAME}
+_HIDDEN_FILES = {WORKSPACE_META_FILENAME}
 _ID_RE = re.compile(r"^[a-z0-9]{6,32}$")
 
 
@@ -163,6 +167,112 @@ def _apply_cli_host_vars_defaults(host_vars_path: Path, host: str) -> None:
         )
 
 
+def _secrets_dir(root: Path) -> Path:
+    return root / SECRETS_DIRNAME
+
+
+def _keys_dir(root: Path) -> Path:
+    return _secrets_dir(root) / KEYS_DIRNAME
+
+
+def _kdbx_path(root: Path) -> Path:
+    return _secrets_dir(root) / KDBX_FILENAME
+
+
+def _ensure_secrets_dirs(root: Path) -> None:
+    safe_mkdir(_secrets_dir(root))
+    safe_mkdir(_keys_dir(root))
+
+
+def _vault_alias(alias: Optional[str]) -> str:
+    cleaned = _sanitize_host_filename(alias or "default")
+    return cleaned or "default"
+
+
+def _vault_entry_title(kind: str, alias: Optional[str] = None) -> str:
+    if kind == "vault_password":
+        return "vault_password"
+    if kind == "server_password":
+        return f"server_password::{_vault_alias(alias)}"
+    if kind == "key_passphrase":
+        return f"key_passphrase::{_vault_alias(alias)}"
+    raise ValueError(f"unknown vault entry kind: {kind}")
+
+
+def _open_kdbx(
+    root: Path,
+    master_password: str,
+    *,
+    create_if_missing: bool,
+    master_password_confirm: Optional[str] = None,
+):
+    if not (master_password or "").strip():
+        raise HTTPException(status_code=400, detail="master_password is required")
+    path = _kdbx_path(root)
+    if not path.exists():
+        if not create_if_missing:
+            raise HTTPException(status_code=404, detail="credentials vault not found")
+        if master_password_confirm is None or master_password_confirm != master_password:
+            raise HTTPException(
+                status_code=400, detail="master password confirmation mismatch"
+            )
+        _ensure_secrets_dirs(root)
+        try:
+            from pykeepass import create_database
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"pykeepass not available: {exc}"
+            )
+        create_database(str(path), password=master_password)
+        try:
+            path.chmod(0o600)
+        except Exception:
+            pass
+    try:
+        from pykeepass import PyKeePass
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"pykeepass not available: {exc}")
+    try:
+        return PyKeePass(str(path), password=master_password)
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid master password")
+
+
+def _upsert_kdbx_entry(kp, title: str, password: Optional[str]) -> None:
+    entry = kp.find_entries(title=title, first=True)
+    if password is None:
+        return
+    if password == "":
+        if entry:
+            kp.delete_entry(entry)
+        return
+    if entry:
+        entry.password = password
+    else:
+        kp.add_entry(kp.root_group, title=title, username="", password=password)
+
+
+def _read_kdbx_entry(kp, title: str) -> Optional[str]:
+    entry = kp.find_entries(title=title, first=True)
+    if not entry:
+        return None
+    value = entry.password or ""
+    return value or None
+
+
+def _vault_password_from_kdbx(
+    root: Path, master_password: str, *, create_if_missing: bool = False
+) -> str:
+    kp = _open_kdbx(root, master_password, create_if_missing=create_if_missing)
+    value = _read_kdbx_entry(kp, _vault_entry_title("vault_password"))
+    if not value:
+        raise HTTPException(status_code=400, detail="vault password not set")
+    return value
+
+
+def _generate_passphrase() -> str:
+    return secrets.token_urlsafe(24)
+
 class WorkspaceService:
     def __init__(self) -> None:
         _ensure_workspace_root()
@@ -176,14 +286,7 @@ class WorkspaceService:
         safe_mkdir(root)
         safe_mkdir(root / "host_vars")
         safe_mkdir(root / "group_vars")
-
-        vault_path = root / VAULT_PASS_FILENAME
-        if not vault_path.exists():
-            atomic_write_text(vault_path, "")
-            try:
-                vault_path.chmod(0o600)
-            except Exception:
-                pass
+        _ensure_secrets_dirs(root)
 
         meta = {
             "workspace_id": workspace_id,
@@ -231,6 +334,16 @@ class WorkspaceService:
             raise HTTPException(status_code=404, detail="file not found")
         try:
             return target.read_text(encoding="utf-8", errors="replace")
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"failed to read file: {exc}")
+
+    def read_file_bytes(self, workspace_id: str, rel_path: str) -> bytes:
+        root = self.ensure(workspace_id)
+        target = _safe_resolve(root, rel_path)
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail="file not found")
+        try:
+            return target.read_bytes()
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"failed to read file: {exc}")
 
@@ -310,6 +423,7 @@ class WorkspaceService:
         deploy_target = (payload.get("deploy_target") or "").strip()
         alias = (payload.get("alias") or "").strip()
         host = (payload.get("host") or "").strip()
+        port = payload.get("port")
         user = (payload.get("user") or "").strip()
         auth_method = payload.get("auth_method")
         selected_roles = payload.get("selected_roles") or []
@@ -322,6 +436,15 @@ class WorkspaceService:
             alias = host
         if not selected_roles:
             raise HTTPException(status_code=400, detail="selected_roles is required")
+        if port is not None:
+            try:
+                port = int(port)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=400, detail=f"invalid port: {exc}"
+                ) from exc
+            if port < 1 or port > 65535:
+                raise HTTPException(status_code=400, detail="port out of range")
 
         cleaned_roles: List[str] = []
         seen_roles: set[str] = set()
@@ -354,6 +477,7 @@ class WorkspaceService:
                 {
                     "ansible_host": host,
                     "ansible_user": user,
+                    **({"ansible_port": port} if port else {}),
                 },
                 sort_keys=False,
                 default_flow_style=False,
@@ -363,6 +487,29 @@ class WorkspaceService:
         _apply_cli_host_vars_defaults(
             root / "host_vars" / f"{host_vars_name}.yml", host
         )
+        if port:
+            host_vars_path = root / "host_vars" / f"{host_vars_name}.yml"
+            try:
+                host_vars_data = (
+                    yaml.safe_load(
+                        host_vars_path.read_text(
+                            encoding="utf-8", errors="replace"
+                        )
+                    )
+                    or {}
+                )
+            except Exception:
+                host_vars_data = {}
+            host_vars_data["ansible_port"] = port
+            atomic_write_text(
+                host_vars_path,
+                yaml.safe_dump(
+                    host_vars_data,
+                    sort_keys=False,
+                    default_flow_style=False,
+                    allow_unicode=True,
+                ),
+            )
         atomic_write_text(root / "group_vars" / "all.yml", "")
 
         meta = _load_meta(root)
@@ -372,6 +519,7 @@ class WorkspaceService:
                 "selected_roles": list(cleaned_roles),
                 "deploy_target": deploy_target,
                 "host": host,
+                "port": port,
                 "user": user,
                 "auth_method": auth_method,
                 "host_vars_file": f"host_vars/{host_vars_name}.yml",
@@ -380,18 +528,12 @@ class WorkspaceService:
         )
         _write_meta(root, meta)
 
-        vault_path = root / VAULT_PASS_FILENAME
-        if not vault_path.exists():
-            atomic_write_text(vault_path, "")
-            try:
-                vault_path.chmod(0o600)
-            except Exception:
-                pass
+        _ensure_secrets_dirs(root)
 
     def generate_credentials(
         self,
         workspace_id: str,
-        vault_password: str,
+        master_password: str,
         selected_roles: List[str] | None,
         allow_empty_plain: bool,
         set_values: List[str] | None,
@@ -404,8 +546,13 @@ class WorkspaceService:
         if not roles:
             raise HTTPException(status_code=400, detail="no roles selected")
 
-        vault_path = root / VAULT_PASS_FILENAME
-        atomic_write_text(vault_path, vault_password)
+        vault_password = _vault_password_from_kdbx(root, master_password)
+        with tempfile.NamedTemporaryFile(
+            mode="w", prefix="vault-pass-", delete=False
+        ) as tmp:
+            tmp.write(vault_password)
+            tmp.flush()
+            vault_path = Path(tmp.name)
         try:
             vault_path.chmod(0o600)
         except Exception:
@@ -484,7 +631,7 @@ class WorkspaceService:
                     )
         finally:
             try:
-                atomic_write_text(vault_path, "")
+                vault_path.unlink(missing_ok=True)
             except Exception:
                 pass
 
@@ -580,3 +727,354 @@ class WorkspaceService:
                     )
 
         self._refresh_meta_after_upload(root)
+
+    def set_vault_entries(
+        self,
+        workspace_id: str,
+        *,
+        master_password: str,
+        master_password_confirm: Optional[str],
+        create_if_missing: bool,
+        alias: Optional[str],
+        server_password: Optional[str],
+        vault_password: Optional[str],
+        key_passphrase: Optional[str],
+    ) -> bool:
+        root = self.ensure(workspace_id)
+        kp = _open_kdbx(
+            root,
+            master_password,
+            create_if_missing=create_if_missing,
+            master_password_confirm=master_password_confirm,
+        )
+        if server_password is not None:
+            _upsert_kdbx_entry(
+                kp, _vault_entry_title("server_password", alias), server_password
+            )
+        if vault_password is not None:
+            _upsert_kdbx_entry(
+                kp, _vault_entry_title("vault_password"), vault_password
+            )
+        if key_passphrase is not None:
+            _upsert_kdbx_entry(
+                kp, _vault_entry_title("key_passphrase", alias), key_passphrase
+            )
+        kp.save()
+        return True
+
+    def change_vault_master_password(
+        self,
+        workspace_id: str,
+        *,
+        master_password: str,
+        new_master_password: str,
+        new_master_password_confirm: str,
+    ) -> None:
+        root = self.ensure(workspace_id)
+        if new_master_password != new_master_password_confirm:
+            raise HTTPException(
+                status_code=400, detail="new master password confirmation mismatch"
+            )
+        kp = _open_kdbx(
+            root, master_password, create_if_missing=False, master_password_confirm=None
+        )
+        kp.change_password(new_master_password)
+        kp.save()
+
+    def generate_ssh_keypair(
+        self,
+        workspace_id: str,
+        *,
+        alias: str,
+        algorithm: str,
+        with_passphrase: bool,
+        master_password: Optional[str] = None,
+        master_password_confirm: Optional[str] = None,
+        return_passphrase: bool = False,
+    ) -> Dict[str, Any]:
+        root = self.ensure(workspace_id)
+        _ensure_secrets_dirs(root)
+
+        safe_alias = _vault_alias(alias)
+        key_dir = _keys_dir(root)
+        key_private = key_dir / safe_alias
+        key_public = key_dir / f"{safe_alias}.pub"
+
+        if key_private.exists():
+            try:
+                key_private.unlink()
+            except Exception:
+                pass
+        if key_public.exists():
+            try:
+                key_public.unlink()
+            except Exception:
+                pass
+
+        algo = (algorithm or "ed25519").lower().strip()
+        if algo not in {"ed25519", "rsa", "ecdsa"}:
+            raise HTTPException(status_code=400, detail="unsupported ssh algorithm")
+
+        passphrase = ""
+        if with_passphrase:
+            if not master_password:
+                raise HTTPException(
+                    status_code=400, detail="master_password is required"
+                )
+            passphrase = _generate_passphrase()
+
+        cmd = [
+            "ssh-keygen",
+            "-t",
+            algo,
+            "-f",
+            str(key_private),
+            "-N",
+            passphrase,
+            "-q",
+        ]
+        if algo == "rsa":
+            cmd.extend(["-b", "4096"])
+        comment = (alias or "").strip()
+        if comment:
+            cmd.extend(["-C", comment])
+
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if res.returncode != 0 or not key_private.exists():
+            raise HTTPException(
+                status_code=500,
+                detail="ssh-keygen failed",
+            )
+
+        try:
+            key_private.chmod(0o600)
+        except Exception:
+            pass
+
+        private_key = key_private.read_text(encoding="utf-8", errors="replace")
+        public_key = key_public.read_text(encoding="utf-8", errors="replace")
+
+        if with_passphrase:
+            kp = _open_kdbx(
+                root,
+                master_password or "",
+                create_if_missing=True,
+                master_password_confirm=master_password_confirm,
+            )
+            _upsert_kdbx_entry(
+                kp, _vault_entry_title("key_passphrase", alias), passphrase
+            )
+            kp.save()
+
+        response: Dict[str, Any] = {
+            "private_key": private_key,
+            "public_key": public_key,
+            "key_path": key_private.relative_to(root).as_posix(),
+            "public_key_path": key_public.relative_to(root).as_posix(),
+        }
+        if with_passphrase and return_passphrase:
+            response["passphrase"] = passphrase
+        return response
+
+    def change_key_passphrase(
+        self,
+        workspace_id: str,
+        *,
+        alias: str,
+        master_password: str,
+        new_passphrase: str,
+        new_passphrase_confirm: str,
+    ) -> None:
+        if new_passphrase != new_passphrase_confirm:
+            raise HTTPException(
+                status_code=400, detail="new passphrase confirmation mismatch"
+            )
+        root = self.ensure(workspace_id)
+        key_private = _keys_dir(root) / _vault_alias(alias)
+        if not key_private.is_file():
+            raise HTTPException(status_code=404, detail="private key not found")
+
+        kp = _open_kdbx(
+            root, master_password, create_if_missing=False, master_password_confirm=None
+        )
+        old_passphrase = _read_kdbx_entry(
+            kp, _vault_entry_title("key_passphrase", alias)
+        )
+        cmd = [
+            "ssh-keygen",
+            "-p",
+            "-f",
+            str(key_private),
+            "-P",
+            old_passphrase or "",
+            "-N",
+            new_passphrase,
+        ]
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if res.returncode != 0:
+            raise HTTPException(status_code=500, detail="failed to update passphrase")
+
+        _upsert_kdbx_entry(
+            kp, _vault_entry_title("key_passphrase", alias), new_passphrase
+        )
+        kp.save()
+
+    def vault_decrypt(
+        self, workspace_id: str, *, master_password: str, vault_text: str
+    ) -> str:
+        root = self.ensure(workspace_id)
+        vault_password = _vault_password_from_kdbx(root, master_password)
+        raw = (vault_text or "").strip()
+        if not raw:
+            raise HTTPException(status_code=400, detail="vault_text is required")
+        try:
+            from ansible.parsing.vault import VaultLib, VaultSecret
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"ansible vault unavailable: {exc}"
+            )
+        vault = VaultLib(secrets=[("default", VaultSecret(vault_password.encode()))])
+        try:
+            decrypted = vault.decrypt(raw.encode("utf-8"))
+        except Exception:
+            raise HTTPException(status_code=400, detail="vault decryption failed")
+        return decrypted.decode("utf-8", errors="replace")
+
+    def vault_encrypt(
+        self, workspace_id: str, *, master_password: str, plaintext: str
+    ) -> str:
+        root = self.ensure(workspace_id)
+        vault_password = _vault_password_from_kdbx(root, master_password)
+        if plaintext is None:
+            raise HTTPException(status_code=400, detail="plaintext is required")
+        try:
+            from ansible.parsing.vault import VaultLib, VaultSecret
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"ansible vault unavailable: {exc}"
+            )
+        vault = VaultLib(secrets=[("default", VaultSecret(vault_password.encode()))])
+        try:
+            encrypted = vault.encrypt(plaintext.encode("utf-8"))
+        except Exception:
+            raise HTTPException(status_code=400, detail="vault encryption failed")
+        return encrypted.decode("utf-8", errors="replace")
+
+    def test_connection(
+        self,
+        *,
+        host: str,
+        port: Optional[int],
+        user: str,
+        auth_method: str,
+        password: Optional[str],
+        private_key: Optional[str],
+        key_passphrase: Optional[str],
+        timeout: int = 6,
+    ) -> Dict[str, Any]:
+        ping_ok = False
+        ping_error: Optional[str] = None
+        ssh_ok = False
+        ssh_error: Optional[str] = None
+
+        if host:
+            try:
+                res = subprocess.run(
+                    ["ping", "-c", "1", "-W", "2", host],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                ping_ok = res.returncode == 0
+                if not ping_ok:
+                    ping_error = (res.stderr or res.stdout or "ping failed").strip()
+            except Exception as exc:
+                ping_ok = False
+                ping_error = str(exc)
+
+        try:
+            import paramiko
+            from io import StringIO
+        except Exception as exc:
+            ssh_error = f"paramiko unavailable: {exc}"
+            return {
+                "ping_ok": ping_ok,
+                "ping_error": ping_error,
+                "ssh_ok": False,
+                "ssh_error": ssh_error,
+            }
+
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            connect_kwargs = {
+                "hostname": host,
+                "username": user,
+                "timeout": timeout,
+                "allow_agent": False,
+                "look_for_keys": False,
+            }
+            if port:
+                connect_kwargs["port"] = port
+            if auth_method == "password":
+                client.connect(
+                    **connect_kwargs,
+                    password=password or "",
+                )
+            else:
+                if not private_key:
+                    raise HTTPException(
+                        status_code=400, detail="private key is required"
+                    )
+                key_obj = None
+                key_buf = StringIO(private_key)
+                key_classes = [
+                    paramiko.Ed25519Key,
+                    paramiko.RSAKey,
+                    paramiko.ECDSAKey,
+                    paramiko.DSSKey,
+                ]
+                for cls in key_classes:
+                    key_buf.seek(0)
+                    try:
+                        key_obj = cls.from_private_key(
+                            key_buf, password=key_passphrase
+                        )
+                        break
+                    except Exception:
+                        continue
+                if key_obj is None:
+                    raise HTTPException(
+                        status_code=400, detail="failed to load private key"
+                    )
+                client.connect(
+                    **connect_kwargs,
+                    pkey=key_obj,
+                )
+            ssh_ok = True
+        except HTTPException as exc:
+            ssh_error = str(exc.detail)
+        except Exception as exc:
+            ssh_error = str(exc)
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
+
+        return {
+            "ping_ok": ping_ok,
+            "ping_error": ping_error,
+            "ssh_ok": ssh_ok,
+            "ssh_error": ssh_error,
+        }

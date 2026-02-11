@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import { filterRoles } from "../lib/role_filter";
 
 type RoleLogo = {
@@ -16,6 +17,12 @@ type Role = {
   description: string;
   deployment_targets: string[];
   logo?: RoleLogo | null;
+  documentation?: string | null;
+  video?: string | null;
+  forum?: string | null;
+  homepage?: string | null;
+  issue_tracker_url?: string | null;
+  license_url?: string | null;
 };
 
 const STATUS_ORDER = [
@@ -93,6 +100,42 @@ function displayTargets(targets: string[]) {
   return Array.from(out);
 }
 
+function toEmbedUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace("www.", "");
+    if (host === "youtu.be") {
+      const id = parsed.pathname.replace("/", "").trim();
+      return id ? `https://www.youtube.com/embed/${id}` : url;
+    }
+    if (host.includes("youtube.com")) {
+      if (parsed.pathname.startsWith("/embed/")) {
+        return url;
+      }
+      const id = parsed.searchParams.get("v");
+      return id ? `https://www.youtube.com/embed/${id}` : url;
+    }
+    if (host.includes("vimeo.com")) {
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      const id = parts[0];
+      return id ? `https://player.vimeo.com/video/${id}` : url;
+    }
+    return url;
+  } catch {
+    return url;
+  }
+}
+
+const QUICK_LINK_ICON_STYLE: CSSProperties = {
+  width: 28,
+  height: 28,
+  borderRadius: 10,
+  border: "1px solid var(--bs-border-color)",
+  display: "grid",
+  placeItems: "center",
+  background: "var(--bs-body-bg)",
+};
+
 type RoleDashboardProps = {
   roles: Role[];
   loading: boolean;
@@ -117,6 +160,21 @@ export default function RoleDashboard({
   const [targetFilter, setTargetFilter] = useState("all");
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
   const [page, setPage] = useState(1);
+  const [activeVideo, setActiveVideo] = useState<{
+    url: string;
+    title: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!activeVideo) return;
+    const handle = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setActiveVideo(null);
+      }
+    };
+    window.addEventListener("keydown", handle);
+    return () => window.removeEventListener("keydown", handle);
+  }, [activeVideo]);
 
   const statusOptions = useMemo(() => {
     const set = new Set<string>();
@@ -464,7 +522,13 @@ export default function RoleDashboard({
                     overflow: "hidden",
                   }}
                 >
-                  {role.logo?.url ? (
+                  {role.logo?.css_class ? (
+                    <i
+                      className={role.logo.css_class}
+                      aria-hidden="true"
+                      style={{ fontSize: 18, color: "var(--bs-body-color)" }}
+                    />
+                  ) : role.logo?.url ? (
                     <img
                       src={role.logo.url}
                       alt={role.display_name}
@@ -558,6 +622,115 @@ export default function RoleDashboard({
                   </span>
                 ))}
               </div>
+
+              {(() => {
+                const quickLinks = [
+                  {
+                    key: "documentation",
+                    label: "Documentation",
+                    url: role.documentation,
+                    type: "link",
+                    iconClass: "fa-solid fa-book",
+                  },
+                  {
+                    key: "video",
+                    label: "Video",
+                    url: role.video,
+                    type: "video",
+                    iconClass: "fa-solid fa-circle-play",
+                  },
+                  {
+                    key: "forum",
+                    label: "Forum",
+                    url: role.forum,
+                    type: "link",
+                    iconClass: "fa-solid fa-comments",
+                  },
+                  {
+                    key: "homepage",
+                    label: "Homepage",
+                    url: role.homepage,
+                    type: "link",
+                    iconClass: "fa-solid fa-house",
+                  },
+                  {
+                    key: "issues",
+                    label: "Issues",
+                    url: role.issue_tracker_url,
+                    type: "link",
+                    iconClass: "fa-solid fa-bug",
+                  },
+                  {
+                    key: "license",
+                    label: "License",
+                    url: role.license_url,
+                    type: "link",
+                    iconClass: "fa-solid fa-scale-balanced",
+                  },
+                ].filter((item) => !!item.url);
+
+                if (quickLinks.length === 0) {
+                  return null;
+                }
+
+                return (
+                  <div
+                    style={{
+                      marginTop: "auto",
+                      display: "flex",
+                      gap: 6,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
+                  >
+                    {quickLinks.map((link) =>
+                      link.type === "video" ? (
+                        <button
+                          key={link.key}
+                          onClick={() =>
+                            setActiveVideo({
+                              url: toEmbedUrl(link.url || ""),
+                              title: `${role.display_name} video`,
+                            })
+                          }
+                          title={link.label}
+                          aria-label={link.label}
+                          style={{
+                            ...QUICK_LINK_ICON_STYLE,
+                            cursor: "pointer",
+                          }}
+                        >
+                          <i
+                            className={link.iconClass}
+                            aria-hidden="true"
+                            style={{ fontSize: 12 }}
+                          />
+                        </button>
+                      ) : (
+                        <a
+                          key={link.key}
+                          href={link.url || "#"}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={link.label}
+                          aria-label={link.label}
+                          style={{
+                            ...QUICK_LINK_ICON_STYLE,
+                            color: "inherit",
+                            textDecoration: "none",
+                          }}
+                        >
+                          <i
+                            className={link.iconClass}
+                            aria-hidden="true"
+                            style={{ fontSize: 12 }}
+                          />
+                        </a>
+                      )
+                    )}
+                  </div>
+                );
+              })()}
             </article>
           );
         })}
@@ -620,6 +793,73 @@ export default function RoleDashboard({
           Next
         </button>
       </div>
+      {activeVideo ? (
+        <div
+          onClick={() => setActiveVideo(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(5, 10, 18, 0.7)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 80,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: "min(900px, 92vw)",
+              borderRadius: 18,
+              overflow: "hidden",
+              background: "var(--bs-body-bg)",
+              border: "1px solid var(--bs-border-color-translucent)",
+              boxShadow: "var(--deployer-shadow)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "10px 14px",
+                borderBottom: "1px solid var(--bs-border-color-translucent)",
+              }}
+            >
+              <span style={{ fontSize: 13, fontWeight: 600 }}>
+                {activeVideo.title}
+              </span>
+              <button
+                onClick={() => setActiveVideo(null)}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: "1px solid var(--bs-border-color)",
+                  background: "var(--bs-body-bg)",
+                  cursor: "pointer",
+                  fontSize: 12,
+                }}
+              >
+                Close
+              </button>
+            </div>
+            <div style={{ position: "relative", paddingTop: "56.25%" }}>
+              <iframe
+                src={activeVideo.url}
+                title={activeVideo.title}
+                allow="autoplay; encrypted-media"
+                allowFullScreen
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

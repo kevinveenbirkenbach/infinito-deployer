@@ -11,9 +11,13 @@ test("initial state is invalid and empty", () => {
   const state = createInitialState();
   assert.ok(state.alias);
   assert.equal(state.host, "");
+  assert.equal(state.port, "");
   assert.equal(state.user, "");
   assert.equal(state.password, "");
   assert.equal(state.privateKey, "");
+  assert.equal(state.publicKey, "");
+  assert.equal(state.keyAlgorithm, "ed25519");
+  assert.equal(state.keyPassphrase, "");
   assert.equal(isFormValid(state), false);
 });
 
