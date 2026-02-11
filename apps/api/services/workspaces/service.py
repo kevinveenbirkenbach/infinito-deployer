@@ -212,7 +212,10 @@ def _open_kdbx(
     if not path.exists():
         if not create_if_missing:
             raise HTTPException(status_code=404, detail="credentials vault not found")
-        if master_password_confirm is None or master_password_confirm != master_password:
+        if (
+            master_password_confirm is None
+            or master_password_confirm != master_password
+        ):
             raise HTTPException(
                 status_code=400, detail="master password confirmation mismatch"
             )
@@ -272,6 +275,7 @@ def _vault_password_from_kdbx(
 
 def _generate_passphrase() -> str:
     return secrets.token_urlsafe(24)
+
 
 class WorkspaceService:
     def __init__(self) -> None:
@@ -492,9 +496,7 @@ class WorkspaceService:
             try:
                 host_vars_data = (
                     yaml.safe_load(
-                        host_vars_path.read_text(
-                            encoding="utf-8", errors="replace"
-                        )
+                        host_vars_path.read_text(encoding="utf-8", errors="replace")
                     )
                     or {}
                 )
@@ -752,9 +754,7 @@ class WorkspaceService:
                 kp, _vault_entry_title("server_password", alias), server_password
             )
         if vault_password is not None:
-            _upsert_kdbx_entry(
-                kp, _vault_entry_title("vault_password"), vault_password
-            )
+            _upsert_kdbx_entry(kp, _vault_entry_title("vault_password"), vault_password)
         if key_passphrase is not None:
             _upsert_kdbx_entry(
                 kp, _vault_entry_title("key_passphrase", alias), key_passphrase
@@ -1047,9 +1047,7 @@ class WorkspaceService:
                 for cls in key_classes:
                     key_buf.seek(0)
                     try:
-                        key_obj = cls.from_private_key(
-                            key_buf, password=key_passphrase
-                        )
+                        key_obj = cls.from_private_key(key_buf, password=key_passphrase)
                         break
                     except Exception:
                         continue

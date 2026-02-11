@@ -230,7 +230,9 @@ def change_key_passphrase(
     return WorkspaceVaultEntryOut(ok=True)
 
 
-@router.post("/{workspace_id}/test-connection", response_model=WorkspaceConnectionTestOut)
+@router.post(
+    "/{workspace_id}/test-connection", response_model=WorkspaceConnectionTestOut
+)
 def test_connection(
     workspace_id: str, payload: WorkspaceConnectionTestIn
 ) -> WorkspaceConnectionTestOut:

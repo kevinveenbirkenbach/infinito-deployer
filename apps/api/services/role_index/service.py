@@ -102,9 +102,7 @@ class RoleIndexService:
                 else None
             )
 
-            documentation = _normalize_url(
-                md.documentation, md.id, "documentation"
-            )
+            documentation = _normalize_url(md.documentation, md.id, "documentation")
             video = _normalize_url(md.video, md.id, "video")
             homepage = _normalize_url(md.homepage, md.id, "homepage")
             issue_tracker_url = _normalize_url(
