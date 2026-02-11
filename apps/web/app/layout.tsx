@@ -20,8 +20,8 @@ const bodyFont = Work_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Infinito Deployer",
-  description: "Deployment dashboard for Infinito.Nexus (WIP)",
+  title: "Infinito.Nexus Software Center",
+  description: "Software on your infrastructure. Data under your control.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

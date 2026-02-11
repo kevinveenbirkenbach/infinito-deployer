@@ -605,13 +605,38 @@ export default function DeploymentWorkspace({
   const hasNext = activeIndex >= 0 && activeIndex < panels.length - 1;
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
-      {panels.map((panel) => {
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+        height: "100%",
+        minHeight: 0,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          flex: 1,
+          minHeight: 0,
+        }}
+      >
+        {panels.map((panel) => {
         const isOpen = activePanel === panel.key;
         const keepMounted = panel.key === "inventory";
         const mountContent = isOpen || keepMounted;
         return (
-          <div key={panel.key}>
+          <div
+            key={panel.key}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              flex: isOpen ? 1 : "0 0 auto",
+              minHeight: 0,
+            }}
+          >
             <button
               onClick={() => setActivePanel(panel.key)}
               aria-expanded={isOpen}
@@ -647,6 +672,9 @@ export default function DeploymentWorkspace({
                   padding: 12,
                   background: "var(--bs-body-bg)",
                   display: isOpen ? "block" : "none",
+                  flex: 1,
+                  minHeight: 0,
+                  overflow: "auto",
                 }}
                 aria-hidden={!isOpen}
               >
@@ -656,6 +684,7 @@ export default function DeploymentWorkspace({
           </div>
         );
       })}
+      </div>
       <div
         style={{
           marginTop: 8,
