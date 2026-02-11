@@ -47,8 +47,12 @@ Allow selecting workspaces via URL, support multiple workspaces per user, and cl
 
 * [ ] Logged‑in users see a **workspace overview** on the start page.
 * [ ] Overview lists all workspaces and allows selecting one.
+* [ ] In the header, **below the right logo**, show the **current workspace** with a dropdown of all user workspaces.
+  * [ ] Dropdown allows switching workspaces.
+  * [ ] When logged out, **nothing is shown** in that spot.
 
 **Acceptance Criteria**
 
 * [ ] Start page changes based on auth state.
 * [ ] User can select a workspace from the overview and is routed accordingly.
+* [ ] Workspace dropdown appears only for authenticated users and switches context.
