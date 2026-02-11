@@ -371,6 +371,27 @@ For each job:
 * [ ] Vault decrypt/show only works after explicit action and does not auto-reveal
 * [ ] Plaintext is never logged or streamed over SSE
 
+---
+
+### 4.2.4 Credentials Dialog & Server Selection
+
+* [ ] One “credentials box” per server (all servers visible)
+* [ ] Active server is marked via radio button
+* [ ] Each server has its own **Credentials** button and box
+* [ ] Only one credentials dialog/box can be open at a time
+* [ ] Credentials dialog opens via a **Credentials** button
+* [ ] Dialog appears as a JS popup/modal
+* [ ] Dialog contains all key and password configuration options
+* [ ] Each server row has a **Test connection** button to verify credentials
+* [ ] Test flow: probe ping first, then SSH login; show results separately
+
+**A/C**
+
+* [ ] Active server selection is unambiguous and persists
+* [ ] Test connection uses the selected server’s credentials
+* [ ] Ping and SSH results are shown independently (e.g. ping OK / SSH failed)
+* [ ] No credentials are logged or streamed over SSE during testing
+
 ### 4.3 Workspace Inventory (SPOT)
 
 * [x] Inventory is edited in Workspace & Files (inventory.yml, host_vars, group_vars)
