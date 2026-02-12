@@ -10,13 +10,11 @@ export function createWorkspacePanelVaultActions(ctx: any) {
     credentialsBusy,
     credentialsScope,
     credentialsRole,
-    setValuesText,
     forceOverwrite,
     pendingCredentials,
     vaultPromptMode,
-    vaultPasswordDraft,
-    vaultPasswordConfirm,
     masterChangeValues,
+    masterChangeMode,
     keyPassphraseModal,
     keyPassphraseValues,
     vaultValueModal,
@@ -31,8 +29,6 @@ export function createWorkspacePanelVaultActions(ctx: any) {
     setVaultPromptMode,
     setVaultPromptConfirm,
     setVaultPromptOpen,
-    setVaultError,
-    setVaultStatus,
     setMasterChangeBusy,
     setMasterChangeError,
     setMasterChangeOpen,
@@ -48,11 +44,21 @@ export function createWorkspacePanelVaultActions(ctx: any) {
     setEditorDirty,
   } = ctx;
 
+  const toUserError = (err: any, fallback: string) => {
+    const raw = String(err?.message ?? "").trim();
+    if (!raw) return fallback;
+    if (raw === "Failed to fetch") {
+      return "API unreachable. Check web/api connection and reload.";
+    }
+    return raw;
+  };
+
   const postCredentials = async (
     targetRoles: string[],
     force: boolean,
     setValues: string[],
-    masterPassword: string
+    masterPassword: string,
+    aliasOverride?: string
   ) => {
     if (!workspaceId || !masterPassword || credentialsBusy) return;
     setCredentialsBusy(true);
@@ -68,7 +74,7 @@ export function createWorkspacePanelVaultActions(ctx: any) {
           allow_empty_plain: allowEmptyPlain,
           set_values: setValues.length > 0 ? setValues : undefined,
           force,
-          alias: activeAlias || undefined,
+          alias: aliasOverride || activeAlias || undefined,
         }),
       });
       if (!res.ok) {
@@ -84,77 +90,45 @@ export function createWorkspacePanelVaultActions(ctx: any) {
       setCredentialsStatus("Credentials generated.");
       await refreshFiles(workspaceId);
     } catch (err: any) {
-      setCredentialsError(err?.message ?? "credential generation failed");
+      setCredentialsError(toUserError(err, "credential generation failed"));
     } finally {
       setCredentialsBusy(false);
     }
   };
 
-  const generateCredentials = async () => {
+  const generateCredentials = async (
+    options?: {
+      scope?: "all" | "single";
+      role?: string;
+      force?: boolean;
+      alias?: string;
+      targetRoles?: string[];
+    }
+  ) => {
     if (!workspaceId || credentialsBusy) return;
-    const targetRoles = resolveTargetRoles(credentialsScope, credentialsRole);
+    const scope = options?.scope ?? credentialsScope;
+    const role = options?.role ?? credentialsRole;
+    const force = options?.force ?? forceOverwrite;
+    const alias = options?.alias || activeAlias;
+    const targetRoles = options?.targetRoles ?? resolveTargetRoles(scope, role);
     if (targetRoles.length === 0) {
       setCredentialsError("Select a role to generate credentials.");
       return;
     }
-    const setValues =
-      credentialsScope === "single"
-        ? setValuesText
-            .split(/[\n,]+/)
-            .map((value: string) => value.trim())
-            .filter(Boolean)
-        : [];
     setPendingCredentials({
       roles: targetRoles,
-      force: forceOverwrite,
-      setValues,
+      force,
+      setValues: [],
+      alias,
     });
     setVaultPromptMode("generate");
     setVaultPromptConfirm(false);
     setVaultPromptOpen(true);
   };
 
-  const storeVaultPassword = async (
-    masterPassword: string,
-    masterConfirm: string | null
-  ) => {
-    if (!workspaceId) return;
-    if (!vaultPasswordDraft) {
-      setVaultError("Enter a vault password to store.");
-      return;
-    }
-    if (vaultPasswordDraft !== vaultPasswordConfirm) {
-      setVaultError("Vault passwords do not match.");
-      return;
-    }
-    setVaultError(null);
-    setVaultStatus(null);
-    try {
-      const res = await fetch(`${baseUrl}/api/workspaces/${workspaceId}/vault/entries`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          master_password: masterPassword,
-          master_password_confirm: masterConfirm || undefined,
-          create_if_missing: true,
-          vault_password: vaultPasswordDraft,
-        }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `HTTP ${res.status}`);
-      }
-      setVaultStatus("Vault password stored in credentials.kdbx.");
-      ctx.setVaultPasswordDraft("");
-      ctx.setVaultPasswordConfirm("");
-    } catch (err: any) {
-      setVaultError(err?.message ?? "failed to store vault password");
-    }
-  };
-
   const handleVaultPromptSubmit = (
     masterPassword: string,
-    confirmPassword: string | null
+    _confirmPassword: string | null
   ) => {
     setVaultPromptOpen(false);
     const mode = vaultPromptMode;
@@ -164,13 +138,50 @@ export function createWorkspacePanelVaultActions(ctx: any) {
         pendingCredentials.roles,
         pendingCredentials.force,
         pendingCredentials.setValues,
-        masterPassword
+        masterPassword,
+        pendingCredentials.alias
       );
       setPendingCredentials(null);
       return;
     }
-    if (mode === "save-vault") {
-      void storeVaultPassword(masterPassword, confirmPassword);
+    if (mode === "vault-reset") {
+      void (async () => {
+        if (!workspaceId) return;
+        setCredentialsBusy(true);
+        setCredentialsError(null);
+        setCredentialsStatus(null);
+        try {
+          const res = await fetch(
+            `${baseUrl}/api/workspaces/${workspaceId}/vault/reset-password`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ master_password: masterPassword }),
+            }
+          );
+          if (!res.ok) {
+            let message = `HTTP ${res.status}`;
+            try {
+              const data = await res.json();
+              if (data?.detail) message = data.detail;
+            } catch {
+              // ignore
+            }
+            throw new Error(message);
+          }
+          const data = await res.json();
+          const updatedValues = Number(data?.updated_values ?? 0);
+          const updatedFiles = Number(data?.updated_files ?? 0);
+          setCredentialsStatus(
+            `Vault password reset (${updatedValues} values in ${updatedFiles} files).`
+          );
+          await refreshFiles(workspaceId);
+        } catch (err: any) {
+          setCredentialsError(toUserError(err, "failed to reset vault password"));
+        } finally {
+          setCredentialsBusy(false);
+        }
+      })();
     }
   };
 
@@ -180,12 +191,13 @@ export function createWorkspacePanelVaultActions(ctx: any) {
     setMasterChangeError(null);
     try {
       const res = await fetch(
-        `${baseUrl}/api/workspaces/${workspaceId}/vault/change-master`,
+        `${baseUrl}/api/workspaces/${workspaceId}/vault/master-password`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            master_password: masterChangeValues.current,
+            current_master_password:
+              masterChangeMode === "reset" ? masterChangeValues.current : undefined,
             new_master_password: masterChangeValues.next,
             new_master_password_confirm: masterChangeValues.confirm,
           }),
@@ -197,11 +209,25 @@ export function createWorkspacePanelVaultActions(ctx: any) {
       }
       setMasterChangeOpen(false);
       setMasterChangeValues({ current: "", next: "", confirm: "" });
+      setCredentialsStatus(
+        masterChangeMode === "set"
+          ? "Master password set."
+          : "Master password reset."
+      );
     } catch (err: any) {
-      setMasterChangeError(err?.message ?? "failed to change master password");
+      setMasterChangeError(toUserError(err, "failed to change master password"));
     } finally {
       setMasterChangeBusy(false);
     }
+  };
+
+  const resetVaultPassword = () => {
+    if (!workspaceId || credentialsBusy) return;
+    setCredentialsError(null);
+    setCredentialsStatus(null);
+    setVaultPromptMode("vault-reset");
+    setVaultPromptConfirm(false);
+    setVaultPromptOpen(true);
   };
 
   const submitKeyPassphraseChange = async () => {
@@ -229,7 +255,7 @@ export function createWorkspacePanelVaultActions(ctx: any) {
       setKeyPassphraseModal(null);
       setKeyPassphraseValues({ master: "", next: "", confirm: "" });
     } catch (err: any) {
-      setKeyPassphraseError(err?.message ?? "failed to change passphrase");
+      setKeyPassphraseError(toUserError(err, "failed to change passphrase"));
     } finally {
       setKeyPassphraseBusy(false);
     }
@@ -330,7 +356,7 @@ export function createWorkspacePanelVaultActions(ctx: any) {
       setVaultValueModal({
         ...vaultValueModal,
         loading: false,
-        error: err?.message ?? "vault operation failed",
+        error: toUserError(err, "vault operation failed"),
       });
     }
   };
@@ -338,7 +364,7 @@ export function createWorkspacePanelVaultActions(ctx: any) {
   return {
     postCredentials,
     generateCredentials,
-    storeVaultPassword,
+    resetVaultPassword,
     handleVaultPromptSubmit,
     submitMasterChange,
     submitKeyPassphraseChange,

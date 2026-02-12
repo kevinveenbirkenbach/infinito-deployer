@@ -57,7 +57,9 @@ export default function WorkspacePanel({
   compact = false,
 }: WorkspacePanelProps) {
   const Wrapper = compact ? "div" : "section";
-  const wrapperClassName = compact ? undefined : styles.wrapper;
+  const wrapperClassName = compact
+    ? `${styles.root} ${styles.compactRoot}`
+    : `${styles.root} ${styles.wrapper}`;
   const [userId, setUserId] = useState<string | null>(null);
   const [workspaceList, setWorkspaceList] = useState<WorkspaceListEntry[]>([]);
   const [workspaceSwitcherTarget, setWorkspaceSwitcherTarget] =
@@ -87,23 +89,19 @@ export default function WorkspacePanel({
 
   const [openDirs, setOpenDirs] = useState<Set<string>>(new Set());
 
-  const [vaultPasswordDraft, setVaultPasswordDraft] = useState("");
-  const [vaultPasswordConfirm, setVaultPasswordConfirm] = useState("");
-  const [vaultStatus, setVaultStatus] = useState<string | null>(null);
-  const [vaultError, setVaultError] = useState<string | null>(null);
   const [vaultPromptOpen, setVaultPromptOpen] = useState(false);
   const [vaultPromptMode, setVaultPromptMode] = useState<
-    "generate" | "save-vault" | null
+    "generate" | "vault-reset" | null
   >(null);
   const [vaultPromptConfirm, setVaultPromptConfirm] = useState(false);
   const [pendingCredentials, setPendingCredentials] = useState<{
     roles: string[];
     force: boolean;
     setValues: string[];
+    alias?: string;
   } | null>(null);
-  const [allowEmptyPlain, setAllowEmptyPlain] = useState(false);
+  const allowEmptyPlain = false;
   const [forceOverwrite, setForceOverwrite] = useState(false);
-  const [setValuesText, setSetValuesText] = useState("");
   const [credentialsScope, setCredentialsScope] = useState<"all" | "single">(
     "all"
   );
@@ -176,6 +174,9 @@ export default function WorkspacePanel({
   const [masterChangeOpen, setMasterChangeOpen] = useState(false);
   const [masterChangeError, setMasterChangeError] = useState<string | null>(null);
   const [masterChangeBusy, setMasterChangeBusy] = useState(false);
+  const [masterChangeMode, setMasterChangeMode] = useState<"set" | "reset">(
+    "reset"
+  );
   const [masterChangeValues, setMasterChangeValues] = useState({
     current: "",
     next: "",
@@ -231,10 +232,35 @@ export default function WorkspacePanel({
     () => hostVarsAliasesFromFiles(files),
     [files]
   );
+  const hasCredentialsVault = useMemo(
+    () => files.some((entry) => entry.path === "secrets/credentials.kdbx"),
+    [files]
+  );
 
   const activeRoles = useMemo(
     () => normalizeRoles(selectedRolesByAlias[activeAlias] ?? []),
     [selectedRolesByAlias, activeAlias]
+  );
+  const serverRolesByAlias = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    const aliases = new Set<string>();
+    if (activeAlias) aliases.add(activeAlias);
+    hostVarsAliases.forEach((alias) => {
+      const key = String(alias || "").trim();
+      if (key) aliases.add(key);
+    });
+    Object.keys(selectedRolesByAlias || {}).forEach((alias) => {
+      const key = String(alias || "").trim();
+      if (key) aliases.add(key);
+    });
+    aliases.forEach((alias) => {
+      map[alias] = normalizeRoles(selectedRolesByAlias[alias] ?? []);
+    });
+    return map;
+  }, [activeAlias, hostVarsAliases, selectedRolesByAlias]);
+  const credentialServerAliases = useMemo(
+    () => Object.keys(serverRolesByAlias),
+    [serverRolesByAlias]
   );
 
   const tree = useMemo(() => buildTree(files), [files]);
@@ -484,6 +510,7 @@ export default function WorkspacePanel({
 
   const {
     generateCredentials,
+    resetVaultPassword,
     handleVaultPromptSubmit,
     submitMasterChange,
     submitKeyPassphraseChange,
@@ -498,13 +525,11 @@ export default function WorkspacePanel({
     credentialsBusy,
     credentialsScope,
     credentialsRole,
-    setValuesText,
     forceOverwrite,
     pendingCredentials,
     vaultPromptMode,
-    vaultPasswordDraft,
-    vaultPasswordConfirm,
     masterChangeValues,
+    masterChangeMode,
     keyPassphraseModal,
     keyPassphraseValues,
     vaultValueModal,
@@ -520,10 +545,6 @@ export default function WorkspacePanel({
     setVaultPromptMode,
     setVaultPromptConfirm,
     setVaultPromptOpen,
-    setVaultError,
-    setVaultStatus,
-    setVaultPasswordDraft,
-    setVaultPasswordConfirm,
     setMasterChangeBusy,
     setMasterChangeError,
     setMasterChangeOpen,
@@ -581,6 +602,13 @@ export default function WorkspacePanel({
       alive = false;
     };
   }, [baseUrl, onWorkspaceIdChange, userId]);
+
+  const openMasterPasswordDialog = () => {
+    setMasterChangeMode(hasCredentialsVault ? "reset" : "set");
+    setMasterChangeError(null);
+    setMasterChangeValues({ current: "", next: "", confirm: "" });
+    setMasterChangeOpen(true);
+  };
 
   useEffect(() => {
     if (isKdbx) return;
@@ -791,7 +819,7 @@ export default function WorkspacePanel({
     inventoryReady &&
     !!workspaceId &&
     !credentialsBusy &&
-    (credentialsScope === "all" ? activeRoles.length > 0 : !!credentialsRole);
+    credentialServerAliases.some((alias) => (serverRolesByAlias[alias] ?? []).length > 0);
 
   const workspaceSwitcher =
     userId && workspaceSwitcherTarget
@@ -828,86 +856,82 @@ export default function WorkspacePanel({
             void selectWorkspace(id);
           }}
         />
-        <WorkspacePanelCards
-          generateCredentials={generateCredentials}
-          canGenerateCredentials={canGenerateCredentials}
-          credentialsBusy={credentialsBusy}
-          vaultPasswordDraft={vaultPasswordDraft}
-          setVaultPasswordDraft={setVaultPasswordDraft}
-          vaultPasswordConfirm={vaultPasswordConfirm}
-          setVaultPasswordConfirm={setVaultPasswordConfirm}
-          setVaultPromptMode={setVaultPromptMode}
-          setVaultPromptConfirm={setVaultPromptConfirm}
-          setVaultPromptOpen={setVaultPromptOpen}
-          workspaceId={workspaceId}
-          credentialsScope={credentialsScope}
-          setValuesText={setValuesText}
-          setSetValuesText={setSetValuesText}
-          activeRoles={activeRoles}
-          credentialsRole={credentialsRole}
-          setCredentialsRole={setCredentialsRole}
-          setCredentialsScope={setCredentialsScope}
-          allowEmptyPlain={allowEmptyPlain}
-          setAllowEmptyPlain={setAllowEmptyPlain}
-          forceOverwrite={forceOverwrite}
-          setForceOverwrite={setForceOverwrite}
-          credentialsError={credentialsError}
-          vaultError={vaultError}
-          vaultStatus={vaultStatus}
-          credentialsStatus={credentialsStatus}
-          downloadZip={downloadZip}
-          zipBusy={zipBusy}
-          openUploadPicker={openUploadPicker}
-          uploadBusy={uploadBusy}
-          uploadInputRef={uploadInputRef}
-          onUploadSelect={onUploadSelect}
-          uploadError={uploadError}
-          zipError={zipError}
-          uploadStatus={uploadStatus}
-        />
-
-        <WorkspacePanelFileEditor
-          activePath={activePath}
-          activeExtension={activeExtension}
-          isKdbx={isKdbx}
-          editorDirty={editorDirty}
-          editorLoading={editorLoading}
-          saveFile={() => {
-            void saveFile(editorValue, editorDirty);
-          }}
-          loadFile={(path: string) => {
-            void loadFile(path);
-          }}
-          kdbxPasswordRef={kdbxPasswordRef}
-          lockKdbx={lockKdbx}
-          setKdbxPromptOpen={setKdbxPromptOpen}
-          editorValue={editorValue}
-          setEditorValue={setEditorValue}
-          setEditorDirty={setEditorDirty}
-          setEditorStatus={setEditorStatus}
-          setEditorError={setEditorError}
-          editorExtensions={editorExtensions}
-          editorViewRef={editorViewRef}
-          setContextMenu={setContextMenu}
-          setEditorMenu={setEditorMenu}
-          markdownHtml={markdownHtml}
-          setMarkdownHtml={setMarkdownHtml}
-          markdownSyncRef={markdownSyncRef}
-          turndown={turndown}
-          quillModules={quillModules}
-          kdbxLoading={kdbxLoading}
-          kdbxError={kdbxError}
-          kdbxEntries={kdbxEntries}
-          kdbxRevealed={kdbxRevealed}
-          setKdbxRevealed={setKdbxRevealed}
-          editorError={editorError}
-          editorStatus={editorStatus}
-          openDirs={openDirs}
-          treeItems={treeItems}
-          toggleDir={toggleDir}
-          fileOpError={fileOpError}
-          openContextMenu={openContextMenu}
-        />
+        <div className={styles.editorSection}>
+          <WorkspacePanelFileEditor
+            activePath={activePath}
+            activeExtension={activeExtension}
+            isKdbx={isKdbx}
+            editorDirty={editorDirty}
+            editorLoading={editorLoading}
+            saveFile={() => {
+              void saveFile(editorValue, editorDirty);
+            }}
+            loadFile={(path: string) => {
+              void loadFile(path);
+            }}
+            kdbxPasswordRef={kdbxPasswordRef}
+            lockKdbx={lockKdbx}
+            setKdbxPromptOpen={setKdbxPromptOpen}
+            editorValue={editorValue}
+            setEditorValue={setEditorValue}
+            setEditorDirty={setEditorDirty}
+            setEditorStatus={setEditorStatus}
+            setEditorError={setEditorError}
+            editorExtensions={editorExtensions}
+            editorViewRef={editorViewRef}
+            setContextMenu={setContextMenu}
+            setEditorMenu={setEditorMenu}
+            markdownHtml={markdownHtml}
+            setMarkdownHtml={setMarkdownHtml}
+            markdownSyncRef={markdownSyncRef}
+            turndown={turndown}
+            quillModules={quillModules}
+            kdbxLoading={kdbxLoading}
+            kdbxError={kdbxError}
+            kdbxEntries={kdbxEntries}
+            kdbxRevealed={kdbxRevealed}
+            setKdbxRevealed={setKdbxRevealed}
+            editorError={editorError}
+            editorStatus={editorStatus}
+            openDirs={openDirs}
+            treeItems={treeItems}
+            toggleDir={toggleDir}
+            fileOpError={fileOpError}
+            openContextMenu={openContextMenu}
+          />
+        </div>
+        <div className={styles.bottomBar}>
+          <WorkspacePanelCards
+            generateCredentials={generateCredentials}
+            resetVaultPassword={resetVaultPassword}
+            openMasterPasswordDialog={openMasterPasswordDialog}
+            hasCredentialsVault={hasCredentialsVault}
+            canGenerateCredentials={canGenerateCredentials}
+            credentialsBusy={credentialsBusy}
+            workspaceId={workspaceId}
+            activeAlias={activeAlias}
+            serverAliases={credentialServerAliases}
+            serverRolesByAlias={serverRolesByAlias}
+            credentialsScope={credentialsScope}
+            activeRoles={activeRoles}
+            credentialsRole={credentialsRole}
+            setCredentialsRole={setCredentialsRole}
+            setCredentialsScope={setCredentialsScope}
+            forceOverwrite={forceOverwrite}
+            setForceOverwrite={setForceOverwrite}
+            credentialsError={credentialsError}
+            credentialsStatus={credentialsStatus}
+            downloadZip={downloadZip}
+            zipBusy={zipBusy}
+            openUploadPicker={openUploadPicker}
+            uploadBusy={uploadBusy}
+            uploadInputRef={uploadInputRef}
+            onUploadSelect={onUploadSelect}
+            uploadError={uploadError}
+            zipError={zipError}
+            uploadStatus={uploadStatus}
+          />
+        </div>
       </Wrapper>
       <WorkspacePanelOverlays
         contextMenu={contextMenu}
@@ -918,6 +942,7 @@ export default function WorkspacePanel({
         downloadFile={downloadFile}
         deleteFile={deleteFile}
         setMasterChangeOpen={setMasterChangeOpen}
+        setMasterChangeMode={setMasterChangeMode}
         setMasterChangeError={setMasterChangeError}
         setKeyPassphraseModal={setKeyPassphraseModal}
         setKeyPassphraseError={setKeyPassphraseError}
@@ -929,13 +954,13 @@ export default function WorkspacePanel({
         setKdbxPromptOpen={setKdbxPromptOpen}
         setEditorLoading={setEditorLoading}
         vaultPromptOpen={vaultPromptOpen}
-        vaultPromptMode={vaultPromptMode}
         vaultPromptConfirm={vaultPromptConfirm}
         handleVaultPromptSubmit={handleVaultPromptSubmit}
         setVaultPromptOpen={setVaultPromptOpen}
         setVaultPromptMode={setVaultPromptMode}
         setPendingCredentials={setPendingCredentials}
         masterChangeOpen={masterChangeOpen}
+        masterChangeMode={masterChangeMode}
         masterChangeValues={masterChangeValues}
         setMasterChangeValues={setMasterChangeValues}
         masterChangeError={masterChangeError}

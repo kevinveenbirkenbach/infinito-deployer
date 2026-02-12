@@ -1,3 +1,11 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  flex: 1;
+}
+
 .wrapper {
   margin-top: 28px;
   padding: 24px;
@@ -5,4 +13,36 @@
   background: var(--deployer-panel-workspace-bg);
   border: 1px solid var(--bs-border-color-translucent);
   box-shadow: var(--deployer-shadow);
+}
+
+.compactRoot {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  flex: 1;
+  overflow: hidden;
+}
+
+.editorSection {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+}
+
+.bottomBar {
+  min-height: 0;
+  margin-top: auto;
+  z-index: 3;
+}
+
+.compactRoot .editorSection {
+  margin-left: -12px;
+  margin-right: -12px;
+}
+
+.compactRoot .bottomBar {
+  margin-left: -12px;
+  margin-right: -12px;
+  margin-bottom: -12px;
 }

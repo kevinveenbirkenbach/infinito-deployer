@@ -1,37 +1,139 @@
 .cardsRoot {
-  margin-top: 18px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
+  margin-top: 0;
+  display: block;
+  min-height: 0;
 }
 
 .card {
-  padding: 16px;
-  border-radius: 18px;
+  padding: 8px 12px 14px;
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
 }
 
-.label {
+.bottomRail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 2px;
+  min-height: 0;
+}
+
+.menuWrap {
+  position: relative;
+}
+
+.menuTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.menuPanel {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: min(340px, calc(100vw - 56px));
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 14px;
+  background: var(--bs-body-bg);
+  box-shadow: var(--deployer-shadow-strong);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  z-index: 30;
+}
+
+.menuList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.menuItem {
+  width: 100%;
+  display: inline-flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menuItem:hover:not(:disabled) {
+  background: var(--bs-tertiary-bg);
+}
+
+.menuItem:disabled {
+  color: var(--deployer-disabled-text);
+  cursor: not-allowed;
+}
+
+.menuItemLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.submenu {
+  margin: 2px 0 4px;
+  padding-left: 20px;
+  display: grid;
+  gap: 2px;
+}
+
+.submenuItem {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.submenuItem:hover:not(:disabled) {
+  background: var(--bs-tertiary-bg);
+}
+
+.submenuItem:disabled {
+  color: var(--deployer-disabled-text);
+  cursor: not-allowed;
+}
+
+.menuDivider {
+  height: 1px;
+  background: var(--bs-border-color-translucent);
+  margin: 4px 0;
+}
+
+.menuStatus {
+  margin: 2px 0 0;
   font-size: 12px;
 }
 
-.actionsRow {
-  margin-top: 8px;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.formStack {
-  margin-top: 10px;
-  display: grid;
-  gap: 8px;
-}
-
-.inputControl {
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--bs-border-color);
-  background: var(--bs-body-bg);
+.label {
   font-size: 12px;
 }
 
@@ -50,46 +152,6 @@
 .selectControlDisabled {
   background: var(--deployer-disabled-bg);
   color: var(--deployer-disabled-text);
-}
-
-.primaryButton {
-  padding: 8px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--bs-body-color);
-  font-size: 12px;
-}
-
-.primaryButtonEnabled {
-  background: var(--bs-body-color);
-  color: var(--bs-body-bg);
-  cursor: pointer;
-}
-
-.primaryButtonDisabled {
-  background: var(--deployer-disabled-bg);
-  color: var(--deployer-disabled-text);
-  cursor: not-allowed;
-}
-
-.neutralButton {
-  padding: 8px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--bs-border-color);
-  background: var(--bs-body-bg);
-  color: var(--deployer-muted-ink);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.auxButton {
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--bs-border-color);
-  background: var(--bs-body-bg);
-  color: var(--deployer-muted-ink);
-  font-size: 12px;
-  cursor: pointer;
-  width: fit-content;
 }
 
 .radioGroup {
@@ -116,10 +178,73 @@
 }
 
 .statusText {
-  margin: 8px 0 0;
+  margin: 0;
   font-size: 12px;
 }
 
 .hiddenInput {
   display: none;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 20, 0.65);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  z-index: 220;
+}
+
+.modalCard {
+  width: min(420px, 92vw);
+  border-radius: 18px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  box-shadow: var(--deployer-shadow-strong);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 16px;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modalButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.modalButton:disabled {
+  background: var(--deployer-disabled-bg);
+  color: var(--deployer-disabled-text);
+  cursor: not-allowed;
+}
+
+@media (max-width: 960px) {
+  .bottomRail {
+    flex-wrap: wrap;
+  }
+
+  .menuPanel {
+    left: 0;
+    right: auto;
+    width: min(300px, calc(100vw - 40px));
+  }
 }

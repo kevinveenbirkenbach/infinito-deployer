@@ -116,12 +116,28 @@ def _read_kdbx_entry(kp, title: str) -> Optional[str]:
 
 
 def _vault_password_from_kdbx(
-    root: Path, master_password: str, *, create_if_missing: bool = False
+    root: Path,
+    master_password: str,
+    *,
+    create_if_missing: bool = False,
+    provision_if_missing: bool = False,
 ) -> str:
-    kp = _open_kdbx(root, master_password, create_if_missing=create_if_missing)
+    kp = _open_kdbx(
+        root,
+        master_password,
+        create_if_missing=create_if_missing,
+        master_password_confirm=master_password if create_if_missing else None,
+    )
     value = _read_kdbx_entry(kp, _vault_entry_title("vault_password"))
-    if not value:
+    if value:
+        return value
+
+    if not provision_if_missing:
         raise HTTPException(status_code=400, detail="vault password not set")
+
+    value = _generate_passphrase()
+    _upsert_kdbx_entry(kp, _vault_entry_title("vault_password"), value)
+    kp.save()
     return value
 
 

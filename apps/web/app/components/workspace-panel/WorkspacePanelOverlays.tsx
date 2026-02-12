@@ -14,6 +14,7 @@ export default function WorkspacePanelOverlays(props: any) {
     downloadFile,
     deleteFile,
     setMasterChangeOpen,
+    setMasterChangeMode,
     setMasterChangeError,
     setKeyPassphraseModal,
     setKeyPassphraseError,
@@ -25,13 +26,13 @@ export default function WorkspacePanelOverlays(props: any) {
     setKdbxPromptOpen,
     setEditorLoading,
     vaultPromptOpen,
-    vaultPromptMode,
     vaultPromptConfirm,
     handleVaultPromptSubmit,
     setVaultPromptOpen,
     setVaultPromptMode,
     setPendingCredentials,
     masterChangeOpen,
+    masterChangeMode,
     masterChangeValues,
     setMasterChangeValues,
     masterChangeError,
@@ -159,6 +160,7 @@ export default function WorkspacePanelOverlays(props: any) {
                       <button
                         onClick={() => {
                           setContextMenu(null);
+                          setMasterChangeMode("reset");
                           setMasterChangeOpen(true);
                           setMasterChangeError(null);
                         }}
@@ -221,11 +223,7 @@ export default function WorkspacePanelOverlays(props: any) {
       />
       <VaultPasswordModal
         open={vaultPromptOpen}
-        title={
-          vaultPromptMode === "save-vault"
-            ? "Store vault password"
-            : "Unlock credentials vault"
-        }
+        title="Unlock credentials vault"
         requireConfirm={vaultPromptConfirm}
         confirmLabel="Confirm master password"
         helperText="Master password is required for each vault action."
@@ -242,23 +240,29 @@ export default function WorkspacePanelOverlays(props: any) {
             onClick={(event) => event.stopPropagation()}
             className={styles.modalCard}
           >
-            <h3 className={styles.modalTitle}>Change master password</h3>
-            <div className={styles.fieldStack}>
-              <label className={`text-body-tertiary ${styles.fieldLabel}`}>
-                Current master password
-              </label>
-              <input
-                type="password"
-                value={masterChangeValues.current}
-                onChange={(event) =>
-                  setMasterChangeValues((prev: any) => ({
-                    ...prev,
-                    current: event.target.value,
-                  }))
-                }
-                className={styles.inputControl}
-              />
-            </div>
+            <h3 className={styles.modalTitle}>
+              {masterChangeMode === "set"
+                ? "Set master password"
+                : "Reset master password"}
+            </h3>
+            {masterChangeMode === "reset" ? (
+              <div className={styles.fieldStack}>
+                <label className={`text-body-tertiary ${styles.fieldLabel}`}>
+                  Current master password
+                </label>
+                <input
+                  type="password"
+                  value={masterChangeValues.current}
+                  onChange={(event) =>
+                    setMasterChangeValues((prev: any) => ({
+                      ...prev,
+                      current: event.target.value,
+                    }))
+                  }
+                  className={styles.inputControl}
+                />
+              </div>
+            ) : null}
             <div className={styles.fieldStack}>
               <label className={`text-body-tertiary ${styles.fieldLabel}`}>
                 New master password
@@ -306,7 +310,11 @@ export default function WorkspacePanelOverlays(props: any) {
                 disabled={masterChangeBusy}
                 className={styles.primaryButton}
               >
-                {masterChangeBusy ? "Saving..." : "Change password"}
+                {masterChangeBusy
+                  ? "Saving..."
+                  : masterChangeMode === "set"
+                  ? "Set password"
+                  : "Reset password"}
               </button>
             </div>
           </div>

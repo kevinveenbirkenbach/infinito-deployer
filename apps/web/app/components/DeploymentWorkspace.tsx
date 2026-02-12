@@ -777,28 +777,30 @@ export default function DeploymentWorkspace({
       key: "inventory",
       title: "Inventory",
       content: (
-        <WorkspacePanel
-          baseUrl={baseUrl}
-          selectedRolesByAlias={selectedRolesByAlias}
-          credentials={credentials}
-          onCredentialsPatch={(patch) => {
-            if (!activeServer) return;
-            updateServer(activeServer.alias, patch);
-          }}
-          onInventoryReadyChange={setInventoryReady}
-          onSelectedRolesByAliasChange={applySelectedRolesByAlias}
-          onWorkspaceIdChange={setWorkspaceId}
-          aliasRenames={aliasRenames}
-          onAliasRenamesHandled={(count) =>
-            setAliasRenames((prev) => prev.slice(count))
-          }
-          aliasDeletes={aliasDeletes}
-          onAliasDeletesHandled={(count) =>
-            setAliasDeletes((prev) => prev.slice(count))
-          }
-          selectionTouched={selectionTouched}
-          compact
-        />
+        <div className={styles.inventoryPanelContent}>
+          <WorkspacePanel
+            baseUrl={baseUrl}
+            selectedRolesByAlias={selectedRolesByAlias}
+            credentials={credentials}
+            onCredentialsPatch={(patch) => {
+              if (!activeServer) return;
+              updateServer(activeServer.alias, patch);
+            }}
+            onInventoryReadyChange={setInventoryReady}
+            onSelectedRolesByAliasChange={applySelectedRolesByAlias}
+            onWorkspaceIdChange={setWorkspaceId}
+            aliasRenames={aliasRenames}
+            onAliasRenamesHandled={(count) =>
+              setAliasRenames((prev) => prev.slice(count))
+            }
+            aliasDeletes={aliasDeletes}
+            onAliasDeletesHandled={(count) =>
+              setAliasDeletes((prev) => prev.slice(count))
+            }
+            selectionTouched={selectionTouched}
+            compact
+          />
+        </div>
       ),
     },
     {

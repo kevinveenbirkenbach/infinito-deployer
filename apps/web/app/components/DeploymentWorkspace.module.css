@@ -66,6 +66,12 @@
   flex-direction: column;
 }
 
+.inventoryPanelContent {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
 .navRow {
   margin-top: 8px;
   display: flex;

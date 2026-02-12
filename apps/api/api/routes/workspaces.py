@@ -13,6 +13,9 @@ from api.schemas.workspace import (
     WorkspaceVaultEntryIn,
     WorkspaceVaultEntryOut,
     WorkspaceVaultChangeIn,
+    WorkspaceMasterPasswordIn,
+    WorkspaceVaultPasswordResetIn,
+    WorkspaceVaultPasswordResetOut,
     WorkspaceVaultDecryptIn,
     WorkspaceVaultDecryptOut,
     WorkspaceVaultEncryptIn,
@@ -164,13 +167,43 @@ def set_vault_entries(
 def change_vault_master(
     workspace_id: str, payload: WorkspaceVaultChangeIn
 ) -> WorkspaceVaultEntryOut:
-    _svc().change_vault_master_password(
+    _svc().set_or_reset_vault_master_password(
         workspace_id=workspace_id,
-        master_password=payload.master_password,
+        current_master_password=payload.master_password,
         new_master_password=payload.new_master_password,
         new_master_password_confirm=payload.new_master_password_confirm,
     )
     return WorkspaceVaultEntryOut(ok=True)
+
+
+@router.post(
+    "/{workspace_id}/vault/master-password", response_model=WorkspaceVaultEntryOut
+)
+def set_or_reset_vault_master(
+    workspace_id: str, payload: WorkspaceMasterPasswordIn
+) -> WorkspaceVaultEntryOut:
+    _svc().set_or_reset_vault_master_password(
+        workspace_id=workspace_id,
+        current_master_password=payload.current_master_password,
+        new_master_password=payload.new_master_password,
+        new_master_password_confirm=payload.new_master_password_confirm,
+    )
+    return WorkspaceVaultEntryOut(ok=True)
+
+
+@router.post(
+    "/{workspace_id}/vault/reset-password",
+    response_model=WorkspaceVaultPasswordResetOut,
+)
+def reset_vault_password(
+    workspace_id: str, payload: WorkspaceVaultPasswordResetIn
+) -> WorkspaceVaultPasswordResetOut:
+    result = _svc().reset_vault_password(
+        workspace_id=workspace_id,
+        master_password=payload.master_password,
+        new_vault_password=payload.new_vault_password,
+    )
+    return WorkspaceVaultPasswordResetOut(ok=True, **result)
 
 
 @router.post("/{workspace_id}/vault/decrypt", response_model=WorkspaceVaultDecryptOut)

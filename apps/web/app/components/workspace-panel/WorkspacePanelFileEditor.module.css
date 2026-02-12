@@ -1,14 +1,35 @@
 .root {
-  margin-top: 20px;
+  margin-top: 0;
   display: grid;
-  grid-template-columns: minmax(200px, 1fr) minmax(320px, 2fr);
-  gap: 16px;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  gap: 0;
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  overflow: hidden;
+  background: var(--bs-body-bg);
+  min-height: 0;
+  height: 100%;
+  flex: 1;
+  align-self: stretch;
+  width: 100%;
 }
 
 .panel {
-  padding: 16px;
-  border-radius: 18px;
-  min-height: 320px;
+  padding: 12px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bs-body-bg);
+}
+
+.filesPanel {
+  border-right: 1px solid var(--bs-border-color-translucent);
+}
+
+.editorPanel {
+  min-width: 0;
 }
 
 .label {
@@ -22,6 +43,10 @@
 
 .treeWrap {
   margin-top: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .treeItem {
@@ -49,6 +74,10 @@
 
 .editorWrap {
   margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .emptyMessage {
@@ -99,19 +128,23 @@
 }
 
 .editorSurface {
-  min-height: 360px;
-  border-radius: 12px;
+  min-height: 0;
+  flex: 1;
+  border-radius: 0;
   border: 1px solid var(--bs-border-color);
   background: var(--bs-body-bg);
+  overflow: hidden;
 }
 
 .quillWrap {
-  min-height: 360px;
+  min-height: 0;
+  height: 100%;
 }
 
 .kdbxPanel {
-  min-height: 360px;
-  border-radius: 12px;
+  min-height: 0;
+  flex: 1;
+  border-radius: 0;
   border: 1px solid var(--bs-border-color);
   background: var(--bs-body-bg);
   padding: 12px;
@@ -126,7 +159,8 @@
 .kdbxEntryList {
   display: grid;
   gap: 8px;
-  max-height: 360px;
+  max-height: none;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -165,4 +199,20 @@
 .statusMessage {
   margin-top: 8px;
   font-size: 12px;
+}
+
+@media (max-width: 960px) {
+  .root {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .filesPanel {
+    border-right: 0;
+    border-bottom: 1px solid var(--bs-border-color-translucent);
+  }
+
+  .treeWrap {
+    max-height: 260px;
+  }
 }

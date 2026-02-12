@@ -25,6 +25,7 @@ from .paths import workspace_dir, workspaces_root
 from .vault import (
     _ensure_secrets_dirs,
     _generate_passphrase,
+    _kdbx_path,
     _keys_dir,
     _open_kdbx,
     _read_kdbx_entry,
@@ -39,6 +40,7 @@ INVENTORY_FILENAME = "inventory.yml"
 
 _HIDDEN_FILES = {WORKSPACE_META_FILENAME}
 _ID_RE = re.compile(r"^[a-z0-9]{6,32}$")
+_VAULT_BLOCK_START_RE = re.compile(r"^([ \t]*).*!vault\s*\|.*$")
 
 
 def _now_iso() -> str:
@@ -445,7 +447,12 @@ class WorkspaceService:
         if not roles:
             raise HTTPException(status_code=400, detail="no roles selected")
 
-        vault_password = _vault_password_from_kdbx(root, master_password)
+        vault_password = _vault_password_from_kdbx(
+            root,
+            master_password,
+            create_if_missing=True,
+            provision_if_missing=True,
+        )
         with tempfile.NamedTemporaryFile(
             mode="w", prefix="vault-pass-", delete=False
         ) as tmp:
@@ -627,6 +634,116 @@ class WorkspaceService:
 
         self._refresh_meta_after_upload(root)
 
+    @staticmethod
+    def _iter_yaml_files(root: Path) -> Iterable[Path]:
+        for dirpath, _dirnames, filenames in os.walk(root):
+            pdir = Path(dirpath)
+            for fname in filenames:
+                if fname in _HIDDEN_FILES:
+                    continue
+                fpath = pdir / fname
+                if fpath.suffix.lower() not in {".yml", ".yaml"}:
+                    continue
+                yield fpath
+
+    @staticmethod
+    def _rotate_vault_blocks_for_file(
+        path: Path, old_vault: Any, new_vault: Any
+    ) -> tuple[str, int]:
+        source = path.read_text(encoding="utf-8", errors="replace")
+        had_trailing_newline = source.endswith("\n")
+        lines = source.splitlines()
+        output: List[str] = []
+        replaced_blocks = 0
+        index = 0
+
+        while index < len(lines):
+            line = lines[index]
+            match = _VAULT_BLOCK_START_RE.match(line)
+            if not match:
+                output.append(line)
+                index += 1
+                continue
+
+            base_indent = len(match.group(1))
+            cursor = index + 1
+            block_indent: Optional[int] = None
+            while cursor < len(lines):
+                candidate = lines[cursor]
+                if not candidate.strip():
+                    if block_indent is None:
+                        cursor += 1
+                        continue
+                    cursor += 1
+                    continue
+                candidate_indent = len(candidate) - len(candidate.lstrip(" "))
+                if candidate_indent <= base_indent:
+                    break
+                if block_indent is None:
+                    block_indent = candidate_indent
+                elif candidate_indent < block_indent:
+                    break
+                cursor += 1
+
+            if block_indent is None:
+                output.append(line)
+                index += 1
+                continue
+
+            block_lines = lines[index + 1 : cursor]
+            normalized_lines: List[str] = []
+            for block_line in block_lines:
+                if not block_line.strip():
+                    normalized_lines.append("")
+                    continue
+                if len(block_line) >= block_indent:
+                    normalized_lines.append(block_line[block_indent:])
+                else:
+                    normalized_lines.append(block_line.lstrip())
+
+            vault_text = "\n".join(normalized_lines).strip()
+            if not vault_text.startswith("$ANSIBLE_VAULT;"):
+                output.append(line)
+                output.extend(block_lines)
+                index = cursor
+                continue
+
+            try:
+                plaintext = old_vault.decrypt(vault_text.encode("utf-8")).decode(
+                    "utf-8", errors="replace"
+                )
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"failed to decrypt vault block in "
+                        f"{path.as_posix()}:{index + 1}: {exc}"
+                    ),
+                ) from exc
+            try:
+                rotated = new_vault.encrypt(plaintext.encode("utf-8")).decode(
+                    "utf-8", errors="replace"
+                )
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail=(
+                        f"failed to encrypt vault block in "
+                        f"{path.as_posix()}:{index + 1}: {exc}"
+                    ),
+                ) from exc
+
+            output.append(line)
+            for encrypted_line in rotated.strip().splitlines():
+                output.append((" " * block_indent) + encrypted_line)
+            replaced_blocks += 1
+            index = cursor
+
+        updated = "\n".join(output)
+        if had_trailing_newline:
+            updated += "\n"
+        return updated, replaced_blocks
+
     def set_vault_entries(
         self,
         workspace_id: str,
@@ -659,11 +776,11 @@ class WorkspaceService:
         kp.save()
         return True
 
-    def change_vault_master_password(
+    def set_or_reset_vault_master_password(
         self,
         workspace_id: str,
         *,
-        master_password: str,
+        current_master_password: Optional[str],
         new_master_password: str,
         new_master_password_confirm: str,
     ) -> None:
@@ -672,11 +789,111 @@ class WorkspaceService:
             raise HTTPException(
                 status_code=400, detail="new master password confirmation mismatch"
             )
+        if not new_master_password.strip():
+            raise HTTPException(
+                status_code=400, detail="new master password is required"
+            )
+
+        vault_path = _kdbx_path(root)
+        if not vault_path.is_file():
+            _open_kdbx(
+                root,
+                new_master_password,
+                create_if_missing=True,
+                master_password_confirm=new_master_password,
+            )
+            return
+
+        if not (current_master_password or "").strip():
+            raise HTTPException(
+                status_code=400,
+                detail="current master password is required",
+            )
+
         kp = _open_kdbx(
-            root, master_password, create_if_missing=False, master_password_confirm=None
+            root,
+            current_master_password,
+            create_if_missing=False,
+            master_password_confirm=None,
         )
         kp.change_password(new_master_password)
         kp.save()
+
+    def change_vault_master_password(
+        self,
+        workspace_id: str,
+        *,
+        master_password: str,
+        new_master_password: str,
+        new_master_password_confirm: str,
+    ) -> None:
+        self.set_or_reset_vault_master_password(
+            workspace_id=workspace_id,
+            current_master_password=master_password,
+            new_master_password=new_master_password,
+            new_master_password_confirm=new_master_password_confirm,
+        )
+
+    def reset_vault_password(
+        self,
+        workspace_id: str,
+        *,
+        master_password: str,
+        new_vault_password: Optional[str] = None,
+    ) -> Dict[str, int]:
+        root = self.ensure(workspace_id)
+        kp = _open_kdbx(
+            root,
+            master_password,
+            create_if_missing=False,
+            master_password_confirm=None,
+        )
+        current_vault_password = _read_kdbx_entry(
+            kp, _vault_entry_title("vault_password")
+        )
+        if not current_vault_password:
+            raise HTTPException(status_code=400, detail="vault password not set")
+
+        next_vault_password = (new_vault_password or "").strip() or _generate_passphrase()
+        if next_vault_password == current_vault_password:
+            raise HTTPException(
+                status_code=400, detail="new vault password must differ"
+            )
+
+        try:
+            from ansible.parsing.vault import VaultLib, VaultSecret
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"ansible vault unavailable: {exc}"
+            ) from exc
+
+        old_vault = VaultLib(
+            secrets=[("default", VaultSecret(current_vault_password.encode()))]
+        )
+        new_vault = VaultLib(
+            secrets=[("default", VaultSecret(next_vault_password.encode()))]
+        )
+
+        updated_files = 0
+        updated_values = 0
+        for file_path in self._iter_yaml_files(root):
+            updated_content, replaced_blocks = self._rotate_vault_blocks_for_file(
+                file_path, old_vault, new_vault
+            )
+            if replaced_blocks <= 0:
+                continue
+            atomic_write_text(file_path, updated_content)
+            updated_files += 1
+            updated_values += replaced_blocks
+
+        _upsert_kdbx_entry(
+            kp, _vault_entry_title("vault_password"), next_vault_password
+        )
+        kp.save()
+        return {
+            "updated_files": updated_files,
+            "updated_values": updated_values,
+        }
 
     def generate_ssh_keypair(
         self,

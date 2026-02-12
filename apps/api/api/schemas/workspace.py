@@ -107,6 +107,23 @@ class WorkspaceVaultChangeIn(BaseModel):
     new_master_password_confirm: str = Field(..., min_length=1)
 
 
+class WorkspaceMasterPasswordIn(BaseModel):
+    current_master_password: Optional[str] = None
+    new_master_password: str = Field(..., min_length=1)
+    new_master_password_confirm: str = Field(..., min_length=1)
+
+
+class WorkspaceVaultPasswordResetIn(BaseModel):
+    master_password: str = Field(..., min_length=1)
+    new_vault_password: Optional[str] = None
+
+
+class WorkspaceVaultPasswordResetOut(BaseModel):
+    ok: bool
+    updated_files: int = 0
+    updated_values: int = 0
+
+
 class WorkspaceVaultDecryptIn(BaseModel):
     master_password: str = Field(..., min_length=1)
     vault_text: str = Field(..., min_length=1)

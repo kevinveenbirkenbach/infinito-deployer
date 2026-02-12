@@ -50,7 +50,7 @@ export default function WorkspacePanelFileEditor(props: any) {
 
   return (
     <div className={styles.root}>
-      <div className={`bg-body border ${styles.panel}`}>
+      <div className={`${styles.panel} ${styles.filesPanel}`}>
         <label className={`text-body-tertiary ${styles.label}`}>Files</label>
         <div className={`text-body-tertiary ${styles.helperText}`}>
           Right-click to create files or folders.
@@ -96,7 +96,7 @@ export default function WorkspacePanelFileEditor(props: any) {
         ) : null}
       </div>
 
-      <div className={`bg-body border ${styles.panel}`}>
+      <div className={`${styles.panel} ${styles.editorPanel}`}>
         <label className={`text-body-tertiary ${styles.label}`}>Editor</label>
         <div className={styles.editorWrap}>
           {!activePath ? (
@@ -228,7 +228,7 @@ export default function WorkspacePanelFileEditor(props: any) {
               ) : (
                 <CodeMirror
                   value={editorValue}
-                  height="360px"
+                  height="100%"
                   extensions={editorExtensions}
                   onCreateEditor={(view) => {
                     editorViewRef.current = view;

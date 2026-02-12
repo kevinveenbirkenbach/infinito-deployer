@@ -1,7 +1,11 @@
 import DeploymentConsole from "./components/DeploymentConsole";
 
 export default function Page() {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const configuredBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim();
+  const baseUrl =
+    !configuredBaseUrl || configuredBaseUrl === "http://localhost:8000"
+      ? ""
+      : configuredBaseUrl;
   const logoUrl =
     process.env.NEXT_PUBLIC_BRAND_LOGO_URL || "/brand-logo.png";
 
