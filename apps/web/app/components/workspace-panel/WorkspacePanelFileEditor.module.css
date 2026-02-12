@@ -1,0 +1,168 @@
+.root {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(320px, 2fr);
+  gap: 16px;
+}
+
+.panel {
+  padding: 16px;
+  border-radius: 18px;
+  min-height: 320px;
+}
+
+.label {
+  font-size: 12px;
+}
+
+.helperText {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.treeWrap {
+  margin-top: 8px;
+}
+
+.treeItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  margin-left: var(--tree-indent, 0px);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  background: transparent;
+  color: var(--bs-body-color);
+}
+
+.treeItemActive {
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+}
+
+.treeIcon {
+  width: 14px;
+  text-align: center;
+}
+
+.editorWrap {
+  margin-top: 8px;
+}
+
+.emptyMessage {
+  font-size: 12px;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.toolbarActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.button {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.primaryButton {
+  border: 1px solid var(--bs-body-color);
+}
+
+.primaryButtonEnabled {
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+  cursor: pointer;
+}
+
+.primaryButtonDisabled {
+  background: var(--deployer-disabled-bg);
+  color: var(--deployer-disabled-text);
+  cursor: not-allowed;
+}
+
+.secondaryButton {
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  cursor: pointer;
+}
+
+.editorSurface {
+  min-height: 360px;
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+}
+
+.quillWrap {
+  min-height: 360px;
+}
+
+.kdbxPanel {
+  min-height: 360px;
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.kdbxMessage {
+  font-size: 12px;
+}
+
+.kdbxEntryList {
+  display: grid;
+  gap: 8px;
+  max-height: 360px;
+  overflow: auto;
+}
+
+.kdbxEntry {
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color);
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  background: var(--deployer-card-bg-soft);
+}
+
+.kdbxEntryHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.passwordRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.revealButton {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.statusMessage {
+  margin-top: 8px;
+  font-size: 12px;
+}

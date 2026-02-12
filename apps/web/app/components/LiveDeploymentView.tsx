@@ -9,6 +9,7 @@ import {
   statusColors,
   statusLabel,
 } from "../lib/deployment_status";
+import styles from "./LiveDeploymentView.module.css";
 
 type StatusPayload = {
   job_id: string;
@@ -35,21 +36,12 @@ export default function LiveDeploymentView({
   onStatusChange?: (status: StatusPayload | null) => void;
 }) {
   const Wrapper = compact ? "div" : "section";
-  const wrapperStyle: CSSProperties | undefined = {
-    ...(compact
-      ? {}
-      : {
-          marginTop: 28,
-          padding: 24,
-          borderRadius: 24,
-          background: "var(--deployer-panel-live-bg)",
-          border: "1px solid var(--bs-border-color-translucent)",
-          boxShadow: "var(--deployer-shadow)",
-        }),
-    ...(fill
-      ? { display: "flex", flexDirection: "column", minHeight: 0, flex: 1 }
-      : {}),
-  };
+  const wrapperClassName = [
+    compact ? "" : styles.wrapperPanel,
+    fill ? styles.wrapperFill : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   const [jobId, setJobId] = useState(externalJobId ?? "");
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const [connected, setConnected] = useState(false);
@@ -162,6 +154,18 @@ export default function LiveDeploymentView({
   }, []);
 
   const statusStyles = useMemo(() => statusColors(status?.status), [status]);
+  const statusStyle = {
+    "--live-status-bg": statusStyles.bg,
+    "--live-status-fg": statusStyles.fg,
+    "--live-status-border": statusStyles.border,
+  } as CSSProperties;
+  const terminalStyle = {
+    "--terminal-top": `${compact ? 12 : 16}px`,
+    "--terminal-radius": compact ? "0px" : "18px",
+    "--terminal-height": fill ? "100%" : "320px",
+    "--terminal-flex": fill ? "1" : "initial",
+    "--terminal-min-height": fill ? "220px" : "initial",
+  } as CSSProperties;
 
   const writeLines = (text: string) => {
     const term = termRef.current;
@@ -268,145 +272,61 @@ export default function LiveDeploymentView({
   };
 
   return (
-    <Wrapper style={wrapperStyle}>
+    <Wrapper className={wrapperClassName}>
       {!compact ? (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-          <div style={{ flex: "1 1 320px" }}>
-            <h2
-              className="text-body"
-              style={{
-                margin: 0,
-                fontFamily: "var(--font-display)",
-                fontSize: 26,
-                letterSpacing: "-0.02em",
-              }}
-            >
-              Live Deployment View
-            </h2>
-            <p className="text-body-secondary" style={{ margin: "8px 0 0" }}>
+        <div className={styles.header}>
+          <div className={styles.headerLeft}>
+            <h2 className={`text-body ${styles.title}`}>Live Deployment View</h2>
+            <p className={`text-body-secondary ${styles.subtitle}`}>
               Docker-like terminal output via SSE, with real-time status updates.
             </p>
           </div>
-          <div
-            className="text-body-secondary"
-            style={{
-              flex: "1 1 240px",
-              alignSelf: "center",
-              textAlign: "right",
-              fontSize: 13,
-            }}
-          >
+          <div className={`text-body-secondary ${styles.headerRight}`}>
             Status:{" "}
-            <span
-              style={{
-                padding: "4px 8px",
-                borderRadius: 999,
-                background: statusStyles.bg,
-                color: statusStyles.fg,
-                border: `1px solid ${statusStyles.border}`,
-                fontSize: 12,
-              }}
-            >
+            <span className={styles.statusBadge} style={statusStyle}>
               {statusLabel(status?.status)}
             </span>
           </div>
         </div>
       ) : null}
 
-      <div
-        style={{
-          marginTop: 16,
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 12,
-        }}
-      >
+      <div className={styles.controls}>
         <input
           value={jobId}
           onChange={(e) => setJobId(e.target.value)}
           placeholder="Job ID"
-          style={{
-            flex: "1 1 240px",
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid var(--bs-border-color)",
-            background: "var(--bs-body-bg)",
-          }}
+          className={styles.jobInput}
         />
         <button
           onClick={connect}
           disabled={!jobId.trim() || connected}
-          style={{
-            padding: "10px 16px",
-            borderRadius: 999,
-            border: "1px solid var(--bs-body-color)",
-            background: connected
-              ? "var(--deployer-disabled-bg)"
-              : "var(--bs-body-color)",
-            color: connected
-              ? "var(--deployer-disabled-text)"
-              : "var(--bs-body-bg)",
-            cursor: connected ? "not-allowed" : "pointer",
-          }}
+          className={`${styles.connectButton} ${
+            connected ? styles.connectDisabled : styles.connectEnabled
+          }`}
         >
           {connected ? "Connected" : "Connect"}
         </button>
         <button
           onClick={cancel}
           disabled={!jobId.trim() || canceling || isTerminalStatus(status?.status)}
-          style={{
-            padding: "10px 16px",
-            borderRadius: 999,
-            border: "1px solid var(--bs-border-color)",
-            background: "var(--bs-body-bg)",
-            color: "var(--bs-body-color)",
-            cursor:
-              !jobId.trim() || canceling || isTerminalStatus(status?.status)
-                ? "not-allowed"
-                : "pointer",
-          }}
+          className={`${styles.cancelButton} ${
+            !jobId.trim() || canceling || isTerminalStatus(status?.status)
+              ? styles.cancelDisabled
+              : styles.cancelEnabled
+          }`}
         >
           {canceling ? "Canceling..." : "Cancel"}
         </button>
       </div>
 
-      {error ? (
-        <div className="text-danger" style={{ marginTop: 8 }}>
-          {error}
-        </div>
-      ) : null}
+      {error ? <div className={`text-danger ${styles.error}`}>{error}</div> : null}
 
-      <div
-        style={{
-          marginTop: compact ? 12 : 16,
-          borderRadius: compact ? 0 : 18,
-          border: "1px solid var(--deployer-terminal-border)",
-          background: "var(--deployer-terminal-bg)",
-          height: fill ? "100%" : 320,
-          flex: fill ? 1 : undefined,
-          minHeight: fill ? 220 : undefined,
-          overflow: "hidden",
-          display: "flex",
-        }}
-      >
-        <div
-          style={{ width: "100%", height: "100%", flex: 1, minHeight: 0 }}
-          ref={containerRef}
-        />
+      <div className={styles.terminalWrap} style={terminalStyle}>
+        <div className={styles.terminalContainer} ref={containerRef} />
       </div>
 
       {status?.status && isTerminalStatus(status.status) ? (
-        <div
-          style={{
-            marginTop: 12,
-            padding: 12,
-            borderRadius: 12,
-            background: statusStyles.bg,
-            color: statusStyles.fg,
-            border: `1px solid ${statusStyles.border}`,
-            fontSize: 12,
-          }}
-        >
+        <div className={styles.finalStatus} style={statusStyle}>
           Final status: {statusLabel(status.status)}
           {status.exit_code !== null && status.exit_code !== undefined
             ? ` (exit ${status.exit_code})`

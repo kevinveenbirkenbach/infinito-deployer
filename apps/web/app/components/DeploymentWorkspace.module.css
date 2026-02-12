@@ -1,0 +1,268 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+}
+
+.panels {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.panelItem {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panelItemOpen {
+  flex: 1;
+}
+
+.panelHeader {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--deployer-card-bg-soft);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 16px;
+}
+
+.panelHeaderOpen {
+  border-radius: 16px 16px 0 0;
+  border-bottom: none;
+  background: var(--bs-body-bg);
+}
+
+.panelIcon {
+  font-size: 18px;
+}
+
+.panelBody {
+  margin-top: 0;
+  border: 1px solid var(--bs-border-color-translucent);
+  border-top: none;
+  border-radius: 0 0 16px 16px;
+  padding: 12px;
+  background: var(--bs-body-bg);
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: none;
+}
+
+.panelBodyOpen {
+  display: block;
+}
+
+.navRow {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.navButton {
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.backButton {
+  border: 1px solid var(--bs-border-color);
+}
+
+.backEnabled {
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  cursor: pointer;
+}
+
+.backDisabled {
+  background: var(--deployer-disabled-bg);
+  color: var(--deployer-disabled-text);
+  cursor: not-allowed;
+}
+
+.nextButton {
+  border: 1px solid var(--bs-body-color);
+}
+
+.nextEnabled {
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+  cursor: pointer;
+}
+
+.nextDisabled {
+  background: var(--deployer-disabled-bg);
+  color: var(--deployer-disabled-text);
+  cursor: not-allowed;
+}
+
+.deployLayout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  height: 100%;
+}
+
+.deployTop {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.deployTopLeft {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.startButton {
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  font-weight: 600;
+}
+
+.startEnabled {
+  background: var(--deployer-accent);
+  color: var(--deployer-accent-contrast);
+  cursor: pointer;
+}
+
+.startDisabled {
+  background: var(--deployer-disabled-bg);
+  color: var(--deployer-disabled-text);
+  cursor: not-allowed;
+}
+
+.jobInfo {
+  font-size: 12px;
+}
+
+.deployTopRight {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.smallButton {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+}
+
+.smallButtonEnabled {
+  cursor: pointer;
+}
+
+.smallButtonDisabled {
+  cursor: not-allowed;
+}
+
+.errorList {
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color-translucent);
+  font-size: 12px;
+}
+
+.errorText {
+  color: var(--bs-danger-text-emphasis);
+  font-size: 12px;
+}
+
+.deployBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.serverList {
+  max-height: 50%;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.serverTableHeader {
+  display: grid;
+  grid-template-columns: var(--deploy-table-columns);
+  gap: 10px;
+  font-size: 11px;
+  color: var(--deployer-muted-ink);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.serverRow {
+  display: grid;
+  grid-template-columns: var(--deploy-table-columns);
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  font-size: 12px;
+}
+
+.serverRowSelected {
+  border: 1px solid var(--bs-body-color);
+}
+
+.statusCell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--deployer-muted-ink);
+}
+
+.statusCellDeployed {
+  color: var(--bs-success-text-emphasis);
+}
+
+.statusDot {
+  font-size: 10px;
+}
+
+.aliasCell {
+  font-weight: 600;
+}
+
+.roleCell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.liveWrap {
+  flex: 1;
+  min-height: 0;
+}

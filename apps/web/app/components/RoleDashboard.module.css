@@ -1,0 +1,223 @@
+.wrapper {
+  margin-top: 28px;
+  padding: 24px;
+  border-radius: 24px;
+  background: var(--deployer-panel-catalog-bg);
+  border: 1px solid var(--bs-border-color-translucent);
+  box-shadow: var(--deployer-shadow);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.headerLeft {
+  flex: 1 1 320px;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+}
+
+.headerRight {
+  flex: 1 1 240px;
+  align-self: center;
+  text-align: right;
+  font-size: 13px;
+}
+
+.error {
+  margin-top: 16px;
+}
+
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.scrollArea {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.controls {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bs-body-bg);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--bs-border-color-translucent);
+}
+
+.controlsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.controlsLeft {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  flex: 1 1 320px;
+}
+
+.search {
+  min-width: 220px;
+  border-radius: 12px;
+  background: var(--bs-body-bg);
+  font-size: 14px;
+  padding: 8px 10px;
+}
+
+.viewModeButtons {
+  display: flex;
+  gap: 6px;
+}
+
+.viewModeButton {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.viewModeButtonActive {
+  border: 1px solid var(--bs-body-color);
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+}
+
+.controlsRight {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.dropdown {
+  position: relative;
+}
+
+.dropdownSummary {
+  list-style: none;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  font-size: 12px;
+}
+
+.dropdownCard {
+  position: absolute;
+  right: 0;
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  box-shadow: var(--deployer-shadow);
+  z-index: 20;
+  display: grid;
+  gap: 8px;
+}
+
+.viewDropdownCard {
+  min-width: 200px;
+}
+
+.filterDropdownCard {
+  min-width: 260px;
+  gap: 12px;
+}
+
+.group {
+  display: grid;
+  gap: 6px;
+}
+
+.groupTitle {
+  font-size: 12px;
+}
+
+.groupButtons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pillButton {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+}
+
+.pillButtonActive {
+  border: 1px solid var(--bs-body-color);
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+}
+
+.rowSelect {
+  border-radius: 12px;
+  background: var(--bs-body-bg);
+  font-size: 13px;
+}
+
+.content {
+  padding-top: 6px;
+}
+
+.pagination {
+  margin-top: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.pageButton {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  font-size: 12px;
+}
+
+.pageButtonEnabled {
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+}
+
+.pageButtonDisabled {
+  background: var(--deployer-disabled-bg);
+  color: var(--deployer-disabled-text);
+}

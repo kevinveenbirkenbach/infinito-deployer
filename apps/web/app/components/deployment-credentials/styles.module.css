@@ -1,0 +1,466 @@
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 20, 0.65);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+}
+
+.serverModalOverlay {
+  z-index: 70;
+}
+
+.removeModalOverlay {
+  z-index: 80;
+}
+
+.modalCard {
+  background: var(--bs-body-bg);
+  border-radius: 18px;
+  border: 1px solid var(--bs-border-color-translucent);
+  box-shadow: var(--deployer-shadow);
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.serverModalCard {
+  width: min(720px, 95vw);
+  gap: 14px;
+}
+
+.removeModalCard {
+  width: min(420px, 92vw);
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 18px;
+}
+
+.modalHint {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+.sectionLabel {
+  font-size: 12px;
+}
+
+.segmentedButtons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.segmentedButton {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+}
+
+.segmentedButtonActive {
+  border: 1px solid var(--bs-body-color);
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+}
+
+.errorTextTop {
+  margin: 8px 0 0;
+}
+
+.sectionStack {
+  display: grid;
+  gap: 16px;
+}
+
+.formField {
+  display: grid;
+  gap: 8px;
+}
+
+.inputControl {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  font-size: 12px;
+}
+
+.textAreaControl {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+}
+
+.inputDisabledBg {
+  background: var(--deployer-input-disabled-bg);
+}
+
+.buttonRow {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.subtleButton {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.primaryButton {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-body-color);
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.closeButton {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.generatorCard {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--deployer-card-bg-soft);
+  display: grid;
+  gap: 10px;
+}
+
+.generatorHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.generatorTitle {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.selectControl {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  font-size: 12px;
+}
+
+.checkLabel {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.statusRow {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.smallText {
+  font-size: 12px;
+}
+
+.saveButton {
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-body-color);
+}
+
+.saveButtonActive {
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+  cursor: pointer;
+}
+
+.saveButtonDisabled {
+  background: var(--deployer-disabled-bg);
+  color: var(--deployer-disabled-text);
+  cursor: not-allowed;
+}
+
+.errorList {
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
+  font-size: 12px;
+}
+
+.listRoot {
+  display: grid;
+  gap: 10px;
+}
+
+.listGrid {
+  display: grid;
+  grid-template-columns: var(--server-list-columns);
+  gap: 10px;
+}
+
+.listHeader {
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--deployer-muted-ink);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.listRow {
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 14px;
+  box-shadow: var(--deployer-shadow);
+}
+
+.rowDefault {
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+}
+
+.rowActive {
+  border: 2px solid var(--bs-success-border-subtle);
+  background: var(--bs-success-bg-subtle);
+}
+
+.fieldColumn {
+  display: grid;
+  gap: 4px;
+}
+
+.inputSmall {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  font-size: 12px;
+}
+
+.inputError {
+  border-color: var(--bs-danger);
+}
+
+.aliasErrorText {
+  font-size: 11px;
+}
+
+.activeBadge {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-success-text-emphasis);
+  border: 1px solid var(--bs-success-border-subtle);
+  width: fit-content;
+}
+
+.statusHint {
+  font-size: 11px;
+}
+
+.actionRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.actionButtonSolid {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-body-color);
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.actionButtonSoft {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.trashButton {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--bs-danger-text-emphasis);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--server-grid-columns, 1), minmax(0, 1fr));
+  gap: 16px;
+  align-content: start;
+}
+
+.serverCard {
+  padding: var(--server-card-padding, 16px);
+  border-radius: 18px;
+  display: grid;
+  gap: var(--server-card-gap, 12px);
+  box-shadow: var(--deployer-shadow);
+}
+
+.cardDefault {
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+}
+
+.cardActive {
+  border: 2px solid var(--bs-success-border-subtle);
+  background: var(--bs-success-bg-subtle);
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.cardHeaderMeta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.cardLabel {
+  font-size: 12px;
+}
+
+.cardActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.actionButtonPrimary {
+  padding: var(--server-action-padding, 6px 10px);
+  border-radius: 999px;
+  border: 1px solid var(--bs-body-color);
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+  font-size: var(--server-action-font, 12px);
+  cursor: pointer;
+}
+
+.actionButtonSecondary {
+  padding: var(--server-action-padding, 6px 10px);
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  font-size: var(--server-action-font, 12px);
+  cursor: pointer;
+}
+
+.trashButtonCard {
+  width: var(--server-trash-size, 32px);
+  height: var(--server-trash-size, 32px);
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--bs-danger-text-emphasis);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.fieldGrid {
+  display: grid;
+  gap: var(--server-fields-gap, 10px);
+}
+
+.fieldWrap {
+  display: grid;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: 12px;
+}
+
+.fieldInput {
+  width: 100%;
+  padding: var(--server-input-padding, 8px 10px);
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  font-size: var(--server-input-font, 13px);
+}
+
+.statusCard {
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--deployer-card-bg-soft);
+  font-size: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.modalActionRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.deleteButton {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-danger-text-emphasis);
+  background: var(--bs-danger-text-emphasis);
+  color: var(--bs-body-bg);
+  font-size: 12px;
+}
+
+.deleteButtonBusy {
+  cursor: not-allowed;
+}

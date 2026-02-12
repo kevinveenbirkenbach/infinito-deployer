@@ -1,0 +1,100 @@
+"use client";
+
+import styles from "./WorkspacePanelHeader.module.css";
+import type { WorkspaceListEntry } from "./types";
+
+type WorkspacePanelHeaderProps = {
+  compact: boolean;
+  userId: string | null;
+  workspaceId: string | null;
+  inventoryReady: boolean;
+  workspaceList: WorkspaceListEntry[];
+  workspaceError: string | null;
+  inventorySyncError: string | null;
+  onCreateWorkspace: () => void;
+  onSelectWorkspace: (id: string) => void;
+};
+
+export default function WorkspacePanelHeader({
+  compact,
+  userId,
+  workspaceId,
+  inventoryReady,
+  workspaceList,
+  workspaceError,
+  inventorySyncError,
+  onCreateWorkspace,
+  onSelectWorkspace,
+}: WorkspacePanelHeaderProps) {
+  return (
+    <>
+      {!compact ? (
+        <div className={styles.topRow}>
+          <div className={styles.topLeft}>
+            <h2 className={`text-body ${styles.title}`}>Inventory</h2>
+            <p className={`text-body-secondary ${styles.subtitle}`}>
+              Step-by-step: select roles → edit files → generate credentials → export
+              ZIP or deploy.
+            </p>
+          </div>
+          <div className={`text-body-secondary ${styles.topRight}`}>
+            Workspace: <strong>{workspaceId ? workspaceId : "creating..."}</strong>
+            <br />
+            Inventory: <strong>{inventoryReady ? "ready" : "not generated"}</strong>
+          </div>
+        </div>
+      ) : null}
+
+      {userId ? (
+        <div className={styles.workspaceCard}>
+          <div className={styles.workspaceCardHeader}>
+            <div>
+              <h3 className={styles.workspaceTitle}>Workspaces</h3>
+              <p className={`text-body-secondary ${styles.workspaceHint}`}>
+                Signed in as {userId}
+              </p>
+            </div>
+            <button onClick={onCreateWorkspace} className={styles.newWorkspaceButton}>
+              New workspace
+            </button>
+          </div>
+          <div className={styles.workspaceList}>
+            {workspaceList.length === 0 ? (
+              <div className={`text-body-secondary ${styles.emptyState}`}>
+                No workspaces yet. Create one to get started.
+              </div>
+            ) : (
+              workspaceList.map((entry) => (
+                <button
+                  key={entry.id}
+                  onClick={() => onSelectWorkspace(entry.id)}
+                  className={`${styles.workspaceItem} ${
+                    entry.id === workspaceId ? styles.workspaceItemActive : ""
+                  }`}
+                >
+                  <span>{entry.id}</span>
+                  <span className={styles.workspaceTimestamp}>
+                    {(() => {
+                      if (!entry.last_used) return "new";
+                      const parsed = new Date(entry.last_used);
+                      return Number.isNaN(parsed.getTime())
+                        ? "new"
+                        : parsed.toLocaleString();
+                    })()}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {workspaceError ? (
+        <div className={`text-danger ${styles.errorTop}`}>{workspaceError}</div>
+      ) : null}
+      {inventorySyncError ? (
+        <div className={`text-danger ${styles.errorBottom}`}>{inventorySyncError}</div>
+      ) : null}
+    </>
+  );
+}

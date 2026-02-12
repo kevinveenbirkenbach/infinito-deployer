@@ -1,0 +1,81 @@
+.section {
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 12px;
+}
+
+.title {
+  margin-top: 0;
+}
+
+.controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.input {
+  flex: 1 1 280px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+}
+
+.button {
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.connectButton {
+  border: 1px solid var(--bs-body-color);
+}
+
+.connectEnabled {
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+  cursor: pointer;
+}
+
+.connectDisabled {
+  background: var(--deployer-disabled-bg);
+  color: var(--deployer-disabled-text);
+  cursor: default;
+}
+
+.disconnectButton {
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+}
+
+.disconnectEnabled {
+  cursor: pointer;
+}
+
+.disconnectDisabled {
+  cursor: default;
+}
+
+.status {
+  margin-top: 12px;
+}
+
+.logBox {
+  margin-top: 12px;
+  height: 320px;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--deployer-terminal-bg);
+  color: var(--deployer-terminal-text);
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ansiLine {
+  white-space: pre;
+}

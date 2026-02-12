@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
+import styles from "./DeploymentLogs.module.css";
 
 type StatusPayload = {
   job_id: string;
@@ -139,7 +140,7 @@ function parseAnsi(text: string): AnsiSegment[] {
 function AnsiLine({ line }: { line: string }) {
   const segments = useMemo(() => parseAnsi(line), [line]);
   return (
-    <div style={{ whiteSpace: "pre" }}>
+    <div className={styles.ansiLine}>
       {segments.map((seg, idx) => (
         <span key={idx} style={seg.style}>
           {seg.text}
@@ -233,93 +234,47 @@ export default function DeploymentLogs({ baseUrl }: { baseUrl: string }) {
   };
 
   return (
-    <section
-      style={{
-        marginTop: 24,
-        padding: 16,
-        border: "1px solid var(--bs-border-color)",
-        borderRadius: 12,
-      }}
-    >
-      <h2 style={{ marginTop: 0 }}>Live Logs (SSE)</h2>
+    <section className={styles.section}>
+      <h2 className={styles.title}>Live Logs (SSE)</h2>
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+      <div className={styles.controls}>
         <input
           value={jobId}
           onChange={(e) => setJobId(e.target.value)}
           placeholder="Job ID (e.g. a1b2c3d4e5f6)"
-          style={{
-            flex: "1 1 280px",
-            padding: "8px 10px",
-            borderRadius: 8,
-            border: "1px solid var(--bs-border-color)",
-            background: "var(--bs-body-bg)",
-          }}
+          className={styles.input}
         />
         <button
           onClick={connect}
           disabled={!jobId.trim() || connected}
-          style={{
-            padding: "8px 12px",
-            borderRadius: 8,
-            border: "1px solid var(--bs-body-color)",
-            background: connected
-              ? "var(--deployer-disabled-bg)"
-              : "var(--bs-body-color)",
-            color: connected
-              ? "var(--deployer-disabled-text)"
-              : "var(--bs-body-bg)",
-            cursor: connected ? "default" : "pointer",
-          }}
+          className={`${styles.button} ${styles.connectButton} ${
+            connected ? styles.connectDisabled : styles.connectEnabled
+          }`}
         >
           {connected ? "Connected" : "Connect"}
         </button>
         <button
           onClick={disconnect}
           disabled={!connected}
-          style={{
-            padding: "8px 12px",
-            borderRadius: 8,
-            border: "1px solid var(--bs-border-color)",
-            background: "var(--bs-body-bg)",
-            color: "var(--bs-body-color)",
-            cursor: connected ? "pointer" : "default",
-          }}
+          className={`${styles.button} ${styles.disconnectButton} ${
+            connected ? styles.disconnectEnabled : styles.disconnectDisabled
+          }`}
         >
           Disconnect
         </button>
       </div>
 
-      <div className="text-body-secondary" style={{ marginTop: 12 }}>
+      <div className={`text-body-secondary ${styles.status}`}>
         Status: <strong>{status?.status ?? "—"}</strong>
         {status?.exit_code !== undefined && status?.exit_code !== null ? (
           <span> · exit {status.exit_code}</span>
         ) : null}
-        {error ? (
-          <span className="text-danger"> · {error}</span>
-        ) : null}
+        {error ? <span className="text-danger"> · {error}</span> : null}
       </div>
 
-      <div
-        style={{
-          marginTop: 12,
-          height: 320,
-          overflow: "auto",
-          borderRadius: 12,
-          border: "1px solid var(--bs-border-color)",
-          background: "var(--deployer-terminal-bg)",
-          color: "var(--deployer-terminal-text)",
-          padding: 12,
-          fontFamily:
-            "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-          fontSize: 12,
-          lineHeight: 1.5,
-        }}
-      >
+      <div className={styles.logBox}>
         {lines.length === 0 ? (
-          <div className="text-body-tertiary">
-            No log output yet.
-          </div>
+          <div className="text-body-tertiary">No log output yet.</div>
         ) : (
           lines.map((line, idx) => <AnsiLine key={idx} line={line} />)
         )}

@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import RoleDashboard from "./RoleDashboard";
 import DeploymentCredentialsForm from "./DeploymentCredentialsForm";
 import WorkspacePanel from "./WorkspacePanel";
 import LiveDeploymentView from "./LiveDeploymentView";
+import DeploymentWorkspaceServerSwitcher from "./DeploymentWorkspaceServerSwitcher";
+import styles from "./DeploymentWorkspace.module.css";
 import { createInitialState } from "../lib/deploy_form";
 import { buildDeploymentPayload } from "../lib/deployment_payload";
 
@@ -39,124 +41,6 @@ type ServerState = {
 };
 
 type AliasRename = { from: string; to: string };
-
-function ServerSwitcher({
-  currentAlias,
-  servers,
-  onSelect,
-  onCreate,
-  onOpenServerTab,
-}: {
-  currentAlias: string;
-  servers: ServerState[];
-  onSelect: (alias: string) => void;
-  onCreate: () => void;
-  onOpenServerTab: () => void;
-}) {
-  const detailsRef = useRef<HTMLDetailsElement | null>(null);
-  const close = () => {
-    if (detailsRef.current) {
-      detailsRef.current.open = false;
-    }
-  };
-  const handleSelect = (alias: string) => {
-    onSelect(alias);
-    close();
-  };
-  const handleCreate = () => {
-    onCreate();
-    onOpenServerTab();
-    close();
-  };
-
-  return (
-    <details ref={detailsRef} style={{ position: "relative" }}>
-      <summary
-        style={{
-          listStyle: "none",
-          cursor: "pointer",
-          padding: "6px 12px",
-          borderRadius: 999,
-          border: "1px solid var(--bs-body-color)",
-          background: "var(--bs-body-color)",
-          color: "var(--bs-body-bg)",
-          fontSize: 12,
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
-        <i className="fa-solid fa-server" aria-hidden="true" />
-        <span>{currentAlias || "Select server"}</span>
-      </summary>
-      <div
-        style={{
-          position: "absolute",
-          right: 0,
-          marginTop: 8,
-          padding: 10,
-          borderRadius: 12,
-          border: "1px solid var(--bs-border-color-translucent)",
-          background: "var(--bs-body-bg)",
-          boxShadow: "var(--deployer-shadow)",
-          minWidth: 200,
-          zIndex: 50,
-          display: "grid",
-          gap: 6,
-        }}
-      >
-        {servers.length === 0 ? (
-          <div className="text-body-secondary" style={{ fontSize: 12 }}>
-            No servers yet.
-          </div>
-        ) : (
-          servers.map((server) => (
-            <button
-              key={server.alias}
-              onClick={() => handleSelect(server.alias)}
-              style={{
-                textAlign: "left",
-                padding: "6px 10px",
-                borderRadius: 10,
-                border:
-                  currentAlias === server.alias
-                    ? "1px solid var(--bs-body-color)"
-                    : "1px solid var(--bs-border-color)",
-                background:
-                  currentAlias === server.alias
-                    ? "var(--bs-body-color)"
-                    : "var(--bs-body-bg)",
-                color:
-                  currentAlias === server.alias
-                    ? "var(--bs-body-bg)"
-                    : "var(--bs-body-color)",
-                fontSize: 12,
-                cursor: "pointer",
-              }}
-            >
-              {server.alias}
-            </button>
-          ))
-        )}
-        <button
-          onClick={handleCreate}
-          style={{
-            marginTop: 4,
-            padding: "6px 10px",
-            borderRadius: 10,
-            border: "1px dashed var(--bs-border-color)",
-            background: "var(--bs-body-bg)",
-            color: "var(--bs-body-color)",
-            fontSize: 12,
-            cursor: "pointer",
-          }}
-        >
-          + New
-        </button>
-      </div>
-    </details>
-  );
-}
 
 type DeploymentWorkspaceProps = {
   baseUrl: string;
@@ -612,6 +496,9 @@ export default function DeploymentWorkspace({
 
   const deployTableColumns =
     "32px minmax(140px, 1fr) minmax(180px, 2fr) minmax(120px, 1fr) minmax(200px, 2fr) 120px";
+  const deployTableStyle = {
+    "--deploy-table-columns": deployTableColumns,
+  } as CSSProperties;
 
   const panels: {
     key: "store" | "server" | "inventory" | "deploy";
@@ -682,96 +569,50 @@ export default function DeploymentWorkspace({
       key: "deploy",
       title: "Deploy",
       content: (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 16,
-            minHeight: 0,
-            height: "100%",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 12,
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div className={styles.deployLayout}>
+          <div className={styles.deployTop}>
+            <div className={styles.deployTopLeft}>
               <button
                 onClick={startDeployment}
                 disabled={!canDeploy}
-                style={{
-                  padding: "10px 18px",
-                  borderRadius: 999,
-                  border: "1px solid var(--bs-border-color)",
-                  background: canDeploy
-                    ? "var(--deployer-accent)"
-                    : "var(--deployer-disabled-bg)",
-                  color: canDeploy
-                    ? "var(--deployer-accent-contrast)"
-                    : "var(--deployer-disabled-text)",
-                  cursor: canDeploy ? "pointer" : "not-allowed",
-                  fontWeight: 600,
-                }}
+                className={`${styles.startButton} ${
+                  canDeploy ? styles.startEnabled : styles.startDisabled
+                }`}
               >
                 {deploying ? "Starting..." : "Start deployment"}
               </button>
               {jobId ? (
-                <div style={{ fontSize: 12 }}>
+                <div className={styles.jobInfo}>
                   Job ID: <code>{jobId}</code>
                 </div>
               ) : null}
             </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div className={styles.deployTopRight}>
               <button
                 onClick={selectAllDeployAliases}
                 disabled={selectableAliases.length === 0}
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: 999,
-                  border: "1px solid var(--bs-border-color)",
-                  background: "var(--bs-body-bg)",
-                  color: "var(--deployer-muted-ink)",
-                  fontSize: 12,
-                  cursor:
-                    selectableAliases.length === 0 ? "not-allowed" : "pointer",
-                }}
+                className={`${styles.smallButton} ${
+                  selectableAliases.length === 0
+                    ? styles.smallButtonDisabled
+                    : styles.smallButtonEnabled
+                }`}
               >
                 Select all
               </button>
               <button
                 onClick={deselectAllDeployAliases}
                 disabled={selectableAliases.length === 0}
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: 999,
-                  border: "1px solid var(--bs-border-color)",
-                  background: "var(--bs-body-bg)",
-                  color: "var(--deployer-muted-ink)",
-                  fontSize: 12,
-                  cursor:
-                    selectableAliases.length === 0 ? "not-allowed" : "pointer",
-                }}
+                className={`${styles.smallButton} ${
+                  selectableAliases.length === 0
+                    ? styles.smallButtonDisabled
+                    : styles.smallButtonEnabled
+                }`}
               >
                 Deselect all
               </button>
               <button
-                onClick={() =>
-                  setServerListCollapsed((prev) => !prev)
-                }
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: 999,
-                  border: "1px solid var(--bs-border-color)",
-                  background: "var(--bs-body-bg)",
-                  color: "var(--deployer-muted-ink)",
-                  fontSize: 12,
-                  cursor: "pointer",
-                }}
+                onClick={() => setServerListCollapsed((prev) => !prev)}
+                className={`${styles.smallButton} ${styles.smallButtonEnabled}`}
               >
                 {serverListCollapsed ? "Show list" : "Hide list"}
               </button>
@@ -779,65 +620,19 @@ export default function DeploymentWorkspace({
           </div>
 
           {Object.keys(deploymentErrors).length > 0 ? (
-            <div
-              style={{
-                padding: 12,
-                borderRadius: 12,
-                background: "var(--bs-tertiary-bg)",
-                border: "1px solid var(--bs-border-color-translucent)",
-                fontSize: 12,
-              }}
-            >
+            <div className={styles.errorList}>
               {Object.values(deploymentErrors).map((message, idx) => (
                 <div key={idx}>{message}</div>
               ))}
             </div>
           ) : null}
 
-          {deployError ? (
-            <div
-              style={{
-                color: "var(--bs-danger-text-emphasis)",
-                fontSize: 12,
-              }}
-            >
-              {deployError}
-            </div>
-          ) : null}
+          {deployError ? <div className={styles.errorText}>{deployError}</div> : null}
 
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-              flex: 1,
-              minHeight: 0,
-            }}
-          >
+          <div className={styles.deployBody}>
             {!serverListCollapsed ? (
-              <div
-                style={{
-                  maxHeight: "50%",
-                  overflow: "auto",
-                  borderRadius: 12,
-                  border: "1px solid var(--bs-border-color-translucent)",
-                  background: "var(--bs-body-bg)",
-                  padding: 12,
-                  display: "grid",
-                  gap: 10,
-                }}
-              >
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: deployTableColumns,
-                    gap: 10,
-                    fontSize: 11,
-                    color: "var(--deployer-muted-ink)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                  }}
-                >
+              <div className={styles.serverList} style={deployTableStyle}>
+                <div className={styles.serverTableHeader}>
                   <span>Status</span>
                   <span>Alias</span>
                   <span>Host</span>
@@ -853,7 +648,7 @@ export default function DeploymentWorkspace({
                   const isDeployed = deployedAliases.has(alias);
                   const isSelectable = hasRoles && !isDeployed;
                   const isSelected = deploySelection.has(alias);
-                  const statusLabel = isDeployed
+                  const rowStatusLabel = isDeployed
                     ? "Deployed"
                     : hasRoles
                     ? "Pending"
@@ -864,47 +659,27 @@ export default function DeploymentWorkspace({
                   return (
                     <div
                       key={alias}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: deployTableColumns,
-                        gap: 10,
-                        alignItems: "center",
-                        padding: "8px 10px",
-                        borderRadius: 10,
-                        border: isSelected
-                          ? "1px solid var(--bs-body-color)"
-                          : "1px solid var(--bs-border-color-translucent)",
-                        background: "var(--bs-body-bg)",
-                        fontSize: 12,
-                      }}
+                      className={`${styles.serverRow} ${
+                        isSelected ? styles.serverRowSelected : ""
+                      }`}
                     >
                       <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          color: isDeployed
-                            ? "var(--bs-success-text-emphasis)"
-                            : "var(--deployer-muted-ink)",
-                        }}
+                        className={`${styles.statusCell} ${
+                          isDeployed ? styles.statusCellDeployed : ""
+                        }`}
                       >
                         {isDeployed ? (
                           <i className="fa-solid fa-check" aria-hidden="true" />
                         ) : (
-                          <span style={{ fontSize: 10 }}>•</span>
+                          <span className={styles.statusDot}>•</span>
                         )}
-                        <span>{statusLabel}</span>
+                        <span>{rowStatusLabel}</span>
                       </div>
-                      <span style={{ fontWeight: 600 }}>{alias}</span>
+                      <span className={styles.aliasCell}>{alias}</span>
                       <span>{server.host || "—"}</span>
                       <span>{server.user || "—"}</span>
                       <span
-                        className="text-body-secondary"
-                        style={{
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
+                        className={`text-body-secondary ${styles.roleCell}`}
                         title={roleText}
                       >
                         {roleText}
@@ -923,7 +698,7 @@ export default function DeploymentWorkspace({
               </div>
             ) : null}
 
-            <div style={{ flex: 1, minHeight: 0 }}>
+            <div className={styles.liveWrap}>
               <LiveDeploymentView
                 baseUrl={baseUrl}
                 jobId={jobId ?? ""}
@@ -945,7 +720,7 @@ export default function DeploymentWorkspace({
 
   const serverSwitcher = serverSwitcherTarget
     ? createPortal(
-        <ServerSwitcher
+        <DeploymentWorkspaceServerSwitcher
           currentAlias={activeAlias}
           servers={servers}
           onSelect={setActiveAlias}
@@ -957,25 +732,9 @@ export default function DeploymentWorkspace({
     : null;
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 16,
-        height: "100%",
-        minHeight: 0,
-      }}
-    >
+    <div className={styles.root}>
       {serverSwitcher}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-          flex: 1,
-          minHeight: 0,
-        }}
-      >
+      <div className={styles.panels}>
         {panels.map((panel) => {
         const isOpen = activePanel === panel.key;
         const keepMounted = panel.key === "inventory";
@@ -983,52 +742,23 @@ export default function DeploymentWorkspace({
         return (
           <div
             key={panel.key}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              flex: isOpen ? 1 : "0 0 auto",
-              minHeight: 0,
-            }}
+            className={`${styles.panelItem} ${isOpen ? styles.panelItemOpen : ""}`}
           >
             <button
               onClick={() => setActivePanel(panel.key)}
               aria-expanded={isOpen}
-              style={{
-                width: "100%",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "12px 16px",
-                borderRadius: isOpen ? "16px 16px 0 0" : 16,
-                border: "1px solid var(--bs-border-color-translucent)",
-                borderBottom: isOpen
-                  ? "none"
-                  : "1px solid var(--bs-border-color-translucent)",
-                background: isOpen
-                  ? "var(--bs-body-bg)"
-                  : "var(--deployer-card-bg-soft)",
-                cursor: "pointer",
-                fontFamily: "var(--font-display)",
-                fontSize: 16,
-              }}
+              className={`${styles.panelHeader} ${
+                isOpen ? styles.panelHeaderOpen : ""
+              }`}
             >
               <span>{panel.title}</span>
-              <span style={{ fontSize: 18 }}>{isOpen ? "–" : "+"}</span>
+              <span className={styles.panelIcon}>{isOpen ? "–" : "+"}</span>
             </button>
             {mountContent ? (
               <div
-                style={{
-                  marginTop: 0,
-                  border: "1px solid var(--bs-border-color-translucent)",
-                  borderTop: "none",
-                  borderRadius: "0 0 16px 16px",
-                  padding: 12,
-                  background: "var(--bs-body-bg)",
-                  display: isOpen ? "block" : "none",
-                  flex: 1,
-                  minHeight: 0,
-                  overflow: "auto",
-                }}
+                className={`${styles.panelBody} ${
+                  isOpen ? styles.panelBodyOpen : ""
+                }`}
                 aria-hidden={!isOpen}
               >
                 {panel.content}
@@ -1038,32 +768,15 @@ export default function DeploymentWorkspace({
         );
       })}
       </div>
-      <div
-        style={{
-          marginTop: 8,
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-        }}
-      >
+      <div className={styles.navRow}>
         <button
           onClick={() =>
             hasPrev && setActivePanel(panels[activeIndex - 1].key)
           }
           disabled={!hasPrev}
-          style={{
-            padding: "8px 14px",
-            borderRadius: 999,
-            border: "1px solid var(--bs-border-color)",
-            background: hasPrev
-              ? "var(--bs-body-bg)"
-              : "var(--deployer-disabled-bg)",
-            color: hasPrev
-              ? "var(--deployer-muted-ink)"
-              : "var(--deployer-disabled-text)",
-            cursor: hasPrev ? "pointer" : "not-allowed",
-            fontSize: 12,
-          }}
+          className={`${styles.navButton} ${styles.backButton} ${
+            hasPrev ? styles.backEnabled : styles.backDisabled
+          }`}
         >
           Back
         </button>
@@ -1072,19 +785,9 @@ export default function DeploymentWorkspace({
             hasNext && setActivePanel(panels[activeIndex + 1].key)
           }
           disabled={!hasNext}
-          style={{
-            padding: "8px 14px",
-            borderRadius: 999,
-            border: "1px solid var(--bs-body-color)",
-            background: hasNext
-              ? "var(--bs-body-color)"
-              : "var(--deployer-disabled-bg)",
-            color: hasNext
-              ? "var(--bs-body-bg)"
-              : "var(--deployer-disabled-text)",
-            cursor: hasNext ? "pointer" : "not-allowed",
-            fontSize: 12,
-          }}
+          className={`${styles.navButton} ${styles.nextButton} ${
+            hasNext ? styles.nextEnabled : styles.nextDisabled
+          }`}
         >
           Next
         </button>

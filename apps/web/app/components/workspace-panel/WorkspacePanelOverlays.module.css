@@ -1,0 +1,130 @@
+.contextMenu {
+  position: fixed;
+  top: var(--menu-top, 0px);
+  left: var(--menu-left, 0px);
+  background: var(--bs-body-bg);
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color-translucent);
+  box-shadow: var(--deployer-shadow);
+  padding: 8px;
+  min-width: 160px;
+}
+
+.contextMenuPrimary {
+  z-index: 50;
+}
+
+.contextMenuEditor {
+  z-index: 60;
+}
+
+.contextButton {
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.contextButtonDanger {
+  color: var(--bs-danger-text-emphasis);
+}
+
+.separator {
+  height: 1px;
+  background: var(--bs-border-color-translucent);
+  margin: 6px 0;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 20, 0.65);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  z-index: 90;
+}
+
+.modalCard {
+  width: min(460px, 92vw);
+  background: var(--bs-body-bg);
+  border-radius: 18px;
+  border: 1px solid var(--bs-border-color-translucent);
+  box-shadow: var(--deployer-shadow);
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.modalCardWide {
+  width: min(520px, 92vw);
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 18px;
+}
+
+.fieldStack {
+  display: grid;
+  gap: 8px;
+}
+
+.fieldLabel {
+  font-size: 12px;
+}
+
+.inputControl {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  font-size: 12px;
+}
+
+.textareaControl {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  font-size: 12px;
+}
+
+.textareaReadonly {
+  background: var(--deployer-input-disabled-bg);
+}
+
+.errorText {
+  margin: 0;
+  font-size: 12px;
+}
+
+.actionsRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.secondaryButton {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.primaryButton {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-body-color);
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+  font-size: 12px;
+  cursor: pointer;
+}

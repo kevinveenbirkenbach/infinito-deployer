@@ -1,0 +1,125 @@
+.cardsRoot {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  padding: 16px;
+  border-radius: 18px;
+}
+
+.label {
+  font-size: 12px;
+}
+
+.actionsRow {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.formStack {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.inputControl {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  font-size: 12px;
+}
+
+.selectControl {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color);
+  font-size: 12px;
+}
+
+.selectControlEnabled {
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+}
+
+.selectControlDisabled {
+  background: var(--deployer-disabled-bg);
+  color: var(--deployer-disabled-text);
+}
+
+.primaryButton {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-body-color);
+  font-size: 12px;
+}
+
+.primaryButtonEnabled {
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+  cursor: pointer;
+}
+
+.primaryButtonDisabled {
+  background: var(--deployer-disabled-bg);
+  color: var(--deployer-disabled-text);
+  cursor: not-allowed;
+}
+
+.neutralButton {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.auxButton {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  cursor: pointer;
+  width: fit-content;
+}
+
+.radioGroup {
+  display: grid;
+  gap: 6px;
+}
+
+.radioLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.helpSmall {
+  font-size: 11px;
+}
+
+.statusText {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+
+.hiddenInput {
+  display: none;
+}
