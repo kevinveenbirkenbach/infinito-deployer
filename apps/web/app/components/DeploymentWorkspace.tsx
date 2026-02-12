@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { createPortal } from "react-dom";
 import RoleDashboard from "./RoleDashboard";
 import DeploymentCredentialsForm from "./DeploymentCredentialsForm";
 import WorkspacePanel from "./WorkspacePanel";
@@ -79,13 +78,16 @@ export default function DeploymentWorkspace({
   const [deploySelection, setDeploySelection] = useState<Set<string>>(
     new Set<string>()
   );
+  const [deployRoleFilter, setDeployRoleFilter] = useState<Set<string>>(
+    new Set<string>()
+  );
+  const [deployRolePickerOpen, setDeployRolePickerOpen] = useState(false);
+  const [deployRoleQuery, setDeployRoleQuery] = useState("");
   const [deployedAliases, setDeployedAliases] = useState<Set<string>>(
     new Set<string>()
   );
   const [serverListCollapsed, setServerListCollapsed] = useState(false);
   const lastDeploymentSelectionRef = useRef<string[] | null>(null);
-  const [serverSwitcherTarget, setServerSwitcherTarget] =
-    useState<HTMLElement | null>(null);
 
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [inventoryReady, setInventoryReady] = useState(false);
@@ -127,13 +129,6 @@ export default function DeploymentWorkspace({
       alive = false;
     };
   }, [baseUrl]);
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    setServerSwitcherTarget(
-      document.getElementById("server-switcher-slot")
-    );
-  }, []);
 
   useEffect(() => {
     if (!activeAlias && servers.length > 0) {
@@ -204,6 +199,34 @@ export default function DeploymentWorkspace({
     return out;
   }, [servers, selectedRolesByAlias, deployedAliases]);
 
+  const inventoryRoleIds = useMemo(() => {
+    const seen = new Set<string>();
+    Object.values(selectedRolesByAlias).forEach((list) => {
+      (Array.isArray(list) ? list : []).forEach((role) => {
+        const roleId = String(role || "").trim();
+        if (roleId) seen.add(roleId);
+      });
+    });
+    return Array.from(seen).sort((a, b) => a.localeCompare(b));
+  }, [selectedRolesByAlias]);
+
+  const deployRoleOptions = useMemo(() => {
+    const query = deployRoleQuery.trim().toLowerCase();
+    if (!query) return inventoryRoleIds;
+    return inventoryRoleIds.filter((roleId) =>
+      roleId.toLowerCase().includes(query)
+    );
+  }, [inventoryRoleIds, deployRoleQuery]);
+
+  const deployRoleSummary = useMemo(() => {
+    if (inventoryRoleIds.length === 0) return "No apps in inventory";
+    if (deployRoleFilter.size === 0) return "No apps selected";
+    if (deployRoleFilter.size === inventoryRoleIds.length) {
+      return `All apps (${inventoryRoleIds.length})`;
+    }
+    return `${deployRoleFilter.size} apps selected`;
+  }, [inventoryRoleIds, deployRoleFilter]);
+
   useEffect(() => {
     setDeploySelection((prev) => {
       const allowed = new Set(selectableAliases);
@@ -225,9 +248,30 @@ export default function DeploymentWorkspace({
   }, [servers]);
 
   useEffect(() => {
+    setDeployRoleFilter((prev) => {
+      const allowed = new Set(inventoryRoleIds);
+      const next = new Set(Array.from(prev).filter((roleId) => allowed.has(roleId)));
+      if (next.size === 0 && inventoryRoleIds.length > 0) {
+        inventoryRoleIds.forEach((roleId) => next.add(roleId));
+      }
+      return next;
+    });
+  }, [inventoryRoleIds]);
+
+  useEffect(() => {
     setDeployedAliases(new Set());
     setDeploySelection(new Set());
+    setDeployRoleFilter(new Set());
   }, [workspaceId]);
+
+  useEffect(() => {
+    if (!deployRolePickerOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDeployRolePickerOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [deployRolePickerOpen]);
 
   const applySelectedRolesByAlias = useCallback(
     (rolesByAlias: Record<string, string[]>) => {
@@ -236,14 +280,14 @@ export default function DeploymentWorkspace({
         .filter(Boolean);
 
       if (aliases.length === 0) {
-        setSelectedByAlias({});
-        setServers([]);
-        setActiveAlias("");
         return;
       }
 
-      setSelectedByAlias(() => {
+      setSelectedByAlias((prev) => {
         const next: Record<string, Set<string>> = {};
+        Object.entries(prev).forEach(([alias, set]) => {
+          next[alias] = new Set<string>(set);
+        });
         aliases.forEach((alias) => {
           next[alias] = new Set<string>(rolesByAlias?.[alias] ?? []);
         });
@@ -255,7 +299,7 @@ export default function DeploymentWorkspace({
         const ordered: string[] = [];
         const seen = new Set<string>();
         prev.forEach((server) => {
-          if (aliases.includes(server.alias) && !seen.has(server.alias)) {
+          if (!seen.has(server.alias)) {
             ordered.push(server.alias);
             seen.add(server.alias);
           }
@@ -268,7 +312,7 @@ export default function DeploymentWorkspace({
         return ordered.map((alias) => byAlias.get(alias) ?? createServer(alias));
       });
 
-      if (!activeAlias || !aliases.includes(activeAlias)) {
+      if (!activeAlias) {
         setActiveAlias(aliases[0] ?? "");
       }
     },
@@ -420,6 +464,28 @@ export default function DeploymentWorkspace({
     setDeploySelection(new Set());
   };
 
+  const toggleDeployRole = (roleId: string) => {
+    const key = String(roleId || "").trim();
+    if (!key) return;
+    setDeployRoleFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const selectAllDeployRoles = () => {
+    setDeployRoleFilter(new Set(inventoryRoleIds));
+  };
+
+  const deselectAllDeployRoles = () => {
+    setDeployRoleFilter(new Set());
+  };
+
   const deploymentPlan = useMemo(
     () =>
       buildDeploymentPayload({
@@ -427,6 +493,7 @@ export default function DeploymentWorkspace({
         selectedRolesByAlias,
         selectedAliases: Array.from(deploySelection),
         selectableAliases,
+        roleFilter: Array.from(deployRoleFilter),
         workspaceId,
         inventoryReady,
       }),
@@ -435,6 +502,7 @@ export default function DeploymentWorkspace({
       selectedRolesByAlias,
       deploySelection,
       selectableAliases,
+      deployRoleFilter,
       workspaceId,
       inventoryReady,
     ]
@@ -515,10 +583,20 @@ export default function DeploymentWorkspace({
   );
 
   const deployTableColumns =
-    "32px minmax(140px, 1fr) minmax(180px, 2fr) minmax(120px, 1fr) minmax(200px, 2fr) 120px";
+    "minmax(120px, 1.2fr) minmax(120px, 1fr) minmax(160px, 1.8fr) minmax(100px, 1fr) minmax(220px, 2.4fr) 72px";
   const deployTableStyle = {
     "--deploy-table-columns": deployTableColumns,
   } as CSSProperties;
+
+  const serverSwitcher = (
+    <DeploymentWorkspaceServerSwitcher
+      currentAlias={activeAlias}
+      servers={servers}
+      onSelect={setActiveAlias}
+      onCreate={addServer}
+      onOpenServerTab={() => setActivePanel("server")}
+    />
+  );
 
   const panels: {
     key: "store" | "server" | "inventory" | "deploy";
@@ -536,6 +614,7 @@ export default function DeploymentWorkspace({
           selected={new Set<string>(selectedRoles)}
           onToggleSelected={toggleSelected}
           activeAlias={activeAlias}
+          serverSwitcher={serverSwitcher}
           compact
         />
       ),
@@ -606,6 +685,16 @@ export default function DeploymentWorkspace({
                   Job ID: <code>{jobId}</code>
                 </div>
               ) : null}
+              <button
+                type="button"
+                onClick={() => setDeployRolePickerOpen(true)}
+                className={`${styles.smallButton} ${styles.smallButtonEnabled}`}
+                disabled={inventoryRoleIds.length === 0}
+                title="Choose apps passed to infinito deploy --id"
+              >
+                <i className="fa-solid fa-list-check" aria-hidden="true" />
+                <span>Apps: {deployRoleSummary}</span>
+              </button>
             </div>
             <div className={styles.deployTopRight}>
               <button
@@ -673,9 +762,14 @@ export default function DeploymentWorkspace({
                     : hasRoles
                     ? "Pending"
                     : "No roles";
-                  const roleText = hasRoles
-                    ? roles.join(", ")
-                    : "No roles selected";
+                  const roleText =
+                    inventoryRoleIds.length === 0
+                      ? "No apps in inventory"
+                      : deployRoleSummary;
+                  const roleTitle =
+                    deployRoleFilter.size > 0
+                      ? Array.from(deployRoleFilter).sort().join(", ")
+                      : "No apps selected";
                   return (
                     <div
                       key={alias}
@@ -698,12 +792,14 @@ export default function DeploymentWorkspace({
                       <span className={styles.aliasCell}>{alias}</span>
                       <span>{server.host || "—"}</span>
                       <span>{server.user || "—"}</span>
-                      <span
-                        className={`text-body-secondary ${styles.roleCell}`}
-                        title={roleText}
+                      <button
+                        type="button"
+                        onClick={() => setDeployRolePickerOpen(true)}
+                        className={`text-body-secondary ${styles.roleCellButton}`}
+                        title={roleTitle}
                       >
                         {roleText}
-                      </span>
+                      </button>
                       <div>
                         <input
                           type="checkbox"
@@ -738,22 +834,8 @@ export default function DeploymentWorkspace({
   const hasPrev = activeIndex > 0;
   const hasNext = activeIndex >= 0 && activeIndex < panels.length - 1;
 
-  const serverSwitcher = serverSwitcherTarget
-    ? createPortal(
-        <DeploymentWorkspaceServerSwitcher
-          currentAlias={activeAlias}
-          servers={servers}
-          onSelect={setActiveAlias}
-          onCreate={addServer}
-          onOpenServerTab={() => setActivePanel("server")}
-        />,
-        serverSwitcherTarget
-      )
-    : null;
-
   return (
     <div className={styles.root}>
-      {serverSwitcher}
       <div className={styles.panels}>
         {panels.map((panel) => {
         const isOpen = activePanel === panel.key;
@@ -788,6 +870,82 @@ export default function DeploymentWorkspace({
         );
       })}
       </div>
+      {deployRolePickerOpen ? (
+        <div
+          className={styles.rolePickerOverlay}
+          onClick={() => setDeployRolePickerOpen(false)}
+        >
+          <div
+            className={styles.rolePickerCard}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.rolePickerHeader}>
+              <div>
+                <h3 className={styles.rolePickerTitle}>Deploy App Filter</h3>
+                <p className={`text-body-secondary ${styles.rolePickerHint}`}>
+                  Selected apps are passed as <code>--id</code> for all selected
+                  servers.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeployRolePickerOpen(false)}
+                className={`${styles.smallButton} ${styles.smallButtonEnabled}`}
+              >
+                Close
+              </button>
+            </div>
+
+            <input
+              value={deployRoleQuery}
+              onChange={(event) => setDeployRoleQuery(event.target.value)}
+              placeholder="Search apps"
+              className={`form-control ${styles.rolePickerSearch}`}
+            />
+
+            <div className={styles.rolePickerActions}>
+              <button
+                type="button"
+                onClick={selectAllDeployRoles}
+                className={`${styles.smallButton} ${styles.smallButtonEnabled}`}
+                disabled={inventoryRoleIds.length === 0}
+              >
+                Select all
+              </button>
+              <button
+                type="button"
+                onClick={deselectAllDeployRoles}
+                className={`${styles.smallButton} ${styles.smallButtonEnabled}`}
+                disabled={inventoryRoleIds.length === 0}
+              >
+                Clear all
+              </button>
+              <span className={`text-body-secondary ${styles.rolePickerCount}`}>
+                {deployRoleSummary}
+              </span>
+            </div>
+
+            <div className={styles.rolePickerList}>
+              {deployRoleOptions.length === 0 ? (
+                <span className={`text-body-secondary ${styles.rolePickerEmpty}`}>
+                  No matching apps found.
+                </span>
+              ) : (
+                deployRoleOptions.map((roleId) => (
+                  <label key={roleId} className={styles.rolePickerItem}>
+                    <input
+                      type="checkbox"
+                      checked={deployRoleFilter.has(roleId)}
+                      onChange={() => toggleDeployRole(roleId)}
+                    />
+                    <span>{roleId}</span>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className={styles.navRow}>
         <button
           onClick={() =>

@@ -6,6 +6,7 @@ import { validateForm } from "./deploy_form.js";
  * @param {Record<string, string[]>} args.selectedRolesByAlias
  * @param {string[]} args.selectedAliases
  * @param {string[]} args.selectableAliases
+ * @param {string[]} [args.roleFilter]
  * @param {string | null} args.workspaceId
  * @param {boolean} args.inventoryReady
  */
@@ -14,6 +15,7 @@ export function buildDeploymentPayload({
   selectedRolesByAlias,
   selectedAliases,
   selectableAliases,
+  roleFilter,
   workspaceId,
   inventoryReady,
 }) {
@@ -35,7 +37,7 @@ export function buildDeploymentPayload({
   const normalizedSelected = Array.from(
     new Set((selectedAliases || []).map((alias) => String(alias || "").trim()))
   ).filter(Boolean);
-  let roles = [];
+  let rolesFromAliases = [];
   const seen = new Set();
   normalizedSelected.forEach((alias) => {
     const list = rolesByAlias?.[alias] || [];
@@ -43,10 +45,16 @@ export function buildDeploymentPayload({
       const r = String(role ?? "").trim();
       if (r && !seen.has(r)) {
         seen.add(r);
-        roles.push(r);
+        rolesFromAliases.push(r);
       }
     });
   });
+
+  const normalizedRoleFilter = Array.from(
+    new Set((roleFilter || []).map((role) => String(role || "").trim()))
+  ).filter(Boolean);
+  const roles =
+    normalizedRoleFilter.length > 0 ? normalizedRoleFilter : rolesFromAliases;
 
   if (roles.length === 0) {
     errors.selectedRoles = "Select at least one role.";

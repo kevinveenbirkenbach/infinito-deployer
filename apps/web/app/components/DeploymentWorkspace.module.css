@@ -164,6 +164,9 @@
 }
 
 .smallButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 12px;
   border-radius: 999px;
   border: 1px solid var(--bs-border-color);
@@ -216,6 +219,7 @@
   display: grid;
   grid-template-columns: var(--deploy-table-columns);
   gap: 10px;
+  align-items: center;
   font-size: 11px;
   color: var(--deployer-muted-ink);
   text-transform: uppercase;
@@ -243,6 +247,10 @@
   align-items: center;
   gap: 6px;
   color: var(--deployer-muted-ink);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .statusCellDeployed {
@@ -263,7 +271,105 @@
   white-space: nowrap;
 }
 
+.roleCellButton {
+  width: 100%;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  border-radius: 10px;
+  padding: 6px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .liveWrap {
   flex: 1;
   min-height: 0;
+}
+
+.rolePickerOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 10, 18, 0.65);
+  display: grid;
+  place-items: center;
+  z-index: 240;
+}
+
+.rolePickerCard {
+  width: min(560px, 92vw);
+  max-height: min(76vh, 680px);
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  box-shadow: var(--deployer-shadow-strong);
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 14px;
+}
+
+.rolePickerHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.rolePickerTitle {
+  margin: 0;
+  font-size: 18px;
+}
+
+.rolePickerHint {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+.rolePickerSearch {
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.rolePickerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rolePickerCount {
+  font-size: 12px;
+}
+
+.rolePickerList {
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 12px;
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+  overflow: auto;
+}
+
+.rolePickerItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.rolePickerItem:hover {
+  background: var(--bs-tertiary-bg);
+}
+
+.rolePickerEmpty {
+  font-size: 12px;
+  padding: 6px 8px;
 }

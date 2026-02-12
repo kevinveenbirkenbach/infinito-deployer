@@ -3,9 +3,8 @@ import assert from "node:assert/strict";
 
 import { buildDeploymentPayload } from "../../../apps/web/app/lib/deployment_payload.js";
 
-test("builds payload for password auth", () => {
+test("builds payload for password auth with selected aliases", () => {
   const result = buildDeploymentPayload({
-    deployScope: "active",
     activeServer: {
       alias: "server-1",
       host: " example.com ",
@@ -15,8 +14,9 @@ test("builds payload for password auth", () => {
       password: "secret",
       privateKey: "",
     },
-    selectedRolesByAlias: { "server-1": ["role-a", "role-b"] },
-    activeAlias: "server-1",
+    selectedRolesByAlias: { "server-1": ["role-a", "role-b"], "server-2": ["role-c"] },
+    selectedAliases: ["server-1"],
+    selectableAliases: ["server-1", "server-2"],
     workspaceId: "ws1",
     inventoryReady: true,
   });
@@ -32,9 +32,32 @@ test("builds payload for password auth", () => {
   assert.equal(result.payload.limit, "server-1");
 });
 
+test("uses global role filter when provided", () => {
+  const result = buildDeploymentPayload({
+    activeServer: {
+      alias: "server-1",
+      host: "example.com",
+      port: "",
+      user: "root",
+      authMethod: "password",
+      password: "secret",
+      privateKey: "",
+    },
+    selectedRolesByAlias: { "server-1": ["role-a"], "server-2": ["role-b"] },
+    selectedAliases: ["server-1", "server-2"],
+    selectableAliases: ["server-1", "server-2"],
+    roleFilter: ["role-z", "role-a", "role-z"],
+    workspaceId: "ws1",
+    inventoryReady: true,
+  });
+
+  assert.deepEqual(result.errors, {});
+  assert.deepEqual(result.payload.selected_roles, ["role-z", "role-a"]);
+  assert.equal(result.payload.limit, undefined);
+});
+
 test("requires at least one role", () => {
   const result = buildDeploymentPayload({
-    deployScope: "active",
     activeServer: {
       alias: "server-1",
       host: "example.com",
@@ -45,7 +68,8 @@ test("requires at least one role", () => {
       privateKey: "",
     },
     selectedRolesByAlias: { "server-1": [] },
-    activeAlias: "server-1",
+    selectedAliases: ["server-1"],
+    selectableAliases: ["server-1"],
     workspaceId: "ws1",
     inventoryReady: true,
   });
@@ -56,7 +80,6 @@ test("requires at least one role", () => {
 
 test("requires inventory ready", () => {
   const result = buildDeploymentPayload({
-    deployScope: "active",
     activeServer: {
       alias: "server-1",
       host: "example.com",
@@ -67,7 +90,8 @@ test("requires inventory ready", () => {
       privateKey: "",
     },
     selectedRolesByAlias: { "server-1": ["role-a"] },
-    activeAlias: "server-1",
+    selectedAliases: ["server-1"],
+    selectableAliases: ["server-1"],
     workspaceId: "ws1",
     inventoryReady: false,
   });
@@ -78,7 +102,6 @@ test("requires inventory ready", () => {
 
 test("builds payload for key auth", () => {
   const result = buildDeploymentPayload({
-    deployScope: "active",
     activeServer: {
       alias: "server-1",
       host: "127.0.0.1",
@@ -89,7 +112,8 @@ test("builds payload for key auth", () => {
       privateKey: "KEYDATA",
     },
     selectedRolesByAlias: { "server-1": ["role-a"] },
-    activeAlias: "server-1",
+    selectedAliases: ["server-1"],
+    selectableAliases: ["server-1", "server-2"],
     workspaceId: "ws1",
     inventoryReady: true,
   });
@@ -99,11 +123,11 @@ test("builds payload for key auth", () => {
   assert.equal(result.payload.auth.private_key, "KEYDATA");
   assert.equal(result.payload.auth.password, undefined);
   assert.equal(result.payload.port, 2222);
+  assert.equal(result.payload.limit, "server-1");
 });
 
 test("includes key passphrase when provided", () => {
   const result = buildDeploymentPayload({
-    deployScope: "active",
     activeServer: {
       alias: "server-1",
       host: "127.0.0.1",
@@ -115,7 +139,8 @@ test("includes key passphrase when provided", () => {
       keyPassphrase: "pass123",
     },
     selectedRolesByAlias: { "server-1": ["role-a"] },
-    activeAlias: "server-1",
+    selectedAliases: ["server-1"],
+    selectableAliases: ["server-1"],
     workspaceId: "ws1",
     inventoryReady: true,
   });

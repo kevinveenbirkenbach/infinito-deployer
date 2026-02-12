@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { filterRoles } from "../lib/role_filter";
 import { VIEW_CONFIG, VIEW_MODE_ICONS } from "./role-dashboard/constants";
@@ -20,6 +20,7 @@ type RoleDashboardProps = {
   selected: Set<string>;
   onToggleSelected: (id: string) => void;
   activeAlias?: string;
+  serverSwitcher?: ReactNode;
   compact?: boolean;
 };
 
@@ -30,6 +31,7 @@ export default function RoleDashboard({
   selected,
   onToggleSelected,
   activeAlias,
+  serverSwitcher,
   compact = false,
 }: RoleDashboardProps) {
   const Wrapper = compact ? "div" : "section";
@@ -376,6 +378,16 @@ export default function RoleDashboard({
                 <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />
                 <span>Search</span>
               </button>
+              {serverSwitcher ? (
+                <div className={styles.serverSwitcherSlot}>{serverSwitcher}</div>
+              ) : null}
+              <div
+                className={styles.selectionScope}
+                title={`Selection for server: ${activeAlias || "none"}`}
+              >
+                <i className="fa-solid fa-layer-group" aria-hidden="true" />
+                <span>Selection for server: {activeAlias || "none"}</span>
+              </div>
               <div className={styles.viewModeButtons}>
                 {VIEW_MODES.map((mode) => {
                   const active = viewMode === mode;

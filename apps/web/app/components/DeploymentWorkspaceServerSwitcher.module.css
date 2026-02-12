@@ -5,20 +5,21 @@
 .trigger {
   list-style: none;
   cursor: pointer;
-  padding: 6px 12px;
+  padding: 8px 12px;
   border-radius: 999px;
-  border: 1px solid var(--bs-body-color);
-  background: var(--bs-body-color);
-  color: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
   font-size: 12px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
 }
 
 .menu {
   position: absolute;
-  right: 0;
+  left: 0;
   margin-top: 8px;
   padding: 10px;
   border-radius: 12px;
@@ -26,7 +27,7 @@
   background: var(--bs-body-bg);
   box-shadow: var(--deployer-shadow);
   min-width: 200px;
-  z-index: 50;
+  z-index: 220;
   display: grid;
   gap: 6px;
 }
@@ -53,6 +54,9 @@
 }
 
 .newButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin-top: 4px;
   padding: 6px 10px;
   border-radius: 10px;

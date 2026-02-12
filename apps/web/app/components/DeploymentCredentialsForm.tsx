@@ -587,7 +587,6 @@ export default function DeploymentCredentialsForm({
               listColumns={listColumns}
               computedColumns={computedColumns}
               aliasCounts={aliasCounts}
-              activeAlias={activeAlias}
               testBusy={testBusy}
               testResults={testResults}
               workspaceId={workspaceId}

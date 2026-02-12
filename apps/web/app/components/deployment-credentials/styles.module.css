@@ -254,11 +254,6 @@
   background: var(--bs-body-bg);
 }
 
-.rowActive {
-  border: 2px solid var(--bs-success-border-subtle);
-  background: var(--bs-success-bg-subtle);
-}
-
 .fieldColumn {
   display: grid;
   gap: 4px;
@@ -279,16 +274,6 @@
 
 .aliasErrorText {
   font-size: 11px;
-}
-
-.activeBadge {
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--bs-success-bg-subtle);
-  color: var(--bs-success-text-emphasis);
-  border: 1px solid var(--bs-success-border-subtle);
-  width: fit-content;
 }
 
 .statusHint {
@@ -351,11 +336,6 @@
 .cardDefault {
   border: 1px solid var(--bs-border-color-translucent);
   background: var(--bs-body-bg);
-}
-
-.cardActive {
-  border: 2px solid var(--bs-success-border-subtle);
-  background: var(--bs-success-bg-subtle);
 }
 
 .cardHeader {

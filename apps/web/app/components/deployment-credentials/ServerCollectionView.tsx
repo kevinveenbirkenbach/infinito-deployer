@@ -15,7 +15,6 @@ type ServerCollectionViewProps = {
   listColumns: string;
   computedColumns: number;
   aliasCounts: Record<string, number>;
-  activeAlias: string;
   testBusy: Record<string, boolean>;
   testResults: Record<string, ConnectionResult>;
   workspaceId: string | null;
@@ -32,7 +31,6 @@ export default function ServerCollectionView({
   listColumns,
   computedColumns,
   aliasCounts,
-  activeAlias,
   testBusy,
   testResults,
   workspaceId,
@@ -67,13 +65,10 @@ export default function ServerCollectionView({
             ? "Alias already exists."
             : null;
           const status = testResults[server.alias];
-          const isActive = activeAlias === server.alias;
           return (
             <div
               key={server.alias}
-              className={`${styles.listGrid} ${styles.listRow} ${
-                isActive ? styles.rowActive : styles.rowDefault
-              }`}
+              className={`${styles.listGrid} ${styles.listRow} ${styles.rowDefault}`}
               style={listGridStyle}
             >
               <div className={styles.fieldColumn}>
@@ -89,8 +84,6 @@ export default function ServerCollectionView({
                   <span className={`text-danger ${styles.aliasErrorText}`}>
                     {aliasError}
                   </span>
-                ) : isActive ? (
-                  <span className={styles.activeBadge}>Active</span>
                 ) : null}
               </div>
               <input
@@ -169,7 +162,6 @@ export default function ServerCollectionView({
           ? "Alias already exists."
           : null;
         const status = testResults[server.alias];
-        const isActive = activeAlias === server.alias;
         const dense = viewConfig.dense;
 
         const cardStyle = {
@@ -186,15 +178,12 @@ export default function ServerCollectionView({
         return (
           <div
             key={server.alias}
-            className={`${styles.serverCard} ${
-              isActive ? styles.cardActive : styles.cardDefault
-            }`}
+            className={`${styles.serverCard} ${styles.cardDefault}`}
             style={cardStyle}
           >
             <div className={styles.cardHeader}>
               <div className={styles.cardHeaderMeta}>
                 <span className={`text-body-secondary ${styles.cardLabel}`}>Server</span>
-                {isActive ? <span className={styles.activeBadge}>Active</span> : null}
               </div>
               <div className={styles.cardActions}>
                 <button

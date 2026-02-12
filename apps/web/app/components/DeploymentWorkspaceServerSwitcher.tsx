@@ -20,7 +20,7 @@ type ServerSwitcherProps = {
   currentAlias: string;
   servers: ServerState[];
   onSelect: (alias: string) => void;
-  onCreate: () => void;
+  onCreate: (aliasHint?: string) => void;
   onOpenServerTab: () => void;
 };
 
@@ -54,7 +54,8 @@ export default function DeploymentWorkspaceServerSwitcher({
     <details ref={detailsRef} className={styles.switcher}>
       <summary className={styles.trigger}>
         <i className="fa-solid fa-server" aria-hidden="true" />
-        <span>{currentAlias || "Select server"}</span>
+        <span>Server: {currentAlias || "Select"}</span>
+        <i className="fa-solid fa-chevron-down" aria-hidden="true" />
       </summary>
       <div className={styles.menu}>
         {servers.length === 0 ? (
@@ -62,6 +63,7 @@ export default function DeploymentWorkspaceServerSwitcher({
         ) : (
           servers.map((server) => (
             <button
+              type="button"
               key={server.alias}
               onClick={() => handleSelect(server.alias)}
               className={`${styles.serverButton} ${
@@ -72,8 +74,9 @@ export default function DeploymentWorkspaceServerSwitcher({
             </button>
           ))
         )}
-        <button onClick={handleCreate} className={styles.newButton}>
-          + New
+        <button type="button" onClick={handleCreate} className={styles.newButton}>
+          <i className="fa-solid fa-plus" aria-hidden="true" />
+          <span>New</span>
         </button>
       </div>
     </details>

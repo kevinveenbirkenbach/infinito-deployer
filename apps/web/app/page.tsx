@@ -1,22 +1,7 @@
 import DeploymentConsole from "./components/DeploymentConsole";
 
-async function getHealth(
-  baseUrl: string
-): Promise<{ status: string } | { error: string }> {
-  try {
-    const res = await fetch(`${baseUrl}/health`, { cache: "no-store" });
-    if (!res.ok) return { error: `HTTP ${res.status}` };
-    return await res.json();
-  } catch (e: any) {
-    return { error: e?.message ?? "unknown error" };
-  }
-}
-
-export default async function Page() {
+export default function Page() {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-  const health = await getHealth(baseUrl);
-  const statusLabel =
-    "status" in health ? String(health.status || "OK") : "ERROR";
   const logoUrl =
     process.env.NEXT_PUBLIC_BRAND_LOGO_URL || "/brand-logo.png";
 
@@ -100,10 +85,6 @@ export default async function Page() {
             id="workspace-switcher-slot"
             style={{ width: "100%", display: "grid", placeItems: "center" }}
           />
-          <div
-            id="server-switcher-slot"
-            style={{ width: "100%", display: "grid", placeItems: "center" }}
-          />
         </div>
       </header>
 
@@ -113,7 +94,7 @@ export default async function Page() {
           flexWrap: "wrap",
           gap: 8,
           alignItems: "center",
-          justifyContent: "space-between",
+          justifyContent: "flex-start",
         }}
       >
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -133,22 +114,6 @@ export default async function Page() {
               {label}
             </button>
           ))}
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span className="text-body-secondary" style={{ fontSize: 12 }}>
-            API: <code>{baseUrl}</code>
-          </span>
-          <span
-            style={{
-              padding: "4px 10px",
-              borderRadius: 999,
-              border: "1px solid var(--bs-border-color)",
-              background: "var(--bs-body-bg)",
-              fontSize: 12,
-            }}
-          >
-            Status: {statusLabel}
-          </span>
         </div>
       </div>
 

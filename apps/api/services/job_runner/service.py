@@ -104,7 +104,7 @@ class JobRunnerService:
         roles_from_inventory: List[str] = []
         if req.workspace_id and p.inventory_path.is_file():
             roles_from_inventory = self._roles_from_inventory(p.inventory_path)
-            if roles_from_inventory:
+            if roles_from_inventory and not req.selected_roles:
                 vars_data["selected_roles"] = roles_from_inventory
 
         # Persist masked request + inventory (no secrets on disk)
@@ -350,7 +350,9 @@ class JobRunnerService:
         if env_bool("JOB_RUNNER_SKIP_BUILD", False):
             cmd.append("--skip-build")
 
-        roles = roles_from_inventory or list(req.selected_roles)
+        roles = list(req.selected_roles or [])
+        if not roles:
+            roles = roles_from_inventory
         if roles:
             cmd.append("--id")
             cmd.extend(roles)

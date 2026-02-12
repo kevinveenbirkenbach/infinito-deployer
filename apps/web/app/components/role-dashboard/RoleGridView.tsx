@@ -65,7 +65,9 @@ export default function RoleGridView({
                 {logo}
                 <div className={styles.roleMetaWrap}>
                   <div className={styles.roleTitleRow}>
-                    <h3 className={styles.roleTitle}>{role.display_name}</h3>
+                    <h3 className={styles.roleTitle} title={role.display_name}>
+                      {role.display_name}
+                    </h3>
                     <span className={styles.statusBadge} style={statusStyle}>
                       {role.status}
                     </span>
@@ -132,6 +134,9 @@ export default function RoleGridView({
               style={cardHeightStyle}
             >
               {logo}
+              <div className={styles.miniTitle} title={role.display_name}>
+                {role.display_name}
+              </div>
               {selectedState ? (
                 <span className={styles.miniSelectedBadge}>
                   <i className="fa-solid fa-check" aria-hidden="true" />
@@ -185,7 +190,9 @@ export default function RoleGridView({
 
             <div>
               <div className={styles.detailRoleMeta}>
-                <h3 className={styles.roleTitle}>{role.display_name}</h3>
+                <h3 className={styles.roleTitle} title={role.display_name}>
+                  {role.display_name}
+                </h3>
                 <span className={styles.statusBadge} style={statusStyle}>
                   {role.status}
                 </span>

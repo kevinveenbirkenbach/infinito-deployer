@@ -1,5 +1,6 @@
 import os
 import time
+import json
 import unittest
 from tempfile import TemporaryDirectory
 from pathlib import Path
@@ -209,6 +210,36 @@ class TestJobRunnerService(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(loaded.workspace_dir, "vars.yml")))
 
         self._wait_for_terminal(svc, job.job_id)
+
+    @patch("services.job_runner.service.build_inventory_preview")
+    def test_selected_roles_filter_is_kept_in_vars(self, m_preview) -> None:
+        m_preview.return_value = (
+            "all:\n  hosts:\n    localhost:\n      vars: {}\n",
+            [],
+        )
+
+        from services.job_runner import JobRunnerService  # noqa: WPS433
+        from api.schemas.deployment import DeploymentRequest  # noqa: WPS433
+
+        req = DeploymentRequest(
+            workspace_id=self.workspace_id,
+            deploy_target="server",
+            host="localhost",
+            user="tester",
+            auth={"method": "password", "password": "x"},
+            selected_roles=["custom-role-a", "custom-role-b"],
+        )
+
+        svc = JobRunnerService()
+        job = svc.create(req=req)
+        self._wait_for_terminal(svc, job.job_id)
+
+        vars_path = Path(job.workspace_dir) / "vars.json"
+        vars_data = json.loads(vars_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            vars_data.get("selected_roles"),
+            ["custom-role-a", "custom-role-b"],
+        )
 
     @patch("services.job_runner.service.build_inventory_preview")
     @patch("services.job_runner.service.start_process")
