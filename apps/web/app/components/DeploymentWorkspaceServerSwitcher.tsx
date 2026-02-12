@@ -54,7 +54,7 @@ export default function DeploymentWorkspaceServerSwitcher({
     <details ref={detailsRef} className={styles.switcher}>
       <summary className={styles.trigger}>
         <i className="fa-solid fa-server" aria-hidden="true" />
-        <span>Server: {currentAlias || "Select"}</span>
+        <span>Selected for: {currentAlias || "none"}</span>
         <i className="fa-solid fa-chevron-down" aria-hidden="true" />
       </summary>
       <div className={styles.menu}>

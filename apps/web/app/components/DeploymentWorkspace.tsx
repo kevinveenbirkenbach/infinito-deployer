@@ -738,7 +738,7 @@ export default function DeploymentWorkspace({
   }[] = [
     {
       key: "store",
-      title: "Store",
+      title: "Software",
       content: (
         <RoleDashboard
           roles={roles}

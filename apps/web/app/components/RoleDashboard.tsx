@@ -307,7 +307,7 @@ export default function RoleDashboard({
       {!compact ? (
         <div className={styles.header}>
           <div className={styles.headerLeft}>
-            <h2 className={`text-body ${styles.title}`}>Store</h2>
+            <h2 className={`text-body ${styles.title}`}>Software</h2>
             <p className={`text-body-secondary ${styles.subtitle}`}>
               Browse roles, filter fast, and keep your selections locked in while you
               explore.
@@ -370,6 +370,7 @@ export default function RoleDashboard({
               >
                 <i className="fa-solid fa-filter" aria-hidden="true" />
                 <span>Filters</span>
+                <i className="fa-solid fa-chevron-down" aria-hidden="true" />
               </button>
               <button
                 onClick={applySearch}
@@ -381,13 +382,6 @@ export default function RoleDashboard({
               {serverSwitcher ? (
                 <div className={styles.serverSwitcherSlot}>{serverSwitcher}</div>
               ) : null}
-              <div
-                className={styles.selectionScope}
-                title={`Selection for server: ${activeAlias || "none"}`}
-              >
-                <i className="fa-solid fa-layer-group" aria-hidden="true" />
-                <span>Selection for server: {activeAlias || "none"}</span>
-              </div>
               <div className={styles.viewModeButtons}>
                 {VIEW_MODES.map((mode) => {
                   const active = viewMode === mode;

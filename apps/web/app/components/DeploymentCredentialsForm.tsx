@@ -567,6 +567,7 @@ export default function DeploymentCredentialsForm({
               >
                 <i className="fa-solid fa-filter" aria-hidden="true" />
                 <span>Filters</span>
+                <i className="fa-solid fa-chevron-down" aria-hidden="true" />
               </button>
               <button
                 onClick={applySearch}

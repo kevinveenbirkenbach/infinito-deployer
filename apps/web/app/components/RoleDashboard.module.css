@@ -112,22 +112,6 @@
   align-items: center;
 }
 
-.selectionScope {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 300px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--bs-border-color);
-  background: var(--bs-body-bg);
-  font-size: 12px;
-  color: var(--deployer-muted-ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .viewModeButtons {
   display: flex;
   gap: 6px;

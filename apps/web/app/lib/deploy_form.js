@@ -1,4 +1,5 @@
 export const AUTH_METHODS = ["password", "private_key"];
+const ALIAS_PATTERN = /^[a-z0-9_]+$/;
 
 export function createInitialState() {
   return {
@@ -27,6 +28,8 @@ export function validateForm(state) {
 
   if (!alias) {
     errors.alias = "Alias is required.";
+  } else if (!ALIAS_PATTERN.test(alias)) {
+    errors.alias = "Alias allows only a-z, 0-9 and _.";
   }
   if (!host) {
     errors.host = "Host is required.";
