@@ -57,12 +57,13 @@
   background: var(--bs-body-bg);
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   display: none;
 }
 
 .panelBodyOpen {
-  display: block;
+  display: flex;
+  flex-direction: column;
 }
 
 .navRow {

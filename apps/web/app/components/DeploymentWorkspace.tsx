@@ -324,18 +324,38 @@ export default function DeploymentWorkspace({
     [activeAlias]
   );
 
-  const addServer = useCallback(() => {
-    let idx = 1;
-    let alias = `server-${idx}`;
-    const existing = new Set(servers.map((server) => server.alias));
-    while (existing.has(alias)) {
-      idx += 1;
-      alias = `server-${idx}`;
-    }
-    setServers((prev) => [...prev, createServer(alias)]);
-    setSelectedByAlias((prev) => ({ ...prev, [alias]: new Set<string>() }));
-    setActiveAlias(alias);
-  }, [servers, createServer]);
+  const addServer = useCallback(
+    (aliasHint?: string) => {
+      const existing = new Set(servers.map((server) => server.alias));
+      const normalizedHint = String(aliasHint || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+
+      let alias = "";
+      if (normalizedHint) {
+        alias = normalizedHint;
+        let idx = 2;
+        while (existing.has(alias)) {
+          alias = `${normalizedHint}-${idx}`;
+          idx += 1;
+        }
+      } else {
+        let idx = 1;
+        alias = `server-${idx}`;
+        while (existing.has(alias)) {
+          idx += 1;
+          alias = `server-${idx}`;
+        }
+      }
+
+      setServers((prev) => [...prev, createServer(alias)]);
+      setSelectedByAlias((prev) => ({ ...prev, [alias]: new Set<string>() }));
+      setActiveAlias(alias);
+    },
+    [servers, createServer]
+  );
 
   const removeServer = useCallback(
     async (alias: string) => {

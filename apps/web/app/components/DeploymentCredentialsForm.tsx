@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { validateForm } from "../lib/deploy_form";
 import styles from "./DeploymentCredentialsForm.module.css";
 import RemoveServerModal from "./deployment-credentials/RemoveServerModal";
@@ -27,8 +28,14 @@ type DeploymentCredentialsFormProps = {
   onActiveAliasChange: (alias: string) => void;
   onUpdateServer: (alias: string, patch: Partial<ServerState>) => void;
   onRemoveServer: (alias: string) => Promise<void> | void;
-  onAddServer: () => void;
+  onAddServer: (aliasHint?: string) => void;
   compact?: boolean;
+};
+
+const SERVER_VIEW_ICONS: Record<ServerViewMode, string> = {
+  selection: "fa-solid fa-object-group",
+  detail: "fa-solid fa-table-cells-large",
+  list: "fa-solid fa-list",
 };
 
 export default function DeploymentCredentialsForm({
@@ -43,17 +50,25 @@ export default function DeploymentCredentialsForm({
   compact = false,
 }: DeploymentCredentialsFormProps) {
   const Wrapper = compact ? "div" : "section";
-  const wrapperClassName = compact ? undefined : styles.wrapper;
+  const wrapperClassName = compact
+    ? styles.root
+    : `${styles.root} ${styles.wrapper}`;
 
   const [openAlias, setOpenAlias] = useState<string | null>(null);
   const [testBusy, setTestBusy] = useState<Record<string, boolean>>({});
   const [testResults, setTestResults] = useState<Record<string, ConnectionResult>>({});
   const [query, setQuery] = useState("");
+  const [queryDraft, setQueryDraft] = useState("");
   const [viewMode, setViewMode] = useState<ServerViewMode>("detail");
+  const [rowsOverride, setRowsOverride] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef<HTMLDivElement | null>(null);
+  const filtersButtonRef = useRef<HTMLButtonElement | null>(null);
+  const filtersPopoverRef = useRef<HTMLDivElement | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersPos, setFiltersPos] = useState({ top: 0, left: 0 });
 
   const [keygenBusy, setKeygenBusy] = useState(false);
   const [keygenError, setKeygenError] = useState<string | null>(null);
@@ -174,7 +189,8 @@ export default function DeploymentCredentialsForm({
     1,
     Math.floor((gridSize.height + gridGap) / (viewConfig.minHeight + gridGap))
   );
-  const pageSize = Math.max(1, computedColumns * computedRows);
+  const rows = Math.max(1, rowsOverride ?? computedRows);
+  const pageSize = Math.max(1, computedColumns * rows);
   const pageCount = Math.max(1, Math.ceil(filteredServers.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const paginatedServers = useMemo(() => {
@@ -187,7 +203,7 @@ export default function DeploymentCredentialsForm({
 
   useEffect(() => {
     setPage(1);
-  }, [query, viewMode]);
+  }, [query, viewMode, rowsOverride]);
 
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
@@ -196,6 +212,91 @@ export default function DeploymentCredentialsForm({
   const updateServer = (alias: string, patch: Partial<ServerState>) => {
     onUpdateServer(alias, patch);
   };
+
+  const applySearch = () => {
+    setQuery(queryDraft.trim());
+  };
+
+  const addServerFromSearch = () => {
+    const aliasHint = queryDraft.trim();
+    onAddServer(aliasHint || undefined);
+  };
+
+  const openFilters = () => {
+    const button = filtersButtonRef.current;
+    if (!button) return;
+    const rect = button.getBoundingClientRect();
+    const width = 230;
+    setFiltersPos({
+      top: rect.bottom + 8,
+      left: Math.max(12, rect.right - width),
+    });
+    setFiltersOpen(true);
+  };
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (filtersPopoverRef.current?.contains(target)) return;
+      if (filtersButtonRef.current?.contains(target)) return;
+      setFiltersOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFiltersOpen(false);
+    };
+    const closeOnViewportChange = () => setFiltersOpen(false);
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    window.addEventListener("resize", closeOnViewportChange);
+    window.addEventListener("scroll", closeOnViewportChange, true);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("resize", closeOnViewportChange);
+      window.removeEventListener("scroll", closeOnViewportChange, true);
+    };
+  }, [filtersOpen]);
+
+  const filtersOverlay =
+    filtersOpen && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            ref={filtersPopoverRef}
+            className={styles.dropdownCardOverlay}
+            style={{ top: filtersPos.top, left: filtersPos.left }}
+          >
+            <div className={styles.group}>
+              <span className={`text-body-tertiary ${styles.groupTitle}`}>Rows</span>
+              <select
+                value={rowsOverride ? String(rowsOverride) : "auto"}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === "auto") {
+                    setRowsOverride(null);
+                  } else {
+                    const parsed = Number(value);
+                    setRowsOverride(Number.isFinite(parsed) ? parsed : null);
+                  }
+                }}
+                className={`form-select ${styles.rowSelect}`}
+              >
+                <option value="auto">Auto ({computedRows})</option>
+                {Array.from(new Set([1, 2, 3, 4, 5, 6, computedRows]))
+                  .sort((a, b) => a - b)
+                  .map((value) => (
+                    <option key={value} value={String(value)}>
+                      {value} rows
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
 
   const handleAliasChange = (alias: string, nextAlias: string) => {
     updateServer(alias, { alias: nextAlias });
@@ -413,18 +514,37 @@ export default function DeploymentCredentialsForm({
         <div ref={scrollRef} className={styles.scrollArea}>
           <div ref={controlsRef} className={styles.controls}>
             <div className={styles.controlsRow}>
-              <div className={styles.controlsLeft}>
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search servers"
-                  aria-label="Search servers"
-                  className={`form-control ${styles.search}`}
-                />
-                <button onClick={onAddServer} className={styles.addButton}>
-                  Add
-                </button>
-              </div>
+              <input
+                value={queryDraft}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setQueryDraft(value);
+                  setQuery(value);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    applySearch();
+                  }
+                }}
+                placeholder="Search servers"
+                aria-label="Search servers"
+                className={`form-control ${styles.search}`}
+              />
+              <button
+                onClick={applySearch}
+                className={`${styles.toolbarButton} ${styles.searchButton}`}
+              >
+                <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />
+                <span>Search</span>
+              </button>
+              <button
+                onClick={addServerFromSearch}
+                className={`${styles.toolbarButton} ${styles.addButton}`}
+              >
+                <i className="fa-solid fa-plus" aria-hidden="true" />
+                <span>Add</span>
+              </button>
               <div className={styles.modeButtons}>
                 {SERVER_VIEW_MODES.map((mode) => {
                   const active = viewMode === mode;
@@ -436,11 +556,27 @@ export default function DeploymentCredentialsForm({
                         active ? styles.modeButtonActive : ""
                       }`}
                     >
-                      {mode}
+                      <i className={SERVER_VIEW_ICONS[mode]} aria-hidden="true" />
+                      <span>{mode}</span>
                     </button>
                   );
                 })}
               </div>
+              <button
+                ref={filtersButtonRef}
+                onClick={() => {
+                  if (filtersOpen) {
+                    setFiltersOpen(false);
+                  } else {
+                    openFilters();
+                  }
+                }}
+                className={`${styles.toolbarButton} ${styles.filterButton}`}
+                aria-expanded={filtersOpen}
+              >
+                <i className="fa-solid fa-filter" aria-hidden="true" />
+                <span>Filters</span>
+              </button>
             </div>
           </div>
 
@@ -536,6 +672,7 @@ export default function DeploymentCredentialsForm({
           void confirmRemoveServer();
         }}
       />
+      {filtersOverlay}
     </Wrapper>
   );
 }
