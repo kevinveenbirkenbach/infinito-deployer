@@ -31,6 +31,8 @@ type DeploymentCredentialsFormProps = {
   onConnectionResult: (alias: string, result: ConnectionResult) => void;
   onRemoveServer: (alias: string) => Promise<void> | void;
   onAddServer: (aliasHint?: string) => void;
+  openCredentialsAlias?: string | null;
+  onOpenCredentialsAliasHandled?: () => void;
   compact?: boolean;
 };
 
@@ -51,6 +53,8 @@ export default function DeploymentCredentialsForm({
   onConnectionResult,
   onRemoveServer,
   onAddServer,
+  openCredentialsAlias = null,
+  onOpenCredentialsAliasHandled,
   compact = false,
 }: DeploymentCredentialsFormProps) {
   const Wrapper = compact ? "div" : "section";
@@ -109,6 +113,25 @@ export default function DeploymentCredentialsForm({
     setPassphraseEnabled(false);
     setPasswordConfirm("");
   }, [openServer?.alias]);
+
+  useEffect(() => {
+    if (!openCredentialsAlias) return;
+    if (!servers.some((server) => server.alias === openCredentialsAlias)) {
+      onOpenCredentialsAliasHandled?.();
+      return;
+    }
+    setOpenAlias(openCredentialsAlias);
+    if (activeAlias !== openCredentialsAlias) {
+      onActiveAliasChange(openCredentialsAlias);
+    }
+    onOpenCredentialsAliasHandled?.();
+  }, [
+    activeAlias,
+    onActiveAliasChange,
+    onOpenCredentialsAliasHandled,
+    openCredentialsAlias,
+    servers,
+  ]);
 
   useEffect(() => {
     const node = scrollRef.current;

@@ -105,6 +105,9 @@ export default function DeploymentWorkspace({
   const [liveConnected, setLiveConnected] = useState(false);
   const [liveCanceling, setLiveCanceling] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
+  const [openCredentialsAlias, setOpenCredentialsAlias] = useState<string | null>(
+    null
+  );
   const [activePanel, setActivePanel] = useState<
     "store" | "server" | "inventory" | "deploy"
   >("store");
@@ -201,14 +204,28 @@ export default function DeploymentWorkspace({
     servers.forEach((server) => {
       const alias = String(server.alias || "").trim();
       if (!alias) return;
-      const roles = selectedRolesByAlias?.[alias] ?? [];
+      const roles = (selectedRolesByAlias?.[alias] ?? []).filter(
+        (roleId) =>
+          deployRoleFilter.size === 0 || deployRoleFilter.has(String(roleId || ""))
+      );
       const hasRoles = Array.isArray(roles) && roles.length > 0;
-      if (hasRoles && !deployedAliases.has(alias)) {
+      const host = String(server.host || "").trim();
+      const user = String(server.user || "").trim();
+      const authReady =
+        server.authMethod === "private_key"
+          ? Boolean(String(server.privateKey || "").trim())
+          : Boolean(String(server.password || "").trim());
+      const portRaw = String(server.port || "").trim();
+      const portNum = Number(portRaw);
+      const portValid =
+        !portRaw || (Number.isInteger(portNum) && portNum >= 1 && portNum <= 65535);
+      const isConfigured = Boolean(host && user && authReady && portValid);
+      if (hasRoles && isConfigured && !deployedAliases.has(alias)) {
         out.push(alias);
       }
     });
     return out;
-  }, [servers, selectedRolesByAlias, deployedAliases]);
+  }, [servers, selectedRolesByAlias, deployedAliases, deployRoleFilter]);
 
   const inventoryRoleIds = useMemo(() => {
     const seen = new Set<string>();
@@ -294,6 +311,7 @@ export default function DeploymentWorkspace({
     setLiveConnected(false);
     setLiveCanceling(false);
     setLiveError(null);
+    setOpenCredentialsAlias(null);
     setConnectRequestKey(0);
     setCancelRequestKey(0);
   }, [workspaceId]);
@@ -620,18 +638,27 @@ export default function DeploymentWorkspace({
   );
 
   const deployTableColumns =
-    "minmax(150px, 1.3fr) minmax(120px, 1fr) minmax(160px, 1.8fr) minmax(120px, 1fr) minmax(220px, 2.1fr) 72px 54px";
+    "minmax(0, 1.3fr) minmax(0, 0.7fr) minmax(0, 1.25fr) minmax(62px, 0.45fr) minmax(0, 0.85fr) minmax(66px, 0.55fr) minmax(94px, 0.85fr) 52px";
   const deployTableStyle = {
     "--deploy-table-columns": deployTableColumns,
   } as CSSProperties;
 
+  const isPortInvalid = (port: string) => {
+    const raw = String(port || "").trim();
+    if (!raw) return false;
+    const num = Number(raw);
+    return !Number.isInteger(num) || num < 1 || num > 65535;
+  };
+
+  const isAuthMissing = (server: ServerState) =>
+    server.authMethod === "private_key"
+      ? !String(server.privateKey || "").trim()
+      : !String(server.password || "").trim();
+
   const hasCredentials = (server: ServerState) => {
     const host = String(server.host || "").trim();
     const user = String(server.user || "").trim();
-    const authReady =
-      server.authMethod === "private_key"
-        ? Boolean(String(server.privateKey || "").trim())
-        : Boolean(String(server.password || "").trim());
+    const authReady = !isAuthMissing(server);
     return Boolean(host && user && authReady);
   };
 
@@ -686,6 +713,14 @@ export default function DeploymentWorkspace({
     setCancelRequestKey((prev) => prev + 1);
   };
 
+  const openCredentialsFor = (alias: string) => {
+    const target = String(alias || "").trim();
+    if (!target) return;
+    setActiveAlias(target);
+    setOpenCredentialsAlias(target);
+    setActivePanel("server");
+  };
+
   const serverSwitcher = (
     <DeploymentWorkspaceServerSwitcher
       currentAlias={activeAlias}
@@ -719,7 +754,7 @@ export default function DeploymentWorkspace({
     },
     {
       key: "server",
-      title: "Server",
+      title: "Hardware",
       content: (
         <DeploymentCredentialsForm
           baseUrl={baseUrl}
@@ -732,6 +767,8 @@ export default function DeploymentWorkspace({
           onConnectionResult={handleConnectionResult}
           onRemoveServer={removeServer}
           onAddServer={addServer}
+          openCredentialsAlias={openCredentialsAlias}
+          onOpenCredentialsAliasHandled={() => setOpenCredentialsAlias(null)}
           compact
         />
       ),
@@ -766,7 +803,7 @@ export default function DeploymentWorkspace({
     },
     {
       key: "deploy",
-      title: "Deploy",
+      title: "Setup",
       content: (
         <div className={styles.deployLayout}>
           <div className={styles.deployTabs}>
@@ -777,7 +814,7 @@ export default function DeploymentWorkspace({
                 deployViewTab === "live-log" ? styles.deployTabButtonActive : ""
               }`}
             >
-              Live log
+              Deploy targets
             </button>
             <button
               type="button"
@@ -789,14 +826,6 @@ export default function DeploymentWorkspace({
               Terminal
             </button>
           </div>
-
-          {Object.keys(deploymentErrors).length > 0 ? (
-            <div className={styles.errorList}>
-              {Object.values(deploymentErrors).map((message, idx) => (
-                <div key={idx}>{message}</div>
-              ))}
-            </div>
-          ) : null}
 
           {deployError ? <div className={styles.errorText}>{deployError}</div> : null}
           {liveError ? <div className={styles.errorText}>{liveError}</div> : null}
@@ -810,7 +839,7 @@ export default function DeploymentWorkspace({
             >
               <div className={styles.serverTableCard} style={deployTableStyle}>
                 <div className={styles.serverTableTop}>
-                  <span className={styles.serverTableTitle}>Live log</span>
+                  <span className={styles.serverTableTitle}>Deploy targets</span>
                   <span className={`text-body-secondary ${styles.serverTableMeta}`}>
                     {deploySelection.size} selected
                   </span>
@@ -819,10 +848,11 @@ export default function DeploymentWorkspace({
                   <span>Status</span>
                   <span>Alias</span>
                   <span>Host</span>
+                  <span>Port</span>
                   <span>User</span>
                   <span>Apps</span>
+                  <span>Credentials</span>
                   <span>Select</span>
-                  <span>Icon</span>
                 </div>
                 <div className={styles.serverTableRows}>
                   {servers.map((server) => {
@@ -835,14 +865,27 @@ export default function DeploymentWorkspace({
                     );
                     const hasRoles = filteredRoles.length > 0;
                     const isDeployed = deployedAliases.has(alias);
-                    const isSelectable = hasRoles && !isDeployed;
                     const isSelected = deploySelection.has(alias);
+                    const hostMissing = !String(server.host || "").trim();
+                    const userMissing = !String(server.user || "").trim();
+                    const portInvalid = isPortInvalid(server.port);
+                    const authMissing = isAuthMissing(server);
+                    const appsMissing = !hasRoles;
+                    const isConfigured =
+                      !hostMissing && !userMissing && !portInvalid && !authMissing;
+                    const isSelectable = hasRoles && isConfigured && !isDeployed;
                     const connectionState = getConnectionState(server);
                     const rowStatusLabel = isDeployed
                       ? "Deployed"
                       : hasRoles
                       ? connectionState.label
                       : "No apps";
+                    const statusIconClass = isDeployed
+                      ? "fa-solid fa-check"
+                      : connectionState.iconClass;
+                    const statusIconTone = isDeployed
+                      ? styles.iconSuccess
+                      : connectionState.iconTone;
                     const roleText = hasRoles ? `${filteredRoles.length} apps` : "—";
                     const roleTitle = hasRoles
                       ? filteredRoles.sort().join(", ")
@@ -859,19 +902,88 @@ export default function DeploymentWorkspace({
                             isDeployed ? styles.statusCellDeployed : ""
                           }`}
                         >
-                          {isDeployed ? (
-                            <i className="fa-solid fa-check" aria-hidden="true" />
-                          ) : (
-                            <span className={styles.statusDot}>•</span>
-                          )}
-                          <span>{rowStatusLabel}</span>
+                          <i
+                            className={`${statusIconClass} ${statusIconTone} ${styles.statusConnectionIcon}`}
+                            aria-hidden="true"
+                          />
+                          <span className={styles.statusLabel}>{rowStatusLabel}</span>
                         </div>
                         <span className={styles.aliasCell}>{alias}</span>
-                        <span>{server.host || "—"}</span>
-                        <span>{server.user || "—"}</span>
-                        <span className={styles.roleCell} title={roleTitle}>
-                          {roleText}
-                        </span>
+                        <div className={styles.tableInputWrap}>
+                          <input
+                            value={server.host}
+                            onChange={(event) =>
+                              updateServer(alias, { host: event.target.value })
+                            }
+                            placeholder="example.com"
+                            className={`${styles.tableInput} ${
+                              hostMissing ? styles.tableInputMissing : ""
+                            }`}
+                          />
+                          {hostMissing ? (
+                            <span className={styles.cellAlert} title="Host is required.">
+                              !
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className={styles.tableInputWrap}>
+                          <input
+                            value={server.port}
+                            onChange={(event) =>
+                              updateServer(alias, { port: event.target.value })
+                            }
+                            placeholder="22"
+                            inputMode="numeric"
+                            className={`${styles.tableInput} ${
+                              portInvalid ? styles.tableInputMissing : ""
+                            }`}
+                          />
+                          {portInvalid ? (
+                            <span
+                              className={styles.cellAlert}
+                              title="Port must be between 1 and 65535."
+                            >
+                              !
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className={styles.tableInputWrap}>
+                          <input
+                            value={server.user}
+                            onChange={(event) =>
+                              updateServer(alias, { user: event.target.value })
+                            }
+                            placeholder="root"
+                            className={`${styles.tableInput} ${
+                              userMissing ? styles.tableInputMissing : ""
+                            }`}
+                          />
+                          {userMissing ? (
+                            <span className={styles.cellAlert} title="User is required.">
+                              !
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className={styles.appsCell} title={roleTitle}>
+                          <span className={styles.roleCell}>{roleText}</span>
+                          {appsMissing ? (
+                            <span
+                              className={styles.cellAlert}
+                              title="Select at least one app for this server."
+                            >
+                              !
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className={styles.credentialsCell}>
+                          <button
+                            type="button"
+                            onClick={() => openCredentialsFor(alias)}
+                            className={`${styles.smallButton} ${styles.smallButtonEnabled}`}
+                          >
+                            Credentials
+                          </button>
+                        </div>
                         <div>
                           <input
                             type="checkbox"
@@ -879,9 +991,6 @@ export default function DeploymentWorkspace({
                             disabled={!isSelectable}
                             onChange={() => toggleDeployAlias(alias)}
                           />
-                        </div>
-                        <div className={`${styles.healthCell} ${connectionState.iconTone}`}>
-                          <i className={connectionState.iconClass} aria-hidden="true" />
                         </div>
                       </div>
                     );

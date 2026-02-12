@@ -230,7 +230,7 @@
 .serverTableHeader {
   display: grid;
   grid-template-columns: var(--deploy-table-columns);
-  gap: 10px;
+  gap: 6px;
   align-items: center;
   padding: 10px 12px;
   border-bottom: 1px solid var(--bs-border-color-translucent);
@@ -239,26 +239,40 @@
   color: var(--deployer-muted-ink);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.serverTableHeader > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .serverTableRows {
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: grid;
-  gap: 8px;
+  gap: 0;
   align-content: start;
-  padding: 10px 12px;
+  padding: 0;
 }
 
 .serverRow {
   display: grid;
   grid-template-columns: var(--deploy-table-columns);
-  gap: 10px;
+  gap: 6px;
   align-items: center;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--bs-border-color-translucent);
+  padding: 8px 12px;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid var(--bs-border-color-translucent);
   background: var(--bs-body-bg);
   font-size: 12px;
+  white-space: nowrap;
+}
+
+.serverRow > * {
+  min-width: 0;
 }
 
 .serverRowHealthy {
@@ -277,12 +291,13 @@
 }
 
 .serverRowMissingCredentials {
-  background: var(--bs-secondary-bg-subtle);
+  background: var(--bs-danger-bg-subtle);
+  border-color: var(--bs-danger-border-subtle);
 }
 
 .serverRowSelected {
-  border-width: 2px;
-  border-color: var(--bs-body-color);
+  outline: 2px solid var(--bs-body-color);
+  outline-offset: -2px;
 }
 
 .statusCell {
@@ -296,16 +311,26 @@
   text-overflow: ellipsis;
 }
 
+.statusLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statusConnectionIcon {
+  flex: 0 0 auto;
+  font-size: 13px;
+}
+
 .statusCellDeployed {
   color: var(--bs-success-text-emphasis);
 }
 
-.statusDot {
-  font-size: 10px;
-}
-
 .aliasCell {
   font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .roleCell {
@@ -314,10 +339,74 @@
   white-space: nowrap;
 }
 
-.healthCell {
-  display: grid;
-  place-items: center;
-  font-size: 15px;
+.tableInputWrap {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.tableInput {
+  width: 100%;
+  min-width: 0;
+  border-radius: 8px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  padding: 5px 18px 5px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tableInputMissing {
+  border-color: var(--bs-danger);
+}
+
+.appsCell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+  position: relative;
+  padding-right: 14px;
+}
+
+.appsCell .roleCell {
+  flex: 1;
+  min-width: 0;
+}
+
+.credentialsCell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+  position: relative;
+  padding-right: 14px;
+}
+
+.credentialsCell .smallButton {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 5px 10px;
+}
+
+.cellAlert {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--bs-danger-text-emphasis);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .iconSuccess {
