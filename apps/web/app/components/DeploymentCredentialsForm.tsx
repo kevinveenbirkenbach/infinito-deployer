@@ -570,13 +570,6 @@ export default function DeploymentCredentialsForm({
                 <i className="fa-solid fa-chevron-down" aria-hidden="true" />
               </button>
               <button
-                onClick={applySearch}
-                className={`${styles.toolbarButton} ${styles.searchButton}`}
-              >
-                <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />
-                <span>Search</span>
-              </button>
-              <button
                 onClick={addServerFromSearch}
                 className={`${styles.toolbarButton} ${styles.addButton}`}
               >

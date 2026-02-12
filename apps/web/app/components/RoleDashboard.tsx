@@ -372,13 +372,6 @@ export default function RoleDashboard({
                 <span>Filters</span>
                 <i className="fa-solid fa-chevron-down" aria-hidden="true" />
               </button>
-              <button
-                onClick={applySearch}
-                className={`${styles.toolbarButton} ${styles.searchButton}`}
-              >
-                <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />
-                <span>Search</span>
-              </button>
               {serverSwitcher ? (
                 <div className={styles.serverSwitcherSlot}>{serverSwitcher}</div>
               ) : null}

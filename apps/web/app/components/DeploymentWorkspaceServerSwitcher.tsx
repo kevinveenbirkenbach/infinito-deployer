@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import styles from "./DeploymentWorkspaceServerSwitcher.module.css";
 
 type ServerState = {
@@ -50,11 +50,34 @@ export default function DeploymentWorkspaceServerSwitcher({
     close();
   };
 
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      const details = detailsRef.current;
+      const target = event.target as Node | null;
+      if (!details || !details.open || !target) return;
+      if (!details.contains(target)) close();
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const details = detailsRef.current;
+      if (!details?.open) return;
+      close();
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
   return (
     <details ref={detailsRef} className={styles.switcher}>
       <summary className={styles.trigger}>
         <i className="fa-solid fa-server" aria-hidden="true" />
-        <span>Selected for: {currentAlias || "none"}</span>
+        <span>Selection for: {currentAlias || "none"}</span>
         <i className="fa-solid fa-chevron-down" aria-hidden="true" />
       </summary>
       <div className={styles.menu}>
