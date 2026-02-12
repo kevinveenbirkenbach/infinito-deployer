@@ -20,7 +20,7 @@ const bodyFont = Work_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Infinito.Nexus Software Center",
+  title: "Infinito.Nexus Store",
   description: "Software on your infrastructure. Data under your control.",
 };
 

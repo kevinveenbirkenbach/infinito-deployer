@@ -51,7 +51,7 @@ export default async function Page() {
               letterSpacing: "-0.03em",
             }}
           >
-            Infinito.Nexus Software Center
+            Infinito.Nexus Store
           </h1>
           <p
             className="text-body-secondary"

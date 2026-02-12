@@ -532,6 +532,21 @@ export default function DeploymentCredentialsForm({
                 className={`form-control ${styles.search}`}
               />
               <button
+                ref={filtersButtonRef}
+                onClick={() => {
+                  if (filtersOpen) {
+                    setFiltersOpen(false);
+                  } else {
+                    openFilters();
+                  }
+                }}
+                className={`${styles.toolbarButton} ${styles.filterButton}`}
+                aria-expanded={filtersOpen}
+              >
+                <i className="fa-solid fa-filter" aria-hidden="true" />
+                <span>Filters</span>
+              </button>
+              <button
                 onClick={applySearch}
                 className={`${styles.toolbarButton} ${styles.searchButton}`}
               >
@@ -562,21 +577,6 @@ export default function DeploymentCredentialsForm({
                   );
                 })}
               </div>
-              <button
-                ref={filtersButtonRef}
-                onClick={() => {
-                  if (filtersOpen) {
-                    setFiltersOpen(false);
-                  } else {
-                    openFilters();
-                  }
-                }}
-                className={`${styles.toolbarButton} ${styles.filterButton}`}
-                aria-expanded={filtersOpen}
-              >
-                <i className="fa-solid fa-filter" aria-hidden="true" />
-                <span>Filters</span>
-              </button>
             </div>
           </div>
 
