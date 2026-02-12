@@ -10,6 +10,7 @@ import DeploymentWorkspaceServerSwitcher from "./DeploymentWorkspaceServerSwitch
 import styles from "./DeploymentWorkspace.module.css";
 import { createInitialState } from "../lib/deploy_form";
 import { buildDeploymentPayload } from "../lib/deployment_payload";
+import type { ConnectionResult } from "./deployment-credentials/types";
 
 type Role = {
   id: string;
@@ -86,14 +87,24 @@ export default function DeploymentWorkspace({
   const [deployedAliases, setDeployedAliases] = useState<Set<string>>(
     new Set<string>()
   );
-  const [serverListCollapsed, setServerListCollapsed] = useState(false);
+  const [connectionResults, setConnectionResults] = useState<
+    Record<string, ConnectionResult>
+  >({});
+  const [deployViewTab, setDeployViewTab] = useState<"live-log" | "terminal">(
+    "live-log"
+  );
   const lastDeploymentSelectionRef = useRef<string[] | null>(null);
 
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [inventoryReady, setInventoryReady] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
-  const [jobId, setJobId] = useState<string | null>(null);
+  const [liveJobId, setLiveJobId] = useState("");
+  const [connectRequestKey, setConnectRequestKey] = useState(0);
+  const [cancelRequestKey, setCancelRequestKey] = useState(0);
+  const [liveConnected, setLiveConnected] = useState(false);
+  const [liveCanceling, setLiveCanceling] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<
     "store" | "server" | "inventory" | "deploy"
   >("store");
@@ -248,6 +259,22 @@ export default function DeploymentWorkspace({
   }, [servers]);
 
   useEffect(() => {
+    setConnectionResults((prev) => {
+      const existing = new Set(servers.map((server) => server.alias));
+      let changed = false;
+      const next: Record<string, ConnectionResult> = {};
+      Object.entries(prev).forEach(([alias, result]) => {
+        if (existing.has(alias)) {
+          next[alias] = result;
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [servers]);
+
+  useEffect(() => {
     setDeployRoleFilter((prev) => {
       const allowed = new Set(inventoryRoleIds);
       const next = new Set(Array.from(prev).filter((roleId) => allowed.has(roleId)));
@@ -260,8 +287,15 @@ export default function DeploymentWorkspace({
 
   useEffect(() => {
     setDeployedAliases(new Set());
+    setConnectionResults({});
     setDeploySelection(new Set());
     setDeployRoleFilter(new Set());
+    setLiveJobId("");
+    setLiveConnected(false);
+    setLiveCanceling(false);
+    setLiveError(null);
+    setConnectRequestKey(0);
+    setCancelRequestKey(0);
   }, [workspaceId]);
 
   useEffect(() => {
@@ -362,6 +396,12 @@ export default function DeploymentWorkspace({
         if (activeAlias === alias) {
           setActiveAlias(nextAlias);
         }
+        setConnectionResults((prev) => {
+          if (!prev[alias]) return prev;
+          const next = { ...prev, [nextAlias]: prev[alias] };
+          delete next[alias];
+          return next;
+        });
         setAliasRenames((prev) => [...prev, { from: alias, to: nextAlias }]);
       }
     },
@@ -369,29 +409,13 @@ export default function DeploymentWorkspace({
   );
 
   const addServer = useCallback(
-    (aliasHint?: string) => {
+    (_aliasHint?: string) => {
       const existing = new Set(servers.map((server) => server.alias));
-      const normalizedHint = String(aliasHint || "")
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
-
-      let alias = "";
-      if (normalizedHint) {
-        alias = normalizedHint;
-        let idx = 2;
-        while (existing.has(alias)) {
-          alias = `${normalizedHint}-${idx}`;
-          idx += 1;
-        }
-      } else {
-        let idx = 1;
+      let alias = "server";
+      let idx = 2;
+      while (existing.has(alias)) {
         alias = `server-${idx}`;
-        while (existing.has(alias)) {
-          idx += 1;
-          alias = `server-${idx}`;
-        }
+        idx += 1;
       }
 
       setServers((prev) => [...prev, createServer(alias)]);
@@ -417,6 +441,12 @@ export default function DeploymentWorkspace({
       });
       setSelectedByAlias((prev) => {
         const next: Record<string, Set<string>> = { ...prev };
+        delete next[alias];
+        return next;
+      });
+      setConnectionResults((prev) => {
+        if (!prev[alias]) return prev;
+        const next = { ...prev };
         delete next[alias];
         return next;
       });
@@ -486,6 +516,12 @@ export default function DeploymentWorkspace({
     setDeployRoleFilter(new Set());
   };
 
+  const handleConnectionResult = (alias: string, result: ConnectionResult) => {
+    const key = String(alias || "").trim();
+    if (!key) return;
+    setConnectionResults((prev) => ({ ...prev, [key]: result }));
+  };
+
   const deploymentPlan = useMemo(
     () =>
       buildDeploymentPayload({
@@ -542,8 +578,9 @@ export default function DeploymentWorkspace({
       }
       const data = await res.json();
       const created = String(data?.job_id ?? "");
-      setJobId(created || null);
       if (created) {
+        setLiveJobId(created);
+        setDeployViewTab("terminal");
         onJobCreated?.(created);
       }
     } catch (err: any) {
@@ -566,7 +603,7 @@ export default function DeploymentWorkspace({
   const handleDeploymentStatus = useCallback(
     (status: { job_id?: string; status?: string } | null) => {
       if (!status?.status) return;
-      if (status.job_id && jobId && status.job_id !== jobId) return;
+      if (status.job_id && liveJobId && status.job_id !== liveJobId) return;
       const terminal = ["succeeded", "failed", "canceled"].includes(status.status);
       if (status.status === "succeeded" && lastDeploymentSelectionRef.current) {
         setDeployedAliases((prev) => {
@@ -579,14 +616,75 @@ export default function DeploymentWorkspace({
         lastDeploymentSelectionRef.current = null;
       }
     },
-    [jobId]
+    [liveJobId]
   );
 
   const deployTableColumns =
-    "minmax(120px, 1.2fr) minmax(120px, 1fr) minmax(160px, 1.8fr) minmax(100px, 1fr) minmax(220px, 2.4fr) 72px";
+    "minmax(150px, 1.3fr) minmax(120px, 1fr) minmax(160px, 1.8fr) minmax(120px, 1fr) minmax(220px, 2.1fr) 72px 54px";
   const deployTableStyle = {
     "--deploy-table-columns": deployTableColumns,
   } as CSSProperties;
+
+  const hasCredentials = (server: ServerState) => {
+    const host = String(server.host || "").trim();
+    const user = String(server.user || "").trim();
+    const authReady =
+      server.authMethod === "private_key"
+        ? Boolean(String(server.privateKey || "").trim())
+        : Boolean(String(server.password || "").trim());
+    return Boolean(host && user && authReady);
+  };
+
+  const getConnectionState = (server: ServerState) => {
+    const credentialsReady = hasCredentials(server);
+    const status = connectionResults[server.alias];
+    const pingFailed = status?.ping_ok === false;
+    const fullyConnected = status?.ping_ok === true && status?.ssh_ok === true;
+
+    if (credentialsReady && fullyConnected) {
+      return {
+        rowClass: styles.serverRowHealthy,
+        label: "Connected",
+        iconClass: "fa-solid fa-circle-check",
+        iconTone: styles.iconSuccess,
+      };
+    }
+    if (!credentialsReady && pingFailed) {
+      return {
+        rowClass: styles.serverRowCritical,
+        label: "Ping fail + missing credentials",
+        iconClass: "fa-solid fa-circle-xmark",
+        iconTone: styles.iconDanger,
+      };
+    }
+    if (!credentialsReady) {
+      return {
+        rowClass: styles.serverRowMissingCredentials,
+        label: "Missing credentials",
+        iconClass: "fa-solid fa-key",
+        iconTone: styles.iconMuted,
+      };
+    }
+    return {
+      rowClass: styles.serverRowWarning,
+      label: status ? "No SSH connection" : "Credentials ready",
+      iconClass: "fa-solid fa-bolt",
+      iconTone: styles.iconWarning,
+    };
+  };
+
+  const requestConnect = () => {
+    if (!liveJobId.trim()) return;
+    setLiveError(null);
+    setConnectRequestKey((prev) => prev + 1);
+    setDeployViewTab("terminal");
+  };
+
+  const requestCancel = () => {
+    if (!liveJobId.trim()) return;
+    setLiveError(null);
+    setCancelRequestKey((prev) => prev + 1);
+  };
 
   const serverSwitcher = (
     <DeploymentWorkspaceServerSwitcher
@@ -627,9 +725,11 @@ export default function DeploymentWorkspace({
           baseUrl={baseUrl}
           workspaceId={workspaceId}
           servers={servers}
+          connectionResults={connectionResults}
           activeAlias={activeAlias}
           onActiveAliasChange={setActiveAlias}
           onUpdateServer={updateServer}
+          onConnectionResult={handleConnectionResult}
           onRemoveServer={removeServer}
           onAddServer={addServer}
           compact
@@ -669,63 +769,25 @@ export default function DeploymentWorkspace({
       title: "Deploy",
       content: (
         <div className={styles.deployLayout}>
-          <div className={styles.deployTop}>
-            <div className={styles.deployTopLeft}>
-              <button
-                onClick={startDeployment}
-                disabled={!canDeploy}
-                className={`${styles.startButton} ${
-                  canDeploy ? styles.startEnabled : styles.startDisabled
-                }`}
-              >
-                {deploying ? "Starting..." : "Start deployment"}
-              </button>
-              {jobId ? (
-                <div className={styles.jobInfo}>
-                  Job ID: <code>{jobId}</code>
-                </div>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => setDeployRolePickerOpen(true)}
-                className={`${styles.smallButton} ${styles.smallButtonEnabled}`}
-                disabled={inventoryRoleIds.length === 0}
-                title="Choose apps passed to infinito deploy --id"
-              >
-                <i className="fa-solid fa-list-check" aria-hidden="true" />
-                <span>Apps: {deployRoleSummary}</span>
-              </button>
-            </div>
-            <div className={styles.deployTopRight}>
-              <button
-                onClick={selectAllDeployAliases}
-                disabled={selectableAliases.length === 0}
-                className={`${styles.smallButton} ${
-                  selectableAliases.length === 0
-                    ? styles.smallButtonDisabled
-                    : styles.smallButtonEnabled
-                }`}
-              >
-                Select all
-              </button>
-              <button
-                onClick={deselectAllDeployAliases}
-                disabled={selectableAliases.length === 0}
-                className={`${styles.smallButton} ${
-                  selectableAliases.length === 0
-                    ? styles.smallButtonDisabled
-                    : styles.smallButtonEnabled
-                }`}
-              >
-                Deselect all
-              </button>
-              <button
-                onClick={() => setServerListCollapsed((prev) => !prev)}
-                className={`${styles.smallButton} ${styles.smallButtonEnabled}`}
-              >
-                {serverListCollapsed ? "Show list" : "Hide list"}
-              </button>
-            </div>
+          <div className={styles.deployTabs}>
+            <button
+              type="button"
+              onClick={() => setDeployViewTab("live-log")}
+              className={`${styles.deployTabButton} ${
+                deployViewTab === "live-log" ? styles.deployTabButtonActive : ""
+              }`}
+            >
+              Live log
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeployViewTab("terminal")}
+              className={`${styles.deployTabButton} ${
+                deployViewTab === "terminal" ? styles.deployTabButtonActive : ""
+              }`}
+            >
+              Terminal
+            </button>
           </div>
 
           {Object.keys(deploymentErrors).length > 0 ? (
@@ -737,93 +799,190 @@ export default function DeploymentWorkspace({
           ) : null}
 
           {deployError ? <div className={styles.errorText}>{deployError}</div> : null}
+          {liveError ? <div className={styles.errorText}>{liveError}</div> : null}
 
           <div className={styles.deployBody}>
-            {!serverListCollapsed ? (
-              <div className={styles.serverList} style={deployTableStyle}>
+            <div
+              className={`${styles.deployTabPanel} ${
+                deployViewTab === "live-log" ? styles.deployTabPanelActive : ""
+              }`}
+              aria-hidden={deployViewTab !== "live-log"}
+            >
+              <div className={styles.serverTableCard} style={deployTableStyle}>
+                <div className={styles.serverTableTop}>
+                  <span className={styles.serverTableTitle}>Live log</span>
+                  <span className={`text-body-secondary ${styles.serverTableMeta}`}>
+                    {deploySelection.size} selected
+                  </span>
+                </div>
                 <div className={styles.serverTableHeader}>
                   <span>Status</span>
                   <span>Alias</span>
                   <span>Host</span>
                   <span>User</span>
-                  <span>Roles</span>
+                  <span>Apps</span>
                   <span>Select</span>
+                  <span>Icon</span>
                 </div>
-                {servers.map((server) => {
-                  const alias = String(server.alias || "").trim();
-                  if (!alias) return null;
-                  const roles = selectedRolesByAlias?.[alias] ?? [];
-                  const hasRoles = Array.isArray(roles) && roles.length > 0;
-                  const isDeployed = deployedAliases.has(alias);
-                  const isSelectable = hasRoles && !isDeployed;
-                  const isSelected = deploySelection.has(alias);
-                  const rowStatusLabel = isDeployed
-                    ? "Deployed"
-                    : hasRoles
-                    ? "Pending"
-                    : "No roles";
-                  const roleText =
-                    inventoryRoleIds.length === 0
-                      ? "No apps in inventory"
-                      : deployRoleSummary;
-                  const roleTitle =
-                    deployRoleFilter.size > 0
-                      ? Array.from(deployRoleFilter).sort().join(", ")
+                <div className={styles.serverTableRows}>
+                  {servers.map((server) => {
+                    const alias = String(server.alias || "").trim();
+                    if (!alias) return null;
+                    const roles = selectedRolesByAlias?.[alias] ?? [];
+                    const filteredRoles = (Array.isArray(roles) ? roles : []).filter(
+                      (roleId) =>
+                        deployRoleFilter.size === 0 || deployRoleFilter.has(roleId)
+                    );
+                    const hasRoles = filteredRoles.length > 0;
+                    const isDeployed = deployedAliases.has(alias);
+                    const isSelectable = hasRoles && !isDeployed;
+                    const isSelected = deploySelection.has(alias);
+                    const connectionState = getConnectionState(server);
+                    const rowStatusLabel = isDeployed
+                      ? "Deployed"
+                      : hasRoles
+                      ? connectionState.label
+                      : "No apps";
+                    const roleText = hasRoles ? `${filteredRoles.length} apps` : "—";
+                    const roleTitle = hasRoles
+                      ? filteredRoles.sort().join(", ")
                       : "No apps selected";
-                  return (
-                    <div
-                      key={alias}
-                      className={`${styles.serverRow} ${
-                        isSelected ? styles.serverRowSelected : ""
-                      }`}
-                    >
+                    return (
                       <div
-                        className={`${styles.statusCell} ${
-                          isDeployed ? styles.statusCellDeployed : ""
-                        }`}
+                        key={alias}
+                        className={`${styles.serverRow} ${
+                          connectionState.rowClass
+                        } ${isSelected ? styles.serverRowSelected : ""}`}
                       >
-                        {isDeployed ? (
-                          <i className="fa-solid fa-check" aria-hidden="true" />
-                        ) : (
-                          <span className={styles.statusDot}>•</span>
-                        )}
-                        <span>{rowStatusLabel}</span>
+                        <div
+                          className={`${styles.statusCell} ${
+                            isDeployed ? styles.statusCellDeployed : ""
+                          }`}
+                        >
+                          {isDeployed ? (
+                            <i className="fa-solid fa-check" aria-hidden="true" />
+                          ) : (
+                            <span className={styles.statusDot}>•</span>
+                          )}
+                          <span>{rowStatusLabel}</span>
+                        </div>
+                        <span className={styles.aliasCell}>{alias}</span>
+                        <span>{server.host || "—"}</span>
+                        <span>{server.user || "—"}</span>
+                        <span className={styles.roleCell} title={roleTitle}>
+                          {roleText}
+                        </span>
+                        <div>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={!isSelectable}
+                            onChange={() => toggleDeployAlias(alias)}
+                          />
+                        </div>
+                        <div className={`${styles.healthCell} ${connectionState.iconTone}`}>
+                          <i className={connectionState.iconClass} aria-hidden="true" />
+                        </div>
                       </div>
-                      <span className={styles.aliasCell}>{alias}</span>
-                      <span>{server.host || "—"}</span>
-                      <span>{server.user || "—"}</span>
-                      <button
-                        type="button"
-                        onClick={() => setDeployRolePickerOpen(true)}
-                        className={`text-body-secondary ${styles.roleCellButton}`}
-                        title={roleTitle}
-                      >
-                        {roleText}
-                      </button>
-                      <div>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          disabled={!isSelectable}
-                          onChange={() => toggleDeployAlias(alias)}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+                <div className={styles.serverTableFooter}>
+                  <button
+                    type="button"
+                    onClick={() => setDeployRolePickerOpen(true)}
+                    className={`${styles.smallButton} ${styles.smallButtonEnabled}`}
+                    disabled={inventoryRoleIds.length === 0}
+                    title="Choose apps passed to infinito deploy --id"
+                  >
+                    <i className="fa-solid fa-list-check" aria-hidden="true" />
+                    <span>Apps: {deployRoleSummary}</span>
+                  </button>
+                  <button
+                    onClick={selectAllDeployAliases}
+                    disabled={selectableAliases.length === 0}
+                    className={`${styles.smallButton} ${
+                      selectableAliases.length === 0
+                        ? styles.smallButtonDisabled
+                        : styles.smallButtonEnabled
+                    }`}
+                  >
+                    Select all
+                  </button>
+                  <button
+                    onClick={deselectAllDeployAliases}
+                    disabled={selectableAliases.length === 0}
+                    className={`${styles.smallButton} ${
+                      selectableAliases.length === 0
+                        ? styles.smallButtonDisabled
+                        : styles.smallButtonEnabled
+                    }`}
+                  >
+                    Deselect all
+                  </button>
+                </div>
               </div>
-            ) : null}
-
-            <div className={styles.liveWrap}>
-              <LiveDeploymentView
-                baseUrl={baseUrl}
-                jobId={jobId ?? ""}
-                autoConnect
-                compact
-                fill
-                onStatusChange={handleDeploymentStatus}
-              />
             </div>
+
+            <div
+              className={`${styles.deployTabPanel} ${
+                deployViewTab === "terminal" ? styles.deployTabPanelActive : ""
+              }`}
+              aria-hidden={deployViewTab !== "terminal"}
+            >
+              <div className={styles.liveWrap}>
+                <LiveDeploymentView
+                  baseUrl={baseUrl}
+                  jobId={liveJobId}
+                  compact
+                  fill
+                  hideControls
+                  connectRequestKey={connectRequestKey}
+                  cancelRequestKey={cancelRequestKey}
+                  onJobIdSync={setLiveJobId}
+                  onConnectedChange={setLiveConnected}
+                  onCancelingChange={setLiveCanceling}
+                  onErrorChange={setLiveError}
+                  onStatusChange={handleDeploymentStatus}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.deployFooter}>
+            <input
+              value={liveJobId}
+              onChange={(event) => {
+                setLiveError(null);
+                setLiveJobId(event.target.value);
+              }}
+              placeholder="Job ID"
+              className={`form-control ${styles.jobInput}`}
+            />
+            <button
+              type="button"
+              onClick={requestConnect}
+              disabled={!liveJobId.trim() || liveConnected}
+              className={`btn btn-info ${styles.footerButton}`}
+            >
+              {liveConnected ? "Connected" : "Connect"}
+            </button>
+            <button
+              type="button"
+              onClick={startDeployment}
+              disabled={!canDeploy}
+              className={`btn btn-success ${styles.footerButton}`}
+            >
+              {deploying ? "Deploying..." : "Deploy"}
+            </button>
+            <button
+              type="button"
+              onClick={requestCancel}
+              disabled={!liveJobId.trim() || liveCanceling || !liveConnected}
+              className={`btn btn-danger ${styles.footerButton}`}
+            >
+              {liveCanceling ? "Canceling..." : "Cancel"}
+            </button>
           </div>
         </div>
       ),

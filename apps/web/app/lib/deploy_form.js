@@ -2,7 +2,7 @@ export const AUTH_METHODS = ["password", "private_key"];
 
 export function createInitialState() {
   return {
-    alias: "main",
+    alias: "server",
     host: "",
     port: "",
     user: "",

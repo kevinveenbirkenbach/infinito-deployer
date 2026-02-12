@@ -24,9 +24,11 @@ type DeploymentCredentialsFormProps = {
   baseUrl: string;
   workspaceId: string | null;
   servers: ServerState[];
+  connectionResults: Record<string, ConnectionResult>;
   activeAlias: string;
   onActiveAliasChange: (alias: string) => void;
   onUpdateServer: (alias: string, patch: Partial<ServerState>) => void;
+  onConnectionResult: (alias: string, result: ConnectionResult) => void;
   onRemoveServer: (alias: string) => Promise<void> | void;
   onAddServer: (aliasHint?: string) => void;
   compact?: boolean;
@@ -42,9 +44,11 @@ export default function DeploymentCredentialsForm({
   baseUrl,
   workspaceId,
   servers,
+  connectionResults,
   activeAlias,
   onActiveAliasChange,
   onUpdateServer,
+  onConnectionResult,
   onRemoveServer,
   onAddServer,
   compact = false,
@@ -56,7 +60,6 @@ export default function DeploymentCredentialsForm({
 
   const [openAlias, setOpenAlias] = useState<string | null>(null);
   const [testBusy, setTestBusy] = useState<Record<string, boolean>>({});
-  const [testResults, setTestResults] = useState<Record<string, ConnectionResult>>({});
   const [query, setQuery] = useState("");
   const [queryDraft, setQueryDraft] = useState("");
   const [viewMode, setViewMode] = useState<ServerViewMode>("detail");
@@ -218,8 +221,7 @@ export default function DeploymentCredentialsForm({
   };
 
   const addServerFromSearch = () => {
-    const aliasHint = queryDraft.trim();
-    onAddServer(aliasHint || undefined);
+    onAddServer();
   };
 
   const openFilters = () => {
@@ -448,17 +450,14 @@ export default function DeploymentCredentialsForm({
         throw new Error(text || `HTTP ${res.status}`);
       }
       const data = await res.json();
-      setTestResults((prev) => ({ ...prev, [server.alias]: data }));
+      onConnectionResult(server.alias, data);
     } catch (err: any) {
-      setTestResults((prev) => ({
-        ...prev,
-        [server.alias]: {
-          ping_ok: false,
-          ping_error: err?.message ?? "ping failed",
-          ssh_ok: false,
-          ssh_error: err?.message ?? "ssh failed",
-        },
-      }));
+      onConnectionResult(server.alias, {
+        ping_ok: false,
+        ping_error: err?.message ?? "ping failed",
+        ssh_ok: false,
+        ssh_error: err?.message ?? "ssh failed",
+      });
     } finally {
       setTestBusy((prev) => ({ ...prev, [server.alias]: false }));
     }
@@ -588,7 +587,7 @@ export default function DeploymentCredentialsForm({
               computedColumns={computedColumns}
               aliasCounts={aliasCounts}
               testBusy={testBusy}
-              testResults={testResults}
+              testResults={connectionResults}
               workspaceId={workspaceId}
               onAliasChange={handleAliasChange}
               onPatchServer={updateServer}

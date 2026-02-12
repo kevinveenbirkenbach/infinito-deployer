@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Terminal as XTermTerminal } from "@xterm/xterm";
 import type { FitAddon as XTermFitAddon } from "@xterm/addon-fit";
@@ -20,21 +20,37 @@ type StatusPayload = {
   timestamp?: string | null;
 };
 
+type LiveDeploymentViewProps = {
+  baseUrl: string;
+  jobId?: string;
+  autoConnect?: boolean;
+  compact?: boolean;
+  fill?: boolean;
+  hideControls?: boolean;
+  connectRequestKey?: number;
+  cancelRequestKey?: number;
+  onStatusChange?: (status: StatusPayload | null) => void;
+  onConnectedChange?: (connected: boolean) => void;
+  onCancelingChange?: (canceling: boolean) => void;
+  onErrorChange?: (error: string | null) => void;
+  onJobIdSync?: (jobId: string) => void;
+};
+
 export default function LiveDeploymentView({
   baseUrl,
   jobId: externalJobId,
   autoConnect = false,
   compact = false,
   fill = false,
+  hideControls = false,
+  connectRequestKey,
+  cancelRequestKey,
   onStatusChange,
-}: {
-  baseUrl: string;
-  jobId?: string;
-  autoConnect?: boolean;
-  compact?: boolean;
-  fill?: boolean;
-  onStatusChange?: (status: StatusPayload | null) => void;
-}) {
+  onConnectedChange,
+  onCancelingChange,
+  onErrorChange,
+  onJobIdSync,
+}: LiveDeploymentViewProps) {
   const Wrapper = compact ? "div" : "section";
   const wrapperClassName = [
     compact ? "" : styles.wrapperPanel,
@@ -48,6 +64,8 @@ export default function LiveDeploymentView({
   const [error, setError] = useState<string | null>(null);
   const [canceling, setCanceling] = useState(false);
   const lastAutoJobRef = useRef<string | null>(null);
+  const lastConnectRequestRef = useRef<number | undefined>(connectRequestKey);
+  const lastCancelRequestRef = useRef<number | undefined>(cancelRequestKey);
 
   const termRef = useRef<XTermTerminal | null>(null);
   const fitRef = useRef<XTermFitAddon | null>(null);
@@ -59,6 +77,7 @@ export default function LiveDeploymentView({
     let onResize: (() => void) | null = null;
     let onSchemeChange: (() => void) | null = null;
     let mediaQuery: MediaQueryList | null = null;
+    let resizeObserver: ResizeObserver | null = null;
 
     const readCssVar = (name: string, fallback: string) => {
       if (typeof window === "undefined") return fallback;
@@ -103,6 +122,10 @@ export default function LiveDeploymentView({
 
       onResize = () => fit.fit();
       window.addEventListener("resize", onResize);
+      if (typeof ResizeObserver !== "undefined" && containerRef.current) {
+        resizeObserver = new ResizeObserver(() => fit.fit());
+        resizeObserver.observe(containerRef.current);
+      }
 
       if (typeof window !== "undefined") {
         mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -141,6 +164,7 @@ export default function LiveDeploymentView({
           legacyMediaQuery.removeListener(onSchemeChange);
         }
       }
+      resizeObserver?.disconnect();
       termRef.current?.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -160,14 +184,21 @@ export default function LiveDeploymentView({
     "--live-status-border": statusStyles.border,
   } as CSSProperties;
   const terminalStyle = {
-    "--terminal-top": `${compact ? 12 : 16}px`,
+    "--terminal-top": hideControls ? "0px" : `${compact ? 12 : 16}px`,
     "--terminal-radius": compact ? "0px" : "18px",
     "--terminal-height": fill ? "100%" : "320px",
     "--terminal-flex": fill ? "1" : "initial",
     "--terminal-min-height": fill ? "220px" : "initial",
   } as CSSProperties;
 
-  const writeLines = (text: string) => {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.requestAnimationFrame(() => {
+      fitRef.current?.fit();
+    });
+  }, [fill, compact, hideControls]);
+
+  const writeLines = useCallback((text: string) => {
     const term = termRef.current;
     if (!term) return;
     const lines = String(text ?? "").split("\n");
@@ -175,14 +206,30 @@ export default function LiveDeploymentView({
       const sanitized = line.replace(/\r/g, "");
       term.writeln(sanitized);
     });
-  };
+  }, []);
 
   useEffect(() => {
     if (typeof externalJobId !== "string") return;
     setJobId((prev) => (prev === externalJobId ? prev : externalJobId));
   }, [externalJobId]);
 
-  const connectTo = (rawId: string) => {
+  useEffect(() => {
+    onConnectedChange?.(connected);
+  }, [connected, onConnectedChange]);
+
+  useEffect(() => {
+    onCancelingChange?.(canceling);
+  }, [canceling, onCancelingChange]);
+
+  useEffect(() => {
+    onErrorChange?.(error);
+  }, [error, onErrorChange]);
+
+  useEffect(() => {
+    onJobIdSync?.(jobId);
+  }, [jobId, onJobIdSync]);
+
+  const connectTo = useCallback((rawId: string) => {
     const trimmed = rawId.trim();
     if (!trimmed) return;
     setError(null);
@@ -236,7 +283,7 @@ export default function LiveDeploymentView({
       setError("Connection lost");
       setConnected(false);
     };
-  };
+  }, [baseUrl, onStatusChange, writeLines]);
 
   const connect = () => {
     connectTo(jobId);
@@ -249,15 +296,23 @@ export default function LiveDeploymentView({
     if (lastAutoJobRef.current === trimmed) return;
     lastAutoJobRef.current = trimmed;
     connectTo(trimmed);
-  }, [autoConnect, externalJobId]);
+  }, [autoConnect, connectTo, externalJobId]);
 
-  const cancel = async () => {
-    if (!jobId.trim()) return;
+  useEffect(() => {
+    if (typeof connectRequestKey !== "number") return;
+    if (lastConnectRequestRef.current === connectRequestKey) return;
+    lastConnectRequestRef.current = connectRequestKey;
+    connectTo(jobId);
+  }, [connectRequestKey, connectTo, jobId]);
+
+  const cancel = useCallback(async (rawJobId?: string) => {
+    const targetJobId = String(rawJobId ?? jobId).trim();
+    if (!targetJobId || isTerminalStatus(status?.status)) return;
     setCanceling(true);
     setError(null);
     try {
       const res = await fetch(
-        `${baseUrl}/api/deployments/${jobId.trim()}/cancel`,
+        `${baseUrl}/api/deployments/${targetJobId}/cancel`,
         { method: "POST" }
       );
       if (!res.ok) {
@@ -269,7 +324,14 @@ export default function LiveDeploymentView({
     } finally {
       setCanceling(false);
     }
-  };
+  }, [baseUrl, jobId, status?.status]);
+
+  useEffect(() => {
+    if (typeof cancelRequestKey !== "number") return;
+    if (lastCancelRequestRef.current === cancelRequestKey) return;
+    lastCancelRequestRef.current = cancelRequestKey;
+    void cancel(jobId);
+  }, [cancel, cancelRequestKey, jobId, status?.status]);
 
   return (
     <Wrapper className={wrapperClassName}>
@@ -290,34 +352,38 @@ export default function LiveDeploymentView({
         </div>
       ) : null}
 
-      <div className={styles.controls}>
-        <input
-          value={jobId}
-          onChange={(e) => setJobId(e.target.value)}
-          placeholder="Job ID"
-          className={styles.jobInput}
-        />
-        <button
-          onClick={connect}
-          disabled={!jobId.trim() || connected}
-          className={`${styles.connectButton} ${
-            connected ? styles.connectDisabled : styles.connectEnabled
-          }`}
-        >
-          {connected ? "Connected" : "Connect"}
-        </button>
-        <button
-          onClick={cancel}
-          disabled={!jobId.trim() || canceling || isTerminalStatus(status?.status)}
-          className={`${styles.cancelButton} ${
-            !jobId.trim() || canceling || isTerminalStatus(status?.status)
-              ? styles.cancelDisabled
-              : styles.cancelEnabled
-          }`}
-        >
-          {canceling ? "Canceling..." : "Cancel"}
-        </button>
-      </div>
+      {!hideControls ? (
+        <div className={styles.controls}>
+          <input
+            value={jobId}
+            onChange={(e) => setJobId(e.target.value)}
+            placeholder="Job ID"
+            className={styles.jobInput}
+          />
+          <button
+            onClick={connect}
+            disabled={!jobId.trim() || connected}
+            className={`${styles.connectButton} ${
+              connected ? styles.connectDisabled : styles.connectEnabled
+            }`}
+          >
+            {connected ? "Connected" : "Connect"}
+          </button>
+          <button
+            onClick={() => {
+              void cancel();
+            }}
+            disabled={!jobId.trim() || canceling || isTerminalStatus(status?.status)}
+            className={`${styles.cancelButton} ${
+              !jobId.trim() || canceling || isTerminalStatus(status?.status)
+                ? styles.cancelDisabled
+                : styles.cancelEnabled
+            }`}
+          >
+            {canceling ? "Canceling..." : "Cancel"}
+          </button>
+        </div>
+      ) : null}
 
       {error ? <div className={`text-danger ${styles.error}`}>{error}</div> : null}
 

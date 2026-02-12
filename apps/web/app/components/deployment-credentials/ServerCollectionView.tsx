@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { SERVER_VIEW_CONFIG } from "./types";
 import styles from "./styles.module.css";
@@ -41,10 +42,50 @@ export default function ServerCollectionView({
   onRequestRemove,
 }: ServerCollectionViewProps) {
   const viewConfig = SERVER_VIEW_CONFIG[viewMode];
+  const [aliasDrafts, setAliasDrafts] = useState<Record<string, string>>({});
 
   const listGridStyle = {
     "--server-list-columns": listColumns,
   } as CSSProperties;
+
+  useEffect(() => {
+    setAliasDrafts((prev) => {
+      const next: Record<string, string> = {};
+      paginatedServers.forEach((server) => {
+        next[server.alias] = prev[server.alias] ?? server.alias;
+      });
+      return next;
+    });
+  }, [paginatedServers]);
+
+  const updateAliasDraft = (alias: string, value: string) => {
+    setAliasDrafts((prev) => ({ ...prev, [alias]: value }));
+  };
+
+  const commitAlias = (server: ServerState) => {
+    const draft = String(aliasDrafts[server.alias] ?? server.alias);
+    const trimmed = draft.trim();
+    if (!trimmed || trimmed === server.alias) {
+      setAliasDrafts((prev) => ({ ...prev, [server.alias]: trimmed || server.alias }));
+      return;
+    }
+    onAliasChange(server.alias, trimmed);
+    setAliasDrafts((prev) => {
+      const next = { ...prev };
+      delete next[server.alias];
+      next[trimmed] = trimmed;
+      return next;
+    });
+  };
+
+  const getAliasError = (server: ServerState) => {
+    const aliasValue = String(aliasDrafts[server.alias] ?? server.alias).trim();
+    if (!aliasValue) return "Alias is required.";
+    const duplicateCount = aliasCounts[aliasValue] ?? 0;
+    const duplicates = aliasValue === server.alias ? duplicateCount > 1 : duplicateCount > 0;
+    if (duplicates) return "Alias already exists.";
+    return null;
+  };
 
   if (viewMode === "list") {
     return (
@@ -58,13 +99,9 @@ export default function ServerCollectionView({
           <span>Actions</span>
         </div>
         {paginatedServers.map((server) => {
-          const alias = (server.alias || "").trim();
-          const aliasError = !alias
-            ? "Alias is required."
-            : aliasCounts[alias] > 1
-            ? "Alias already exists."
-            : null;
+          const aliasError = getAliasError(server);
           const status = testResults[server.alias];
+          const aliasValue = aliasDrafts[server.alias] ?? server.alias;
           return (
             <div
               key={server.alias}
@@ -73,9 +110,16 @@ export default function ServerCollectionView({
             >
               <div className={styles.fieldColumn}>
                 <input
-                  value={server.alias}
-                  onChange={(event) => onAliasChange(server.alias, event.target.value)}
-                  placeholder="main"
+                  value={aliasValue}
+                  onChange={(event) => updateAliasDraft(server.alias, event.target.value)}
+                  onBlur={() => commitAlias(server)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      commitAlias(server);
+                    }
+                  }}
+                  placeholder="server"
                   className={`${styles.inputSmall} ${
                     aliasError ? styles.inputError : ""
                   }`}
@@ -155,14 +199,10 @@ export default function ServerCollectionView({
   return (
     <div className={styles.cardGrid} style={gridStyle}>
       {paginatedServers.map((server) => {
-        const alias = (server.alias || "").trim();
-        const aliasError = !alias
-          ? "Alias is required."
-          : aliasCounts[alias] > 1
-          ? "Alias already exists."
-          : null;
+        const aliasError = getAliasError(server);
         const status = testResults[server.alias];
         const dense = viewConfig.dense;
+        const aliasValue = aliasDrafts[server.alias] ?? server.alias;
 
         const cardStyle = {
           "--server-card-padding": dense ? "12px" : "16px",
@@ -214,9 +254,16 @@ export default function ServerCollectionView({
               <div className={styles.fieldWrap}>
                 <label className={`text-body-tertiary ${styles.fieldLabel}`}>Alias</label>
                 <input
-                  value={server.alias}
-                  onChange={(event) => onAliasChange(server.alias, event.target.value)}
-                  placeholder="main"
+                  value={aliasValue}
+                  onChange={(event) => updateAliasDraft(server.alias, event.target.value)}
+                  onBlur={() => commitAlias(server)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      commitAlias(server);
+                    }
+                  }}
+                  placeholder="server"
                   className={`${styles.fieldInput} ${
                     aliasError ? styles.inputError : ""
                   }`}
