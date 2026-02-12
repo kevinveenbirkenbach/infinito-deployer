@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import type { Terminal as XTermTerminal } from "@xterm/xterm";
 import type { FitAddon as XTermFitAddon } from "@xterm/addon-fit";
 import {
@@ -23,23 +24,32 @@ export default function LiveDeploymentView({
   jobId: externalJobId,
   autoConnect = false,
   compact = false,
+  fill = false,
+  onStatusChange,
 }: {
   baseUrl: string;
   jobId?: string;
   autoConnect?: boolean;
   compact?: boolean;
+  fill?: boolean;
+  onStatusChange?: (status: StatusPayload | null) => void;
 }) {
   const Wrapper = compact ? "div" : "section";
-  const wrapperStyle = compact
-    ? undefined
-    : {
-        marginTop: 28,
-        padding: 24,
-        borderRadius: 24,
-        background: "var(--deployer-panel-live-bg)",
-        border: "1px solid var(--bs-border-color-translucent)",
-        boxShadow: "var(--deployer-shadow)",
-      };
+  const wrapperStyle: CSSProperties | undefined = {
+    ...(compact
+      ? {}
+      : {
+          marginTop: 28,
+          padding: 24,
+          borderRadius: 24,
+          background: "var(--deployer-panel-live-bg)",
+          border: "1px solid var(--bs-border-color-translucent)",
+          boxShadow: "var(--deployer-shadow)",
+        }),
+    ...(fill
+      ? { display: "flex", flexDirection: "column", minHeight: 0, flex: 1 }
+      : {}),
+  };
   const [jobId, setJobId] = useState(externalJobId ?? "");
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const [connected, setConnected] = useState(false);
@@ -197,8 +207,10 @@ export default function LiveDeploymentView({
       try {
         const payload = JSON.parse((evt as MessageEvent).data);
         setStatus(payload);
+        onStatusChange?.(payload);
       } catch {
         setStatus(null);
+        onStatusChange?.(null);
       }
     });
 
@@ -206,8 +218,10 @@ export default function LiveDeploymentView({
       try {
         const payload = JSON.parse((evt as MessageEvent).data);
         setStatus(payload);
+        onStatusChange?.(payload);
       } catch {
         setStatus(null);
+        onStatusChange?.(null);
       }
       setConnected(false);
       es.close();
@@ -364,15 +378,21 @@ export default function LiveDeploymentView({
 
       <div
         style={{
-          marginTop: 16,
-          borderRadius: 18,
+          marginTop: compact ? 12 : 16,
+          borderRadius: compact ? 0 : 18,
           border: "1px solid var(--deployer-terminal-border)",
           background: "var(--deployer-terminal-bg)",
-          height: 320,
+          height: fill ? "100%" : 320,
+          flex: fill ? 1 : undefined,
+          minHeight: fill ? 220 : undefined,
           overflow: "hidden",
+          display: "flex",
         }}
       >
-        <div style={{ width: "100%", height: "100%" }} ref={containerRef} />
+        <div
+          style={{ width: "100%", height: "100%", flex: 1, minHeight: 0 }}
+          ref={containerRef}
+        />
       </div>
 
       {status?.status && isTerminalStatus(status.status) ? (

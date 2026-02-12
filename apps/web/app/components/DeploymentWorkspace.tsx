@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import RoleDashboard from "./RoleDashboard";
 import DeploymentCredentialsForm from "./DeploymentCredentialsForm";
 import WorkspacePanel from "./WorkspacePanel";
@@ -39,6 +40,124 @@ type ServerState = {
 
 type AliasRename = { from: string; to: string };
 
+function ServerSwitcher({
+  currentAlias,
+  servers,
+  onSelect,
+  onCreate,
+  onOpenServerTab,
+}: {
+  currentAlias: string;
+  servers: ServerState[];
+  onSelect: (alias: string) => void;
+  onCreate: () => void;
+  onOpenServerTab: () => void;
+}) {
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+  const close = () => {
+    if (detailsRef.current) {
+      detailsRef.current.open = false;
+    }
+  };
+  const handleSelect = (alias: string) => {
+    onSelect(alias);
+    close();
+  };
+  const handleCreate = () => {
+    onCreate();
+    onOpenServerTab();
+    close();
+  };
+
+  return (
+    <details ref={detailsRef} style={{ position: "relative" }}>
+      <summary
+        style={{
+          listStyle: "none",
+          cursor: "pointer",
+          padding: "6px 12px",
+          borderRadius: 999,
+          border: "1px solid var(--bs-body-color)",
+          background: "var(--bs-body-color)",
+          color: "var(--bs-body-bg)",
+          fontSize: 12,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <i className="fa-solid fa-server" aria-hidden="true" />
+        <span>{currentAlias || "Select server"}</span>
+      </summary>
+      <div
+        style={{
+          position: "absolute",
+          right: 0,
+          marginTop: 8,
+          padding: 10,
+          borderRadius: 12,
+          border: "1px solid var(--bs-border-color-translucent)",
+          background: "var(--bs-body-bg)",
+          boxShadow: "var(--deployer-shadow)",
+          minWidth: 200,
+          zIndex: 50,
+          display: "grid",
+          gap: 6,
+        }}
+      >
+        {servers.length === 0 ? (
+          <div className="text-body-secondary" style={{ fontSize: 12 }}>
+            No servers yet.
+          </div>
+        ) : (
+          servers.map((server) => (
+            <button
+              key={server.alias}
+              onClick={() => handleSelect(server.alias)}
+              style={{
+                textAlign: "left",
+                padding: "6px 10px",
+                borderRadius: 10,
+                border:
+                  currentAlias === server.alias
+                    ? "1px solid var(--bs-body-color)"
+                    : "1px solid var(--bs-border-color)",
+                background:
+                  currentAlias === server.alias
+                    ? "var(--bs-body-color)"
+                    : "var(--bs-body-bg)",
+                color:
+                  currentAlias === server.alias
+                    ? "var(--bs-body-bg)"
+                    : "var(--bs-body-color)",
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              {server.alias}
+            </button>
+          ))
+        )}
+        <button
+          onClick={handleCreate}
+          style={{
+            marginTop: 4,
+            padding: "6px 10px",
+            borderRadius: 10,
+            border: "1px dashed var(--bs-border-color)",
+            background: "var(--bs-body-bg)",
+            color: "var(--bs-body-color)",
+            fontSize: 12,
+            cursor: "pointer",
+          }}
+        >
+          + New
+        </button>
+      </div>
+    </details>
+  );
+}
+
 type DeploymentWorkspaceProps = {
   baseUrl: string;
   onJobCreated?: (jobId: string) => void;
@@ -52,7 +171,6 @@ export default function DeploymentWorkspace({
   const [roles, setRoles] = useState<Role[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [rolesError, setRolesError] = useState<string | null>(null);
-  const [deployScope, setDeployScope] = useState<"active" | "all">("active");
   const [servers, setServers] = useState<ServerState[]>([
     {
       alias: initial.alias,
@@ -74,6 +192,16 @@ export default function DeploymentWorkspace({
   const [aliasRenames, setAliasRenames] = useState<AliasRename[]>([]);
   const [aliasDeletes, setAliasDeletes] = useState<string[]>([]);
   const [selectionTouched, setSelectionTouched] = useState(false);
+  const [deploySelection, setDeploySelection] = useState<Set<string>>(
+    new Set<string>()
+  );
+  const [deployedAliases, setDeployedAliases] = useState<Set<string>>(
+    new Set<string>()
+  );
+  const [serverListCollapsed, setServerListCollapsed] = useState(false);
+  const lastDeploymentSelectionRef = useRef<string[] | null>(null);
+  const [serverSwitcherTarget, setServerSwitcherTarget] =
+    useState<HTMLElement | null>(null);
 
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [inventoryReady, setInventoryReady] = useState(false);
@@ -117,6 +245,13 @@ export default function DeploymentWorkspace({
   }, [baseUrl]);
 
   useEffect(() => {
+    if (typeof document === "undefined") return;
+    setServerSwitcherTarget(
+      document.getElementById("server-switcher-slot")
+    );
+  }, []);
+
+  useEffect(() => {
     if (!activeAlias && servers.length > 0) {
       setActiveAlias(servers[0].alias);
       return;
@@ -125,12 +260,6 @@ export default function DeploymentWorkspace({
       setActiveAlias(servers[0]?.alias ?? "");
     }
   }, [activeAlias, servers]);
-
-  useEffect(() => {
-    if (servers.length <= 1 && deployScope === "all") {
-      setDeployScope("active");
-    }
-  }, [servers, deployScope]);
 
   useEffect(() => {
     if (!activeAlias) return;
@@ -176,6 +305,45 @@ export default function DeploymentWorkspace({
     () => selectedRolesByAlias[activeAlias] ?? [],
     [selectedRolesByAlias, activeAlias]
   );
+
+  const selectableAliases = useMemo(() => {
+    const out: string[] = [];
+    servers.forEach((server) => {
+      const alias = String(server.alias || "").trim();
+      if (!alias) return;
+      const roles = selectedRolesByAlias?.[alias] ?? [];
+      const hasRoles = Array.isArray(roles) && roles.length > 0;
+      if (hasRoles && !deployedAliases.has(alias)) {
+        out.push(alias);
+      }
+    });
+    return out;
+  }, [servers, selectedRolesByAlias, deployedAliases]);
+
+  useEffect(() => {
+    setDeploySelection((prev) => {
+      const allowed = new Set(selectableAliases);
+      const next = new Set(
+        Array.from(prev).filter((alias) => allowed.has(alias))
+      );
+      if (next.size === 0 && selectableAliases.length > 0) {
+        selectableAliases.forEach((alias) => next.add(alias));
+      }
+      return next;
+    });
+  }, [selectableAliases]);
+
+  useEffect(() => {
+    setDeployedAliases((prev) => {
+      const existing = new Set(servers.map((server) => server.alias));
+      return new Set(Array.from(prev).filter((alias) => existing.has(alias)));
+    });
+  }, [servers]);
+
+  useEffect(() => {
+    setDeployedAliases(new Set());
+    setDeploySelection(new Set());
+  }, [workspaceId]);
 
   const applySelectedRolesByAlias = useCallback(
     (rolesByAlias: Record<string, string[]>) => {
@@ -327,21 +495,42 @@ export default function DeploymentWorkspace({
     setSelectionTouched(true);
   };
 
+  const toggleDeployAlias = (alias: string) => {
+    if (!alias) return;
+    setDeploySelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(alias)) {
+        next.delete(alias);
+      } else {
+        next.add(alias);
+      }
+      return next;
+    });
+  };
+
+  const selectAllDeployAliases = () => {
+    setDeploySelection(new Set(selectableAliases));
+  };
+
+  const deselectAllDeployAliases = () => {
+    setDeploySelection(new Set());
+  };
+
   const deploymentPlan = useMemo(
     () =>
       buildDeploymentPayload({
-        deployScope,
         activeServer,
         selectedRolesByAlias,
-        activeAlias,
+        selectedAliases: Array.from(deploySelection),
+        selectableAliases,
         workspaceId,
         inventoryReady,
       }),
     [
-      deployScope,
       activeServer,
       selectedRolesByAlias,
-      activeAlias,
+      deploySelection,
+      selectableAliases,
       workspaceId,
       inventoryReady,
     ]
@@ -358,6 +547,7 @@ export default function DeploymentWorkspace({
       return;
     }
 
+    lastDeploymentSelectionRef.current = Array.from(deploySelection);
     setDeploying(true);
     try {
       const res = await fetch(`${baseUrl}/api/deployments`, {
@@ -400,6 +590,28 @@ export default function DeploymentWorkspace({
       authMethod: activeServer?.authMethod ?? "password",
     };
   }, [activeServer]);
+
+  const handleDeploymentStatus = useCallback(
+    (status: { job_id?: string; status?: string } | null) => {
+      if (!status?.status) return;
+      if (status.job_id && jobId && status.job_id !== jobId) return;
+      const terminal = ["succeeded", "failed", "canceled"].includes(status.status);
+      if (status.status === "succeeded" && lastDeploymentSelectionRef.current) {
+        setDeployedAliases((prev) => {
+          const next = new Set(prev);
+          lastDeploymentSelectionRef.current?.forEach((alias) => next.add(alias));
+          return next;
+        });
+      }
+      if (terminal) {
+        lastDeploymentSelectionRef.current = null;
+      }
+    },
+    [jobId]
+  );
+
+  const deployTableColumns =
+    "32px minmax(140px, 1fr) minmax(180px, 2fr) minmax(120px, 1fr) minmax(200px, 2fr) 120px";
 
   const panels: {
     key: "store" | "server" | "inventory" | "deploy";
@@ -470,95 +682,105 @@ export default function DeploymentWorkspace({
       key: "deploy",
       title: "Deploy",
       content: (
-        <div style={{ display: "grid", gap: 18 }}>
-          <div
-            className="text-body-secondary"
-            style={{ fontSize: 12, display: "flex", gap: 16, flexWrap: "wrap" }}
-          >
-            <span>
-              Selected roles: <strong>{selectedRoles.length || "none"}</strong>
-            </span>
-            <span>
-              Active server: <strong>{activeAlias || "—"}</strong>
-            </span>
-          </div>
-
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+            minHeight: 0,
+            height: "100%",
+          }}
+        >
           <div
             style={{
               display: "flex",
               flexWrap: "wrap",
               gap: 12,
               alignItems: "center",
+              justifyContent: "space-between",
             }}
           >
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <span
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <button
+                onClick={startDeployment}
+                disabled={!canDeploy}
                 style={{
-                  fontSize: 12,
-                  color: "var(--deployer-muted-ink)",
+                  padding: "10px 18px",
+                  borderRadius: 999,
+                  border: "1px solid var(--bs-border-color)",
+                  background: canDeploy
+                    ? "var(--deployer-accent)"
+                    : "var(--deployer-disabled-bg)",
+                  color: canDeploy
+                    ? "var(--deployer-accent-contrast)"
+                    : "var(--deployer-disabled-text)",
+                  cursor: canDeploy ? "pointer" : "not-allowed",
+                  fontWeight: 600,
                 }}
               >
-                Deploy scope:
-              </span>
-              {["active", "all"].map((scope) => {
-                const disabled = servers.length <= 1 && scope === "all";
-                const isActive = deployScope === scope;
-                return (
-                  <button
-                    key={scope}
-                    onClick={() =>
-                      !disabled && setDeployScope(scope as "active" | "all")
-                    }
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: 999,
-                    border: "1px solid var(--deployer-panel-dark-border)",
-                    background: isActive
-                      ? "var(--deployer-accent)"
-                      : "var(--bs-body-bg)",
-                    color: isActive
-                      ? "var(--deployer-accent-contrast)"
-                      : "var(--bs-body-color)",
-                      cursor: disabled ? "not-allowed" : "pointer",
-                      fontSize: 12,
-                      opacity: disabled ? 0.5 : 1,
-                    }}
-                  >
-                    {scope === "active" ? "Active" : "All"}
-                  </button>
-                );
-              })}
+                {deploying ? "Starting..." : "Start deployment"}
+              </button>
+              {jobId ? (
+                <div style={{ fontSize: 12 }}>
+                  Job ID: <code>{jobId}</code>
+                </div>
+              ) : null}
             </div>
-            <button
-              onClick={startDeployment}
-              disabled={!canDeploy}
-              style={{
-                padding: "10px 18px",
-                borderRadius: 999,
-                border: "1px solid var(--bs-border-color)",
-                background: canDeploy
-                  ? "var(--deployer-accent)"
-                  : "var(--deployer-disabled-bg)",
-                color: canDeploy
-                  ? "var(--deployer-accent-contrast)"
-                  : "var(--deployer-disabled-text)",
-                cursor: canDeploy ? "pointer" : "not-allowed",
-                fontWeight: 600,
-              }}
-            >
-              {deploying ? "Starting..." : "Start deployment"}
-            </button>
-            {jobId ? (
-              <div style={{ fontSize: 12 }}>
-                Job ID: <code>{jobId}</code>
-              </div>
-            ) : null}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                onClick={selectAllDeployAliases}
+                disabled={selectableAliases.length === 0}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 999,
+                  border: "1px solid var(--bs-border-color)",
+                  background: "var(--bs-body-bg)",
+                  color: "var(--deployer-muted-ink)",
+                  fontSize: 12,
+                  cursor:
+                    selectableAliases.length === 0 ? "not-allowed" : "pointer",
+                }}
+              >
+                Select all
+              </button>
+              <button
+                onClick={deselectAllDeployAliases}
+                disabled={selectableAliases.length === 0}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 999,
+                  border: "1px solid var(--bs-border-color)",
+                  background: "var(--bs-body-bg)",
+                  color: "var(--deployer-muted-ink)",
+                  fontSize: 12,
+                  cursor:
+                    selectableAliases.length === 0 ? "not-allowed" : "pointer",
+                }}
+              >
+                Deselect all
+              </button>
+              <button
+                onClick={() =>
+                  setServerListCollapsed((prev) => !prev)
+                }
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 999,
+                  border: "1px solid var(--bs-border-color)",
+                  background: "var(--bs-body-bg)",
+                  color: "var(--deployer-muted-ink)",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                {serverListCollapsed ? "Show list" : "Hide list"}
+              </button>
+            </div>
           </div>
 
           {Object.keys(deploymentErrors).length > 0 ? (
             <div
               style={{
-                marginTop: 12,
                 padding: 12,
                 borderRadius: 12,
                 background: "var(--bs-tertiary-bg)",
@@ -575,7 +797,6 @@ export default function DeploymentWorkspace({
           {deployError ? (
             <div
               style={{
-                marginTop: 8,
                 color: "var(--bs-danger-text-emphasis)",
                 fontSize: 12,
               }}
@@ -583,18 +804,136 @@ export default function DeploymentWorkspace({
               {deployError}
             </div>
           ) : null}
+
           <div
             style={{
-              height: 1,
-              background: "var(--bs-border-color-translucent)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+              flex: 1,
+              minHeight: 0,
             }}
-          />
-          <LiveDeploymentView
-            baseUrl={baseUrl}
-            jobId={jobId ?? ""}
-            autoConnect
-            compact
-          />
+          >
+            {!serverListCollapsed ? (
+              <div
+                style={{
+                  maxHeight: "50%",
+                  overflow: "auto",
+                  borderRadius: 12,
+                  border: "1px solid var(--bs-border-color-translucent)",
+                  background: "var(--bs-body-bg)",
+                  padding: 12,
+                  display: "grid",
+                  gap: 10,
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: deployTableColumns,
+                    gap: 10,
+                    fontSize: 11,
+                    color: "var(--deployer-muted-ink)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}
+                >
+                  <span>Status</span>
+                  <span>Alias</span>
+                  <span>Host</span>
+                  <span>User</span>
+                  <span>Roles</span>
+                  <span>Select</span>
+                </div>
+                {servers.map((server) => {
+                  const alias = String(server.alias || "").trim();
+                  if (!alias) return null;
+                  const roles = selectedRolesByAlias?.[alias] ?? [];
+                  const hasRoles = Array.isArray(roles) && roles.length > 0;
+                  const isDeployed = deployedAliases.has(alias);
+                  const isSelectable = hasRoles && !isDeployed;
+                  const isSelected = deploySelection.has(alias);
+                  const statusLabel = isDeployed
+                    ? "Deployed"
+                    : hasRoles
+                    ? "Pending"
+                    : "No roles";
+                  const roleText = hasRoles
+                    ? roles.join(", ")
+                    : "No roles selected";
+                  return (
+                    <div
+                      key={alias}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: deployTableColumns,
+                        gap: 10,
+                        alignItems: "center",
+                        padding: "8px 10px",
+                        borderRadius: 10,
+                        border: isSelected
+                          ? "1px solid var(--bs-body-color)"
+                          : "1px solid var(--bs-border-color-translucent)",
+                        background: "var(--bs-body-bg)",
+                        fontSize: 12,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          color: isDeployed
+                            ? "var(--bs-success-text-emphasis)"
+                            : "var(--deployer-muted-ink)",
+                        }}
+                      >
+                        {isDeployed ? (
+                          <i className="fa-solid fa-check" aria-hidden="true" />
+                        ) : (
+                          <span style={{ fontSize: 10 }}>•</span>
+                        )}
+                        <span>{statusLabel}</span>
+                      </div>
+                      <span style={{ fontWeight: 600 }}>{alias}</span>
+                      <span>{server.host || "—"}</span>
+                      <span>{server.user || "—"}</span>
+                      <span
+                        className="text-body-secondary"
+                        style={{
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={roleText}
+                      >
+                        {roleText}
+                      </span>
+                      <div>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          disabled={!isSelectable}
+                          onChange={() => toggleDeployAlias(alias)}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <LiveDeploymentView
+                baseUrl={baseUrl}
+                jobId={jobId ?? ""}
+                autoConnect
+                compact
+                fill
+                onStatusChange={handleDeploymentStatus}
+              />
+            </div>
+          </div>
         </div>
       ),
     },
@@ -603,6 +942,19 @@ export default function DeploymentWorkspace({
   const activeIndex = panels.findIndex((panel) => panel.key === activePanel);
   const hasPrev = activeIndex > 0;
   const hasNext = activeIndex >= 0 && activeIndex < panels.length - 1;
+
+  const serverSwitcher = serverSwitcherTarget
+    ? createPortal(
+        <ServerSwitcher
+          currentAlias={activeAlias}
+          servers={servers}
+          onSelect={setActiveAlias}
+          onCreate={addServer}
+          onOpenServerTab={() => setActivePanel("server")}
+        />,
+        serverSwitcherTarget
+      )
+    : null;
 
   return (
     <div
@@ -614,6 +966,7 @@ export default function DeploymentWorkspace({
         minHeight: 0,
       }}
     >
+      {serverSwitcher}
       <div
         style={{
           display: "flex",

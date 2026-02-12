@@ -8,51 +8,51 @@ Allow selecting workspaces via URL, support multiple workspaces per user, and cl
 
 ## 1. Core Model
 
-* [ ] A user can have **multiple workspaces**.
-* [ ] Each workspace has **exactly one inventory**.
-* [ ] Each inventory can manage **multiple servers**.
+* [x] A user can have **multiple workspaces**.
+* [x] Each workspace has **exactly one inventory**.
+* [x] Each inventory can manage **multiple servers**.
 
 **Acceptance Criteria**
 
-* [ ] Workspaces and inventories are strictly scoped (no cross-workspace leakage).
-* [ ] Inventory operations affect only the selected workspace.
+* [x] Workspaces and inventories are strictly scoped (no cross-workspace leakage).
+* [x] Inventory operations affect only the selected workspace.
 
 ---
 
 ## 2. URL-Based Workspace Selection
 
-* [ ] Support selecting a workspace via URL (e.g., route or query).
-* [ ] Unknown/invalid workspace in URL should show a clear error or fallback.
+* [x] Support selecting a workspace via URL (e.g., route or query).
+* [x] Unknown/invalid workspace in URL should show a clear error or fallback.
 
 **Acceptance Criteria**
 
-* [ ] Navigating directly to a workspace URL loads that workspace context.
-* [ ] Invalid workspace identifiers are handled gracefully.
+* [x] Navigating directly to a workspace URL loads that workspace context.
+* [x] Invalid workspace identifiers are handled gracefully.
 
 ---
 
 ## 3. Logged-Out Behavior
 
-* [ ] Non‑logged users see the **default interface** (current behavior).
-* [ ] No workspace switching or user-specific data should be visible.
+* [x] Non‑logged users see the **default interface** (current behavior).
+* [x] No workspace switching or user-specific data should be visible.
 
 **Acceptance Criteria**
 
-* [ ] Logged-out users can use the app without workspace selection.
-* [ ] No user workspace data is exposed when not authenticated.
+* [x] Logged-out users can use the app without workspace selection.
+* [x] No user workspace data is exposed when not authenticated.
 
 ---
 
 ## 4. Logged-In Start Page
 
-* [ ] Logged‑in users see a **workspace overview** on the start page.
-* [ ] Overview lists all workspaces and allows selecting one.
-* [ ] In the header, **below the right logo**, show the **current workspace** with a dropdown of all user workspaces.
-  * [ ] Dropdown allows switching workspaces.
-  * [ ] When logged out, **nothing is shown** in that spot.
+* [x] Logged‑in users see a **workspace overview** on the start page.
+* [x] Overview lists all workspaces and allows selecting one.
+* [x] In the header, **below the right logo**, show the **current workspace** with a dropdown of all user workspaces.
+  * [x] Dropdown allows switching workspaces.
+  * [x] When logged out, **nothing is shown** in that spot.
 
 **Acceptance Criteria**
 
-* [ ] Start page changes based on auth state.
-* [ ] User can select a workspace from the overview and is routed accordingly.
-* [ ] Workspace dropdown appears only for authenticated users and switches context.
+* [x] Start page changes based on auth state.
+* [x] User can select a workspace from the overview and is routed accordingly.
+* [x] Workspace dropdown appears only for authenticated users and switches context.

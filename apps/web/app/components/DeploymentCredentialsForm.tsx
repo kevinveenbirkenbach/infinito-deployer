@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { validateForm } from "../lib/deploy_form";
 import VaultPasswordModal from "./VaultPasswordModal";
 
@@ -46,6 +46,18 @@ const FIELD_LABELS: Record<string, string> = {
   privateKey: "Private key",
 };
 
+const SERVER_VIEW_MODES = ["selection", "detail", "list"] as const;
+type ServerViewMode = (typeof SERVER_VIEW_MODES)[number];
+
+const SERVER_VIEW_CONFIG: Record<
+  ServerViewMode,
+  { minWidth: number; minHeight: number; dense: boolean }
+> = {
+  selection: { minWidth: 260, minHeight: 190, dense: true },
+  detail: { minWidth: 320, minHeight: 260, dense: false },
+  list: { minWidth: 600, minHeight: 72, dense: true },
+};
+
 export default function DeploymentCredentialsForm({
   baseUrl,
   workspaceId,
@@ -83,6 +95,12 @@ export default function DeploymentCredentialsForm({
   const [testResults, setTestResults] = useState<Record<string, ConnectionResult>>(
     {}
   );
+  const [query, setQuery] = useState("");
+  const [viewMode, setViewMode] = useState<ServerViewMode>("detail");
+  const [page, setPage] = useState(1);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const controlsRef = useRef<HTMLDivElement | null>(null);
+  const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
 
   const [keygenBusy, setKeygenBusy] = useState(false);
   const [keygenError, setKeygenError] = useState<string | null>(null);
@@ -120,6 +138,27 @@ export default function DeploymentCredentialsForm({
     setPasswordConfirm("");
   }, [openServer?.alias]);
 
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    const update = () => {
+      const controlsHeight = controlsRef.current?.clientHeight ?? 0;
+      setGridSize({
+        width: node.clientWidth || 0,
+        height: Math.max(0, (node.clientHeight || 0) - controlsHeight),
+      });
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", update);
+      return () => window.removeEventListener("resize", update);
+    }
+    const observer = new ResizeObserver(() => update());
+    observer.observe(node);
+    if (controlsRef.current) observer.observe(controlsRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   const aliasCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     servers.forEach((server) => {
@@ -150,6 +189,55 @@ export default function DeploymentCredentialsForm({
 
   const openServerValid =
     Object.keys(formErrors).length === 0 && validationTarget !== null;
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredServers = useMemo(() => {
+    if (!normalizedQuery) return servers;
+    return servers.filter((server) => {
+      const haystack = [
+        server.alias,
+        server.host,
+        server.user,
+        server.port,
+        server.authMethod,
+      ]
+        .map((value) => String(value || "").toLowerCase())
+        .join(" ");
+      return haystack.includes(normalizedQuery);
+    });
+  }, [servers, normalizedQuery]);
+
+  const viewConfig = SERVER_VIEW_CONFIG[viewMode];
+  const gridGap = 16;
+  const computedColumns =
+    viewMode === "list"
+      ? 1
+      : Math.max(
+          1,
+          Math.floor((gridSize.width + gridGap) / (viewConfig.minWidth + gridGap))
+        );
+  const computedRows = Math.max(
+    1,
+    Math.floor((gridSize.height + gridGap) / (viewConfig.minHeight + gridGap))
+  );
+  const pageSize = Math.max(1, computedColumns * computedRows);
+  const pageCount = Math.max(1, Math.ceil(filteredServers.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const paginatedServers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredServers.slice(start, start + pageSize);
+  }, [filteredServers, currentPage, pageSize]);
+
+  const listColumns =
+    "minmax(160px, 1.2fr) minmax(200px, 2fr) minmax(80px, 0.6fr) minmax(120px, 1fr) minmax(160px, 1.2fr) minmax(200px, 1fr)";
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, viewMode]);
+
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
 
   const updateServer = (alias: string, patch: Partial<ServerState>) => {
     onUpdateServer(alias, patch);
@@ -382,245 +470,646 @@ export default function DeploymentCredentialsForm({
         </div>
       ) : null}
 
-      <div style={{ marginTop: compact ? 0 : 20, display: "flex", gap: 12 }}>
-        <button
-          onClick={onAddServer}
-          style={{
-            padding: "8px 12px",
-            borderRadius: 999,
-            border: "1px solid var(--bs-body-color)",
-            background: "var(--bs-body-color)",
-            color: "var(--bs-body-bg)",
-            fontSize: 12,
-            cursor: "pointer",
-          }}
-        >
-          Add server
-        </button>
-      </div>
-
       <div
         style={{
-          marginTop: 16,
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-          gap: 16,
+          marginTop: compact ? 0 : 20,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          flex: 1,
+          minHeight: 0,
         }}
       >
-        {servers.map((server) => {
-          const alias = (server.alias || "").trim();
-          const aliasError = !alias
-            ? "Alias is required."
-            : aliasCounts[alias] > 1
-            ? "Alias already exists."
-            : null;
-          const status = testResults[server.alias];
-          return (
+        <div
+          ref={scrollRef}
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflow: "auto",
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
+        >
+          <div
+            ref={controlsRef}
+            style={{
+              position: "sticky",
+              top: 0,
+              zIndex: 2,
+              background: "var(--bs-body-bg)",
+              paddingBottom: 10,
+              borderBottom: "1px solid var(--bs-border-color-translucent)",
+            }}
+          >
             <div
-              key={server.alias}
-              className="bg-body border"
               style={{
-                padding: 16,
-                borderRadius: 18,
-                display: "grid",
+                display: "flex",
+                flexWrap: "wrap",
                 gap: 12,
+                alignItems: "center",
+                justifyContent: "space-between",
               }}
             >
               <div
                 style={{
                   display: "flex",
-                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 8,
                   alignItems: "center",
                 }}
               >
-                <label
-                  className="text-body-secondary"
-                  style={{ display: "flex", alignItems: "center", gap: 8 }}
-                >
-                  <input
-                    type="radio"
-                    checked={activeAlias === server.alias}
-                    onChange={() => onActiveAliasChange(server.alias)}
-                  />
-                  Active
-                </label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    onClick={() => setOpenAlias(server.alias)}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: 999,
-                      border: "1px solid var(--bs-body-color)",
-                      background: "var(--bs-body-color)",
-                      color: "var(--bs-body-bg)",
-                      fontSize: 12,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Credentials
-                  </button>
-                  <button
-                    onClick={() => testConnection(server)}
-                    disabled={testBusy[server.alias] || !workspaceId}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: 999,
-                      border: "1px solid var(--bs-border-color)",
-                      background: "var(--bs-body-bg)",
-                      color: "var(--deployer-muted-ink)",
-                      fontSize: 12,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {testBusy[server.alias] ? "Testing..." : "Test connection"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setRemoveError(null);
-                      setRemoveTarget(server.alias);
-                    }}
-                    title="Remove server"
-                    aria-label="Remove server"
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 999,
-                      border: "1px solid var(--bs-border-color)",
-                      background: "var(--bs-body-bg)",
-                      color: "var(--bs-danger-text-emphasis)",
-                      display: "grid",
-                      placeItems: "center",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <i className="fa-solid fa-trash" aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gap: 10 }}>
-                <div>
-                  <label className="text-body-tertiary" style={{ fontSize: 12 }}>
-                    Alias
-                  </label>
-                  <input
-                    value={server.alias}
-                    onChange={(event) =>
-                      (() => {
-                        const nextAlias = event.target.value;
-                        updateServer(server.alias, { alias: nextAlias });
-                        if (openAlias === server.alias) {
-                          setOpenAlias(nextAlias);
-                        }
-                      })()
-                    }
-                    placeholder="main"
-                    style={{
-                      width: "100%",
-                      marginTop: 6,
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      border: "1px solid var(--bs-border-color)",
-                      background: "var(--bs-body-bg)",
-                      fontSize: 12,
-                    }}
-                  />
-                  {aliasError ? (
-                    <p className="text-danger" style={{ margin: "6px 0 0" }}>
-                      {aliasError}
-                    </p>
-                  ) : null}
-                </div>
-                <div>
-                  <label className="text-body-tertiary" style={{ fontSize: 12 }}>
-                    Host
-                  </label>
-                  <input
-                    value={server.host}
-                    onChange={(event) =>
-                      updateServer(server.alias, { host: event.target.value })
-                    }
-                    placeholder="example.com"
-                    style={{
-                      width: "100%",
-                      marginTop: 6,
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      border: "1px solid var(--bs-border-color)",
-                      background: "var(--bs-body-bg)",
-                      fontSize: 12,
-                    }}
-                  />
-                </div>
-                <div>
-                  <label className="text-body-tertiary" style={{ fontSize: 12 }}>
-                    Port
-                  </label>
-                  <input
-                    value={server.port}
-                    onChange={(event) =>
-                      updateServer(server.alias, { port: event.target.value })
-                    }
-                    placeholder="22"
-                    inputMode="numeric"
-                    style={{
-                      width: "100%",
-                      marginTop: 6,
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      border: "1px solid var(--bs-border-color)",
-                      background: "var(--bs-body-bg)",
-                      fontSize: 12,
-                    }}
-                  />
-                </div>
-                <div>
-                  <label className="text-body-tertiary" style={{ fontSize: 12 }}>
-                    User
-                  </label>
-                  <input
-                    value={server.user}
-                    onChange={(event) =>
-                      updateServer(server.alias, { user: event.target.value })
-                    }
-                    placeholder="root"
-                    style={{
-                      width: "100%",
-                      marginTop: 6,
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      border: "1px solid var(--bs-border-color)",
-                      background: "var(--bs-body-bg)",
-                      fontSize: 12,
-                    }}
-                  />
-                </div>
-              </div>
-
-              {status ? (
-                <div
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search servers"
+                  aria-label="Search servers"
+                  className="form-control"
                   style={{
-                    padding: 10,
+                    minWidth: 220,
                     borderRadius: 12,
-                    background: "var(--deployer-card-bg-soft)",
+                    background: "var(--bs-body-bg)",
+                    fontSize: 14,
+                    padding: "8px 10px",
+                  }}
+                />
+                <button
+                  onClick={onAddServer}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 999,
+                    border: "1px solid var(--bs-body-color)",
+                    background: "var(--bs-body-color)",
+                    color: "var(--bs-body-bg)",
                     fontSize: 12,
-                    display: "grid",
-                    gap: 4,
+                    cursor: "pointer",
                   }}
                 >
-                  <div>
-                    Ping: {status.ping_ok ? "ok" : "failed"}
-                    {status.ping_ok ? "" : ` (${status.ping_error})`}
-                  </div>
-                  <div>
-                    SSH: {status.ssh_ok ? "ok" : "failed"}
-                    {status.ssh_ok ? "" : ` (${status.ssh_error})`}
-                  </div>
-                </div>
-              ) : null}
+                  Add
+                </button>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {SERVER_VIEW_MODES.map((mode) => {
+                  const active = viewMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => setViewMode(mode)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: 999,
+                        border: active
+                          ? "1px solid var(--bs-body-color)"
+                          : "1px solid var(--bs-border-color)",
+                        background: active
+                          ? "var(--bs-body-color)"
+                          : "var(--bs-body-bg)",
+                        color: active
+                          ? "var(--bs-body-bg)"
+                          : "var(--deployer-muted-ink)",
+                        fontSize: 12,
+                        textTransform: "capitalize",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {mode}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          );
-        })}
+          </div>
+
+          <div style={{ paddingTop: 6 }}>
+            {viewMode === "list" ? (
+              <div style={{ display: "grid", gap: 10 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: listColumns,
+                    gap: 10,
+                    padding: "4px 8px",
+                    fontSize: 11,
+                    color: "var(--deployer-muted-ink)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}
+                >
+                  <span>Alias</span>
+                  <span>Host</span>
+                  <span>Port</span>
+                  <span>User</span>
+                  <span>Status</span>
+                  <span>Actions</span>
+                </div>
+                {paginatedServers.map((server) => {
+                  const alias = (server.alias || "").trim();
+                  const aliasError = !alias
+                    ? "Alias is required."
+                    : aliasCounts[alias] > 1
+                    ? "Alias already exists."
+                    : null;
+                  const status = testResults[server.alias];
+                  const isActive = activeAlias === server.alias;
+                  return (
+                    <div
+                      key={server.alias}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: listColumns,
+                        gap: 10,
+                        alignItems: "center",
+                        padding: "10px 12px",
+                        borderRadius: 14,
+                        border: isActive
+                          ? "2px solid var(--bs-success-border-subtle)"
+                          : "1px solid var(--bs-border-color-translucent)",
+                        background: isActive
+                          ? "var(--bs-success-bg-subtle)"
+                          : "var(--bs-body-bg)",
+                        boxShadow: "var(--deployer-shadow)",
+                      }}
+                    >
+                      <div style={{ display: "grid", gap: 4 }}>
+                        <input
+                          value={server.alias}
+                          onChange={(event) =>
+                            (() => {
+                              const nextAlias = event.target.value;
+                              updateServer(server.alias, { alias: nextAlias });
+                              if (openAlias === server.alias) {
+                                setOpenAlias(nextAlias);
+                              }
+                            })()
+                          }
+                          placeholder="main"
+                          style={{
+                            width: "100%",
+                            padding: "6px 8px",
+                            borderRadius: 10,
+                            border: `1px solid ${
+                              aliasError
+                                ? "var(--bs-danger)"
+                                : "var(--bs-border-color)"
+                            }`,
+                            background: "var(--bs-body-bg)",
+                            fontSize: 12,
+                          }}
+                        />
+                        {aliasError ? (
+                          <span className="text-danger" style={{ fontSize: 11 }}>
+                            {aliasError}
+                          </span>
+                        ) : isActive ? (
+                          <span
+                            style={{
+                              fontSize: 11,
+                              padding: "3px 8px",
+                              borderRadius: 999,
+                              background: "var(--bs-success-bg-subtle)",
+                              color: "var(--bs-success-text-emphasis)",
+                              border: "1px solid var(--bs-success-border-subtle)",
+                              width: "fit-content",
+                            }}
+                          >
+                            Active
+                          </span>
+                        ) : null}
+                      </div>
+                      <input
+                        value={server.host}
+                        onChange={(event) =>
+                          updateServer(server.alias, { host: event.target.value })
+                        }
+                        placeholder="example.com"
+                        style={{
+                          width: "100%",
+                          padding: "6px 8px",
+                          borderRadius: 10,
+                          border: "1px solid var(--bs-border-color)",
+                          background: "var(--bs-body-bg)",
+                          fontSize: 12,
+                        }}
+                      />
+                      <input
+                        value={server.port}
+                        onChange={(event) =>
+                          updateServer(server.alias, { port: event.target.value })
+                        }
+                        placeholder="22"
+                        inputMode="numeric"
+                        style={{
+                          width: "100%",
+                          padding: "6px 8px",
+                          borderRadius: 10,
+                          border: "1px solid var(--bs-border-color)",
+                          background: "var(--bs-body-bg)",
+                          fontSize: 12,
+                        }}
+                      />
+                      <input
+                        value={server.user}
+                        onChange={(event) =>
+                          updateServer(server.alias, { user: event.target.value })
+                        }
+                        placeholder="root"
+                        style={{
+                          width: "100%",
+                          padding: "6px 8px",
+                          borderRadius: 10,
+                          border: "1px solid var(--bs-border-color)",
+                          background: "var(--bs-body-bg)",
+                          fontSize: 12,
+                        }}
+                      />
+                      <div
+                        className="text-body-secondary"
+                        style={{ fontSize: 11 }}
+                      >
+                        {status
+                          ? `Ping ${status.ping_ok ? "ok" : "fail"} · SSH ${
+                              status.ssh_ok ? "ok" : "fail"
+                            }`
+                          : "Not tested"}
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <button
+                          onClick={() => setOpenAlias(server.alias)}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: 999,
+                            border: "1px solid var(--bs-body-color)",
+                            background: "var(--bs-body-color)",
+                            color: "var(--bs-body-bg)",
+                            fontSize: 11,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Credentials
+                        </button>
+                        <button
+                          onClick={() => testConnection(server)}
+                          disabled={testBusy[server.alias] || !workspaceId}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: 999,
+                            border: "1px solid var(--bs-border-color)",
+                            background: "var(--bs-body-bg)",
+                            color: "var(--deployer-muted-ink)",
+                            fontSize: 11,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {testBusy[server.alias] ? "Testing..." : "Test"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setRemoveError(null);
+                            setRemoveTarget(server.alias);
+                          }}
+                          title="Remove server"
+                          aria-label="Remove server"
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 999,
+                            border: "1px solid var(--bs-border-color)",
+                            background: "var(--bs-body-bg)",
+                            color: "var(--bs-danger-text-emphasis)",
+                            display: "grid",
+                            placeItems: "center",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <i className="fa-solid fa-trash" aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${computedColumns}, minmax(0, 1fr))`,
+                  gap: gridGap,
+                  alignContent: "start",
+                }}
+              >
+                {paginatedServers.map((server) => {
+                  const alias = (server.alias || "").trim();
+                  const aliasError = !alias
+                    ? "Alias is required."
+                    : aliasCounts[alias] > 1
+                    ? "Alias already exists."
+                    : null;
+                  const status = testResults[server.alias];
+                  const isActive = activeAlias === server.alias;
+                  const dense = viewConfig.dense;
+                  const inputPadding = dense ? "6px 8px" : "8px 10px";
+                  const fontSize = dense ? 12 : 13;
+                  return (
+                    <div
+                      key={server.alias}
+                      className="bg-body border"
+                      style={{
+                        padding: dense ? 12 : 16,
+                        borderRadius: 18,
+                        display: "grid",
+                        gap: dense ? 10 : 12,
+                        border: isActive
+                          ? "2px solid var(--bs-success-border-subtle)"
+                          : "1px solid var(--bs-border-color-translucent)",
+                        background: isActive
+                          ? "var(--bs-success-bg-subtle)"
+                          : "var(--bs-body-bg)",
+                        boxShadow: "var(--deployer-shadow)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <span
+                            className="text-body-secondary"
+                            style={{ fontSize: 12 }}
+                          >
+                            Server
+                          </span>
+                          {isActive ? (
+                            <span
+                              style={{
+                                fontSize: 11,
+                                padding: "3px 8px",
+                                borderRadius: 999,
+                                background: "var(--bs-success-bg-subtle)",
+                                color: "var(--bs-success-text-emphasis)",
+                                border: "1px solid var(--bs-success-border-subtle)",
+                              }}
+                            >
+                              Active
+                            </span>
+                          ) : null}
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button
+                            onClick={() => setOpenAlias(server.alias)}
+                            style={{
+                              padding: dense ? "5px 8px" : "6px 10px",
+                              borderRadius: 999,
+                              border: "1px solid var(--bs-body-color)",
+                              background: "var(--bs-body-color)",
+                              color: "var(--bs-body-bg)",
+                              fontSize: dense ? 11 : 12,
+                              cursor: "pointer",
+                            }}
+                          >
+                            Credentials
+                          </button>
+                          <button
+                            onClick={() => testConnection(server)}
+                            disabled={testBusy[server.alias] || !workspaceId}
+                            style={{
+                              padding: dense ? "5px 8px" : "6px 10px",
+                              borderRadius: 999,
+                              border: "1px solid var(--bs-border-color)",
+                              background: "var(--bs-body-bg)",
+                              color: "var(--deployer-muted-ink)",
+                              fontSize: dense ? 11 : 12,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {testBusy[server.alias] ? "Testing..." : "Test"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setRemoveError(null);
+                              setRemoveTarget(server.alias);
+                            }}
+                            title="Remove server"
+                            aria-label="Remove server"
+                            style={{
+                              width: dense ? 28 : 32,
+                              height: dense ? 28 : 32,
+                              borderRadius: 999,
+                              border: "1px solid var(--bs-border-color)",
+                              background: "var(--bs-body-bg)",
+                              color: "var(--bs-danger-text-emphasis)",
+                              display: "grid",
+                              placeItems: "center",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <i className="fa-solid fa-trash" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "grid", gap: dense ? 8 : 10 }}>
+                        <div>
+                          <label
+                            className="text-body-tertiary"
+                            style={{ fontSize: 12 }}
+                          >
+                            Alias
+                          </label>
+                          <input
+                            value={server.alias}
+                            onChange={(event) =>
+                              (() => {
+                                const nextAlias = event.target.value;
+                                updateServer(server.alias, { alias: nextAlias });
+                                if (openAlias === server.alias) {
+                                  setOpenAlias(nextAlias);
+                                }
+                              })()
+                            }
+                            placeholder="main"
+                            style={{
+                              width: "100%",
+                              marginTop: 6,
+                              padding: inputPadding,
+                              borderRadius: 10,
+                              border: `1px solid ${
+                                aliasError
+                                  ? "var(--bs-danger)"
+                                  : "var(--bs-border-color)"
+                              }`,
+                              background: "var(--bs-body-bg)",
+                              fontSize,
+                            }}
+                          />
+                          {aliasError ? (
+                            <p className="text-danger" style={{ margin: "6px 0 0" }}>
+                              {aliasError}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div>
+                          <label
+                            className="text-body-tertiary"
+                            style={{ fontSize: 12 }}
+                          >
+                            Host
+                          </label>
+                          <input
+                            value={server.host}
+                            onChange={(event) =>
+                              updateServer(server.alias, { host: event.target.value })
+                            }
+                            placeholder="example.com"
+                            style={{
+                              width: "100%",
+                              marginTop: 6,
+                              padding: inputPadding,
+                              borderRadius: 10,
+                              border: "1px solid var(--bs-border-color)",
+                              background: "var(--bs-body-bg)",
+                              fontSize,
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label
+                            className="text-body-tertiary"
+                            style={{ fontSize: 12 }}
+                          >
+                            Port
+                          </label>
+                          <input
+                            value={server.port}
+                            onChange={(event) =>
+                              updateServer(server.alias, { port: event.target.value })
+                            }
+                            placeholder="22"
+                            inputMode="numeric"
+                            style={{
+                              width: "100%",
+                              marginTop: 6,
+                              padding: inputPadding,
+                              borderRadius: 10,
+                              border: "1px solid var(--bs-border-color)",
+                              background: "var(--bs-body-bg)",
+                              fontSize,
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label
+                            className="text-body-tertiary"
+                            style={{ fontSize: 12 }}
+                          >
+                            User
+                          </label>
+                          <input
+                            value={server.user}
+                            onChange={(event) =>
+                              updateServer(server.alias, { user: event.target.value })
+                            }
+                            placeholder="root"
+                            style={{
+                              width: "100%",
+                              marginTop: 6,
+                              padding: inputPadding,
+                              borderRadius: 10,
+                              border: "1px solid var(--bs-border-color)",
+                              background: "var(--bs-body-bg)",
+                              fontSize,
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {!dense && status ? (
+                        <div
+                          style={{
+                            padding: 10,
+                            borderRadius: 12,
+                            background: "var(--deployer-card-bg-soft)",
+                            fontSize: 12,
+                            display: "grid",
+                            gap: 4,
+                          }}
+                        >
+                          <div>
+                            Ping: {status.ping_ok ? "ok" : "failed"}
+                            {status.ping_ok ? "" : ` (${status.ping_error})`}
+                          </div>
+                          <div>
+                            SSH: {status.ssh_ok ? "ok" : "failed"}
+                            {status.ssh_ok ? "" : ` (${status.ssh_error})`}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div
+          className="text-body-secondary"
+          style={{
+            marginTop: "auto",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: 12,
+            fontSize: 12,
+          }}
+        >
+          <button
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={currentPage <= 1}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 999,
+              border: "1px solid var(--bs-border-color)",
+              background:
+                currentPage <= 1
+                  ? "var(--deployer-disabled-bg)"
+                  : "var(--bs-body-bg)",
+              color:
+                currentPage <= 1
+                  ? "var(--deployer-disabled-text)"
+                  : "var(--deployer-muted-ink)",
+              fontSize: 12,
+            }}
+          >
+            Prev
+          </button>
+          <span>
+            Page {currentPage} / {pageCount}
+          </span>
+          <button
+            onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))}
+            disabled={currentPage >= pageCount}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 999,
+              border: "1px solid var(--bs-border-color)",
+              background:
+                currentPage >= pageCount
+                  ? "var(--deployer-disabled-bg)"
+                  : "var(--bs-body-bg)",
+              color:
+                currentPage >= pageCount
+                  ? "var(--deployer-disabled-text)"
+                  : "var(--deployer-muted-ink)",
+              fontSize: 12,
+            }}
+          >
+            Next
+          </button>
+        </div>
       </div>
 
       {openServer ? (

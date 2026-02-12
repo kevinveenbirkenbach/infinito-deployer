@@ -65,27 +65,45 @@ export default async function Page() {
         </div>
         <div
           style={{
-            width: 64,
-            height: 64,
-            borderRadius: "50%",
-            background: "var(--bs-body-bg)",
-            border: "1px solid var(--bs-border-color-translucent)",
-            display: "grid",
-            placeItems: "center",
-            overflow: "hidden",
-            boxShadow: "var(--deployer-shadow)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 8,
+            minWidth: 160,
           }}
-          aria-label="Infinito.Nexus logo"
         >
-          {logoUrl ? (
-            <img
-              src={logoUrl}
-              alt="Infinito.Nexus logo"
-              style={{ width: "100%", height: "100%", objectFit: "contain" }}
-            />
-          ) : (
-            <i className="fa-solid fa-circle-nodes" aria-hidden="true" />
-          )}
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: "50%",
+              background: "var(--bs-body-bg)",
+              border: "1px solid var(--bs-border-color-translucent)",
+              display: "grid",
+              placeItems: "center",
+              overflow: "hidden",
+              boxShadow: "var(--deployer-shadow)",
+            }}
+            aria-label="Infinito.Nexus logo"
+          >
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt="Infinito.Nexus logo"
+                style={{ width: "100%", height: "100%", objectFit: "contain" }}
+              />
+            ) : (
+              <i className="fa-solid fa-circle-nodes" aria-hidden="true" />
+            )}
+          </div>
+          <div
+            id="workspace-switcher-slot"
+            style={{ width: "100%", display: "grid", placeItems: "center" }}
+          />
+          <div
+            id="server-switcher-slot"
+            style={{ width: "100%", display: "grid", placeItems: "center" }}
+          />
         </div>
       </header>
 

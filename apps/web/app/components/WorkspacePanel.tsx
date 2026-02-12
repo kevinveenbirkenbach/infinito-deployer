@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ChangeEvent, MouseEvent } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { json as jsonLang } from "@codemirror/lang-json";
@@ -142,6 +143,163 @@ type VaultBlock = {
 };
 
 const WORKSPACE_STORAGE_KEY = "infinito.workspace_id";
+const USER_STORAGE_KEY = "infinito.user_id";
+const USER_WORKSPACE_LIST_PREFIX = "infinito.workspaces.";
+const USER_WORKSPACE_CURRENT_PREFIX = "infinito.workspace.current.";
+
+type WorkspaceListEntry = {
+  id: string;
+  created_at?: string | null;
+  last_used?: string | null;
+};
+
+function readQueryParam(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const value = params.get(key);
+  return value ? value.trim() : null;
+}
+
+function loadWorkspaceList(userId: string): WorkspaceListEntry[] {
+  if (typeof window === "undefined") return [];
+  const raw = window.localStorage.getItem(
+    `${USER_WORKSPACE_LIST_PREFIX}${userId}`
+  );
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry) => ({
+        id: String(entry?.id || "").trim(),
+        created_at: entry?.created_at ?? null,
+        last_used: entry?.last_used ?? null,
+      }))
+      .filter((entry) => entry.id);
+  } catch {
+    return [];
+  }
+}
+
+function saveWorkspaceList(userId: string, list: WorkspaceListEntry[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    `${USER_WORKSPACE_LIST_PREFIX}${userId}`,
+    JSON.stringify(list)
+  );
+}
+
+function WorkspaceSwitcher({
+  currentId,
+  workspaces,
+  onSelect,
+  onCreate,
+}: {
+  currentId: string | null;
+  workspaces: WorkspaceListEntry[];
+  onSelect: (id: string) => void;
+  onCreate: () => void;
+}) {
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+  const close = () => {
+    if (detailsRef.current) detailsRef.current.open = false;
+  };
+  const handleSelect = (id: string) => {
+    onSelect(id);
+    close();
+  };
+  const handleCreate = () => {
+    onCreate();
+    close();
+  };
+
+  return (
+    <details ref={detailsRef} style={{ position: "relative" }}>
+      <summary
+        style={{
+          listStyle: "none",
+          cursor: "pointer",
+          padding: "6px 12px",
+          borderRadius: 999,
+          border: "1px solid var(--bs-border-color)",
+          background: "var(--bs-body-bg)",
+          fontSize: 12,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <i className="fa-solid fa-layer-group" aria-hidden="true" />
+        <span>{currentId || "Select workspace"}</span>
+      </summary>
+      <div
+        style={{
+          position: "absolute",
+          right: 0,
+          marginTop: 8,
+          padding: 10,
+          borderRadius: 12,
+          border: "1px solid var(--bs-border-color-translucent)",
+          background: "var(--bs-body-bg)",
+          boxShadow: "var(--deployer-shadow)",
+          minWidth: 220,
+          zIndex: 50,
+          display: "grid",
+          gap: 6,
+        }}
+      >
+        {workspaces.length === 0 ? (
+          <div className="text-body-secondary" style={{ fontSize: 12 }}>
+            No workspaces yet.
+          </div>
+        ) : (
+          workspaces.map((entry) => (
+            <button
+              key={entry.id}
+              onClick={() => handleSelect(entry.id)}
+              style={{
+                textAlign: "left",
+                padding: "6px 10px",
+                borderRadius: 10,
+                border:
+                  currentId === entry.id
+                    ? "1px solid var(--bs-body-color)"
+                    : "1px solid var(--bs-border-color)",
+                background:
+                  currentId === entry.id
+                    ? "var(--bs-body-color)"
+                    : "var(--bs-body-bg)",
+                color:
+                  currentId === entry.id
+                    ? "var(--bs-body-bg)"
+                    : "var(--bs-body-color)",
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              {entry.id}
+            </button>
+          ))
+        )}
+        <button
+          onClick={handleCreate}
+          style={{
+            marginTop: 4,
+            padding: "6px 10px",
+            borderRadius: 10,
+            border: "1px dashed var(--bs-border-color)",
+            background: "var(--bs-body-bg)",
+            color: "var(--bs-body-color)",
+            fontSize: 12,
+            cursor: "pointer",
+          }}
+        >
+          + New
+        </button>
+      </div>
+    </details>
+  );
+}
 
 function buildTree(entries: FileEntry[]) {
   const root: TreeNode = {
@@ -394,6 +552,10 @@ export default function WorkspacePanel({
         border: "1px solid var(--bs-border-color-translucent)",
         boxShadow: "var(--deployer-shadow)",
       };
+  const [userId, setUserId] = useState<string | null>(null);
+  const [workspaceList, setWorkspaceList] = useState<WorkspaceListEntry[]>([]);
+  const [workspaceSwitcherTarget, setWorkspaceSwitcherTarget] =
+    useState<HTMLElement | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
@@ -456,6 +618,35 @@ export default function WorkspacePanel({
   const inventorySeededRef = useRef(false);
   const markdownSyncRef = useRef(false);
   const deleteSyncRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    setWorkspaceSwitcherTarget(
+      document.getElementById("workspace-switcher-slot")
+    );
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const fromQuery =
+      readQueryParam("user") || readQueryParam("workspace_user");
+    const stored = window.localStorage.getItem(USER_STORAGE_KEY);
+    const resolved = fromQuery || stored;
+    if (resolved) {
+      if (fromQuery && fromQuery !== stored) {
+        window.localStorage.setItem(USER_STORAGE_KEY, resolved);
+      }
+      setUserId(resolved);
+    } else {
+      setUserId(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!userId) {
+      setWorkspaceList([]);
+    }
+  }, [userId]);
 
   const [generateBusy, setGenerateBusy] = useState(false);
   const [inventorySyncError, setInventorySyncError] = useState<string | null>(
@@ -727,6 +918,65 @@ export default function WorkspacePanel({
     return merged;
   };
 
+  const updateWorkspaceUrl = (id: string | null) => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (id) {
+      url.searchParams.set("workspace", id);
+    } else {
+      url.searchParams.delete("workspace");
+    }
+    window.history.replaceState({}, "", url.toString());
+  };
+
+  const resetWorkspaceState = () => {
+    setFiles([]);
+    setOpenDirs(new Set());
+    setActivePath(null);
+    setEditorValue("");
+    setEditorDirty(false);
+    setEditorLoading(false);
+    setEditorError(null);
+    setEditorStatus(null);
+    setMarkdownHtml("");
+    setKdbxEntries([]);
+    setKdbxError(null);
+    setKdbxLoading(false);
+    setKdbxPromptOpen(false);
+    setKdbxRevealed({});
+    setInventoryReady(false);
+    onInventoryReadyChange?.(false);
+  };
+
+  const rememberWorkspace = (id: string, createdAt?: string | null) => {
+    if (!userId) return;
+    const now = new Date().toISOString();
+    setWorkspaceList((prev) => {
+      const next = prev.some((entry) => entry.id === id)
+        ? prev.map((entry) =>
+            entry.id === id
+              ? {
+                  ...entry,
+                  last_used: now,
+                  created_at: entry.created_at ?? createdAt ?? now,
+                }
+              : entry
+          )
+        : [
+            ...prev,
+            { id, created_at: createdAt ?? now, last_used: now },
+          ];
+      saveWorkspaceList(userId, next);
+      return next;
+    });
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(
+        `${USER_WORKSPACE_CURRENT_PREFIX}${userId}`,
+        id
+      );
+    }
+  };
+
   const refreshFiles = async (id: string) => {
     const res = await fetch(`${baseUrl}/api/workspaces/${id}/files`, {
       cache: "no-store",
@@ -745,6 +995,30 @@ export default function WorkspacePanel({
           .map((f: FileEntry) => f.path)
       );
       setOpenDirs(dirs);
+    }
+  };
+
+  const selectWorkspace = async (id: string): Promise<boolean> => {
+    if (!id) return false;
+    setWorkspaceLoading(true);
+    setWorkspaceError(null);
+    resetWorkspaceState();
+    try {
+      await refreshFiles(id);
+      setWorkspaceId(id);
+      onWorkspaceIdChange?.(id);
+      if (userId) {
+        rememberWorkspace(id);
+      } else if (typeof window !== "undefined") {
+        window.localStorage.setItem(WORKSPACE_STORAGE_KEY, id);
+      }
+      updateWorkspaceUrl(id);
+      return true;
+    } catch (err: any) {
+      setWorkspaceError(err?.message ?? "workspace not found");
+      return false;
+    } finally {
+      setWorkspaceLoading(false);
     }
   };
 
@@ -813,12 +1087,16 @@ export default function WorkspacePanel({
       if (!id) {
         throw new Error("workspace id missing");
       }
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(WORKSPACE_STORAGE_KEY, id);
-      }
+      resetWorkspaceState();
       setWorkspaceId(id);
       onWorkspaceIdChange?.(id);
       await refreshFiles(id);
+      if (userId) {
+        rememberWorkspace(id, data?.created_at ?? null);
+      } else if (typeof window !== "undefined") {
+        window.localStorage.setItem(WORKSPACE_STORAGE_KEY, id);
+      }
+      updateWorkspaceUrl(id);
     } catch (err: any) {
       setWorkspaceError(err?.message ?? "failed to create workspace");
     } finally {
@@ -832,22 +1110,47 @@ export default function WorkspacePanel({
       setWorkspaceLoading(true);
       setWorkspaceError(null);
       try {
+        if (userId) {
+          const list = loadWorkspaceList(userId);
+          if (alive) setWorkspaceList(list);
+          const requested = readQueryParam("workspace");
+          const storedCurrent =
+            typeof window !== "undefined"
+              ? window.localStorage.getItem(
+                  `${USER_WORKSPACE_CURRENT_PREFIX}${userId}`
+                )
+              : null;
+          const candidates = [requested, storedCurrent, list[0]?.id].filter(
+            Boolean
+          ) as string[];
+          for (const candidate of candidates) {
+            const ok = await selectWorkspace(candidate);
+            if (ok) return;
+            if (requested && candidate === requested && alive) {
+              setWorkspaceError(`Workspace '${requested}' not found.`);
+            }
+          }
+          await createWorkspace();
+          return;
+        }
+
+        const requested = readQueryParam("workspace");
+        if (requested) {
+          const ok = await selectWorkspace(requested);
+          if (ok) return;
+          if (alive) {
+            setWorkspaceError(`Workspace '${requested}' not found.`);
+          }
+        }
         let id: string | null = null;
         if (typeof window !== "undefined") {
           id = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
         }
         if (id) {
-          try {
-            await refreshFiles(id);
-            if (alive) {
-              setWorkspaceId(id);
-              onWorkspaceIdChange?.(id);
-            }
-            return;
-          } catch {
-            if (typeof window !== "undefined") {
-              window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
-            }
+          const ok = await selectWorkspace(id);
+          if (ok) return;
+          if (typeof window !== "undefined") {
+            window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
           }
         }
         await createWorkspace();
@@ -863,7 +1166,7 @@ export default function WorkspacePanel({
     return () => {
       alive = false;
     };
-  }, [baseUrl, onWorkspaceIdChange]);
+  }, [baseUrl, onWorkspaceIdChange, userId]);
 
   const toggleDir = (path: string) => {
     setOpenDirs((prev) => {
@@ -1624,6 +1927,23 @@ export default function WorkspacePanel({
     }
   };
 
+  const workspaceSwitcher =
+    userId && workspaceSwitcherTarget
+      ? createPortal(
+          <WorkspaceSwitcher
+            currentId={workspaceId}
+            workspaces={workspaceList}
+            onSelect={(id) => {
+              void selectWorkspace(id);
+            }}
+            onCreate={() => {
+              void createWorkspace();
+            }}
+          />,
+          workspaceSwitcherTarget
+        )
+      : null;
+
   const submitKeyPassphraseChange = async () => {
     if (!workspaceId || !keyPassphraseModal) return;
     setKeyPassphraseBusy(true);
@@ -2245,6 +2565,7 @@ export default function WorkspacePanel({
 
   return (
     <>
+      {workspaceSwitcher}
       <Wrapper style={wrapperStyle}>
       {!compact ? (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
@@ -2279,6 +2600,106 @@ export default function WorkspacePanel({
             <br />
             Inventory:{" "}
             <strong>{inventoryReady ? "ready" : "not generated"}</strong>
+          </div>
+        </div>
+      ) : null}
+
+      {userId ? (
+        <div
+          style={{
+            marginTop: 16,
+            padding: 16,
+            borderRadius: 16,
+            border: "1px solid var(--bs-border-color-translucent)",
+            background: "var(--bs-body-bg)",
+            display: "grid",
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 12,
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <div>
+              <h3 style={{ margin: 0, fontSize: 18 }}>Workspaces</h3>
+              <p
+                className="text-body-secondary"
+                style={{ margin: "6px 0 0", fontSize: 12 }}
+              >
+                Signed in as {userId}
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                void createWorkspace();
+              }}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid var(--bs-body-color)",
+                background: "var(--bs-body-color)",
+                color: "var(--bs-body-bg)",
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              New workspace
+            </button>
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {workspaceList.length === 0 ? (
+              <div className="text-body-secondary" style={{ fontSize: 12 }}>
+                No workspaces yet. Create one to get started.
+              </div>
+            ) : (
+              workspaceList.map((entry) => (
+                <button
+                  key={entry.id}
+                  onClick={() => {
+                    void selectWorkspace(entry.id);
+                  }}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "8px 12px",
+                    borderRadius: 12,
+                    border:
+                      entry.id === workspaceId
+                        ? "1px solid var(--bs-body-color)"
+                        : "1px solid var(--bs-border-color-translucent)",
+                    background:
+                      entry.id === workspaceId
+                        ? "var(--bs-body-color)"
+                        : "var(--bs-body-bg)",
+                    color:
+                      entry.id === workspaceId
+                        ? "var(--bs-body-bg)"
+                        : "var(--bs-body-color)",
+                    fontSize: 12,
+                    textAlign: "left",
+                    cursor: "pointer",
+                  }}
+                >
+                  <span>{entry.id}</span>
+                  <span style={{ opacity: 0.8 }}>
+                    {(() => {
+                      if (!entry.last_used) return "new";
+                      const parsed = new Date(entry.last_used);
+                      return Number.isNaN(parsed.getTime())
+                        ? "new"
+                        : parsed.toLocaleString();
+                    })()}
+                  </span>
+                </button>
+              ))
+            )}
           </div>
         </div>
       ) : null}

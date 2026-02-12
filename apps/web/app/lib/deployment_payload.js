@@ -2,18 +2,18 @@ import { validateForm } from "./deploy_form.js";
 
 /**
  * @param {object} args
- * @param {"active"|"all"} args.deployScope
  * @param {object | null} args.activeServer
  * @param {Record<string, string[]>} args.selectedRolesByAlias
- * @param {string | null} args.activeAlias
+ * @param {string[]} args.selectedAliases
+ * @param {string[]} args.selectableAliases
  * @param {string | null} args.workspaceId
  * @param {boolean} args.inventoryReady
  */
 export function buildDeploymentPayload({
-  deployScope,
   activeServer,
   selectedRolesByAlias,
-  activeAlias,
+  selectedAliases,
+  selectableAliases,
   workspaceId,
   inventoryReady,
 }) {
@@ -32,24 +32,21 @@ export function buildDeploymentPayload({
   const errors = { ...validateForm(credentials) };
 
   const rolesByAlias = selectedRolesByAlias || {};
+  const normalizedSelected = Array.from(
+    new Set((selectedAliases || []).map((alias) => String(alias || "").trim()))
+  ).filter(Boolean);
   let roles = [];
-  if (deployScope === "all") {
-    const seen = new Set();
-    Object.values(rolesByAlias).forEach((list) => {
-      (list || []).forEach((role) => {
-        const r = String(role ?? "").trim();
-        if (r && !seen.has(r)) {
-          seen.add(r);
-          roles.push(r);
-        }
-      });
+  const seen = new Set();
+  normalizedSelected.forEach((alias) => {
+    const list = rolesByAlias?.[alias] || [];
+    (Array.isArray(list) ? list : []).forEach((role) => {
+      const r = String(role ?? "").trim();
+      if (r && !seen.has(r)) {
+        seen.add(r);
+        roles.push(r);
+      }
     });
-  } else {
-    const list = rolesByAlias?.[activeAlias || ""] || [];
-    roles = (Array.isArray(list) ? list : [])
-      .map((role) => String(role ?? "").trim())
-      .filter(Boolean);
-  }
+  });
 
   if (roles.length === 0) {
     errors.selectedRoles = "Select at least one role.";
@@ -63,8 +60,8 @@ export function buildDeploymentPayload({
     errors.inventory = "Generate inventory in Workspace & Files first.";
   }
 
-  if (deployScope === "active" && !String(activeAlias || "").trim()) {
-    errors.deployScope = "Select an active server before deploying.";
+  if (normalizedSelected.length === 0) {
+    errors.deployScope = "Select at least one server to deploy.";
   }
 
   const hasErrors = Object.keys(errors).length > 0;
@@ -99,8 +96,14 @@ export function buildDeploymentPayload({
     }
   }
 
-  if (deployScope === "active") {
-    payload.limit = String(activeAlias || "").trim();
+  const selectable = Array.from(
+    new Set((selectableAliases || []).map((alias) => String(alias || "").trim()))
+  ).filter(Boolean);
+  const allSelectableSelected =
+    selectable.length > 0 &&
+    selectable.every((alias) => normalizedSelected.includes(alias));
+  if (!allSelectableSelected) {
+    payload.limit = normalizedSelected.join(",");
   }
 
   return {
