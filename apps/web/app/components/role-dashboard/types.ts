@@ -15,6 +15,7 @@ export type Role = {
   video?: string | null;
   forum?: string | null;
   homepage?: string | null;
+  repository?: string | null;
   issue_tracker_url?: string | null;
   license_url?: string | null;
 };

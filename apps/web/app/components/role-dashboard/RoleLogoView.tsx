@@ -3,7 +3,7 @@
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { SIMPLEICON_CDN } from "./constants";
-import { initials, simpleIconCandidates } from "./helpers";
+import { simpleIconCandidates } from "./helpers";
 import styles from "./styles.module.css";
 import type { Role } from "./types";
 
@@ -20,44 +20,55 @@ export default function RoleLogoView({
     if (role.logo?.source === "simpleicons" && role.logo.url) {
       return [role.logo.url, ...urls.filter((url) => url !== role.logo?.url)];
     }
-    return urls;
+    return Array.from(new Set(urls));
   }, [role.display_name, role.id, role.logo?.source, role.logo?.url]);
 
-  const initialMode: "simpleicons" | "meta" | "image" | "initials" =
-    simpleIconUrls.length > 0
-      ? "simpleicons"
-      : role.logo?.css_class
-      ? "meta"
-      : role.logo?.url
-      ? "image"
-      : "initials";
-
-  const [mode, setMode] = useState(initialMode);
-  const [simpleIndex, setSimpleIndex] = useState(0);
+  const [simpleIconSrc, setSimpleIconSrc] = useState<string | null>(null);
+  const [simpleIconVisible, setSimpleIconVisible] = useState(false);
 
   useEffect(() => {
-    setMode(initialMode);
-    setSimpleIndex(0);
-  }, [initialMode, role.display_name, role.id]);
+    let cancelled = false;
+    let raf = 0;
+    setSimpleIconSrc(null);
+    setSimpleIconVisible(false);
 
-  const handleSimpleIconError = () => {
-    setSimpleIndex((prev) => {
-      const next = prev + 1;
-      if (next < simpleIconUrls.length) return next;
-      if (role.logo?.css_class) {
-        setMode("meta");
-      } else if (role.logo?.url) {
-        setMode("image");
-      } else {
-        setMode("initials");
+    const tryLoad = (index: number) => {
+      if (cancelled) return;
+      if (index >= simpleIconUrls.length) return;
+      const probe = new Image();
+      probe.onload = () => {
+        if (cancelled) return;
+        setSimpleIconSrc(simpleIconUrls[index]);
+        raf = window.requestAnimationFrame(() => {
+          if (!cancelled) {
+            setSimpleIconVisible(true);
+          }
+        });
+      };
+      probe.onerror = () => {
+        if (!cancelled) {
+          tryLoad(index + 1);
+        }
+      };
+      probe.src = simpleIconUrls[index];
+    };
+
+    if (simpleIconUrls.length > 0) {
+      tryLoad(0);
+    }
+
+    return () => {
+      cancelled = true;
+      if (raf) {
+        window.cancelAnimationFrame(raf);
       }
-      return prev;
-    });
-  };
+    };
+  }, [simpleIconUrls, role.id]);
 
-  const handleMetaImageError = () => {
-    setMode("initials");
-  };
+  const fallbackMode: "meta" | "default" = useMemo(() => {
+    if (role.logo?.css_class) return "meta";
+    return "default";
+  }, [role.logo?.css_class]);
 
   const logoSizeStyle = {
     "--role-logo-size": `${size}px`,
@@ -67,30 +78,34 @@ export default function RoleLogoView({
 
   return (
     <div className={styles.logoRoot} style={logoSizeStyle}>
-      {mode === "simpleicons" && simpleIconUrls[simpleIndex] ? (
+      <div
+        className={`${styles.logoFallbackLayer} ${
+          simpleIconVisible ? styles.logoLayerHidden : styles.logoLayerVisible
+        }`}
+      >
+        {fallbackMode === "meta" && role.logo?.css_class ? (
+          <i
+            className={`${role.logo.css_class} ${styles.logoMetaIcon}`}
+            aria-hidden="true"
+          />
+        ) : null}
+        {fallbackMode === "default" ? (
+          <i className={`fa-solid fa-cube ${styles.logoMetaIcon}`} aria-hidden="true" />
+        ) : null}
+      </div>
+
+      {simpleIconSrc ? (
         <img
-          src={simpleIconUrls[simpleIndex]}
+          src={simpleIconSrc}
           alt={role.display_name}
-          onError={handleSimpleIconError}
-          className={styles.logoImage}
+          onError={() => {
+            setSimpleIconVisible(false);
+            setSimpleIconSrc(null);
+          }}
+          className={`${styles.logoImage} ${styles.logoSimpleIconLayer} ${
+            simpleIconVisible ? styles.logoLayerVisible : styles.logoLayerHidden
+          }`}
         />
-      ) : null}
-      {mode === "meta" && role.logo?.css_class ? (
-        <i
-          className={`${role.logo.css_class} ${styles.logoMetaIcon}`}
-          aria-hidden="true"
-        />
-      ) : null}
-      {mode === "image" && role.logo?.url ? (
-        <img
-          src={role.logo.url}
-          alt={role.display_name}
-          onError={handleMetaImageError}
-          className={styles.logoImage}
-        />
-      ) : null}
-      {mode === "initials" ? (
-        <span className={styles.logoInitials}>{initials(role.display_name)}</span>
       ) : null}
     </div>
   );

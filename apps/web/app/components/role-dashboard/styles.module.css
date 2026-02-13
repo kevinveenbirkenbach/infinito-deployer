@@ -318,6 +318,7 @@
 }
 
 .logoRoot {
+  position: relative;
   width: var(--role-logo-size, 40px);
   height: var(--role-logo-size, 40px);
   border-radius: 16px;
@@ -331,6 +332,23 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.logoFallbackLayer,
+.logoSimpleIconLayer {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transition: opacity 220ms ease;
+}
+
+.logoLayerVisible {
+  opacity: 1;
+}
+
+.logoLayerHidden {
+  opacity: 0;
 }
 
 .logoMetaIcon {

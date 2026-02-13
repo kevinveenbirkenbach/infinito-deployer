@@ -96,11 +96,8 @@ class RoleIndexService:
 
             md = extract_role_metadata(role_dir)
 
-            logo = (
-                RoleLogoOut(source="meta", css_class=md.logo.css_class)
-                if md.logo and md.logo.css_class
-                else None
-            )
+            meta_css_class = md.logo.css_class if md.logo and md.logo.css_class else None
+            logo = RoleLogoOut(source="meta", css_class=meta_css_class) if meta_css_class else None
 
             documentation = _normalize_url(md.documentation, md.id, "documentation")
             video = _normalize_url(md.video, md.id, "video")
