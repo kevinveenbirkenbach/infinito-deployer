@@ -1176,7 +1176,9 @@ class WorkspaceService:
         if not current_vault_password:
             raise HTTPException(status_code=400, detail="vault password not set")
 
-        next_vault_password = (new_vault_password or "").strip() or _generate_passphrase()
+        next_vault_password = (
+            new_vault_password or ""
+        ).strip() or _generate_passphrase()
         if next_vault_password == current_vault_password:
             raise HTTPException(
                 status_code=400, detail="new vault password must differ"

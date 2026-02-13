@@ -23,7 +23,6 @@ The system MUST be:
 * [ ] Roles MAY provide pricing metadata via:
 
   * `roles/*/meta/pricing.yml` (preferred)
-  * `roles/*/meta/pricing.json` (optional)
 
 * [ ] `meta/main.yml` MAY reference pricing explicitly:
 
@@ -380,3 +379,235 @@ UI controls:
 ## Status
 
 * 🟨 Planned
+
+
+# 7. Inventory Integration – Plan Selection Persistence
+
+## Goal
+
+Persist the selected pricing plan **directly inside the Ansible inventory**, so that:
+
+* Deployment is deterministic
+* No UI-only state exists
+* The plan selection travels with ZIP export/import
+* The CLI can operate without the Web UI
+
+The selected plan MUST be stored per host and per application (role).
+
+---
+
+## 7.1 Storage Location in Inventory
+
+The selected plan MUST be stored in:
+
+```
+host_vars/<host>.yml
+```
+
+Under the corresponding application (role) ID.
+
+### Structure
+
+```yaml
+applications:
+  web-app-nextcloud:
+    plan_id: community
+```
+
+If a role has no pricing metadata, the implicit default is:
+
+```yaml
+plan_id: community
+```
+
+Where:
+
+* `community`
+* default pricing = 1 EUR per user
+* default input: users = 1
+
+Unless explicitly overridden by `pricing.yml`.
+
+---
+
+## 7.2 Full Example with Pricing Inputs
+
+```yaml
+applications:
+  web-app-nextcloud:
+    plan_id: business
+    pricing:
+      currency: EUR
+      region: eu
+      inputs:
+        users: 25
+```
+
+Rules:
+
+* `plan_id` is mandatory when the role is enabled.
+* `pricing` block is optional.
+* If `pricing` block is missing:
+
+  * defaults apply from metadata.
+* If `currency` is missing:
+
+  * default currency from metadata.
+* If `region` is missing:
+
+  * defaults to `global`.
+
+---
+
+## 7.3 Disabled Roles
+
+A role is considered disabled if:
+
+* It is not present under `applications`, OR
+* `plan_id` is explicitly set to `null`.
+
+Example:
+
+```yaml
+applications:
+  web-app-nextcloud:
+    plan_id: null
+```
+
+UI interpretation:
+
+* Dropdown shows "Disabled"
+* No pricing calculation
+* Role excluded from deployment
+
+---
+
+## 7.4 Backend Rules
+
+When generating a pricing quote or preparing deployment:
+
+1. Load role metadata (`pricing.yml`)
+2. Read `plan_id` from `host_vars/<host>.yml`
+3. Validate:
+
+   * plan exists for selected offering
+   * currency valid
+   * region valid
+   * inputs valid
+4. Apply deterministic pricing engine
+
+If validation fails:
+
+* Deployment is blocked
+* Clear validation error returned
+* No silent fallback
+
+---
+
+## 7.5 Default Behavior (Global Rule)
+
+For every role:
+
+If:
+
+* No `pricing.yml` exists
+* OR no `plan_id` defined
+
+Then:
+
+```
+plan_id = community
+pricing.per_unit = 1 EUR
+inputs.users = 1
+```
+
+This guarantees:
+
+* Every role always has a valid pricing state
+* No undefined plan scenario
+* Fully deterministic behavior
+
+---
+
+## 7.6 Why Plan Is Stored in Inventory
+
+This design ensures:
+
+* Inventory is the single source of truth
+* Plan selection survives ZIP export/import
+* CLI and UI behave identically
+* No hidden frontend state
+* Deployment is reproducible
+
+---
+
+## 7.7 Acceptance Criteria
+
+* [ ] `plan_id` is stored per role under `applications.<role_id>`
+* [ ] UI dropdown reflects inventory state
+* [ ] Changing dropdown updates `host_vars/<host>.yml`
+* [ ] Removing a role removes its plan entry
+* [ ] Community default applies automatically if undefined
+* [ ] Pricing engine reads only from inventory + metadata
+
+## UI Integration – Single Dropdown (Inventory-backed Plan Selection)
+
+Each role tile contains **exactly one dropdown** that controls both **enabled/disabled** and the **selected plan**. The dropdown is **inventory-backed**: selecting an entry immediately updates `host_vars/<host>.yml` under `applications.<role_id>.plan_id`.
+
+### Dropdown Entries
+
+The dropdown list MUST contain:
+
+* **Disabled**
+* **Enabled – Community** *(default)*
+* **Enabled – <Plan>** for every plan defined in `pricing.yml`
+* *(optional, only if relevant)* **Enabled – <Plan> (REGION / CURRENCY)** if the role’s pricing metadata is region-aware and/or multi-currency and the UI exposes these as selectable presets.
+
+### Default Behavior
+
+If a role has no `pricing.yml` or no stored `plan_id`, the dropdown defaults to:
+
+* **Enabled – Community**
+
+With implicit defaults:
+
+* `plan_id = community`
+* `per_unit = 1 EUR / user`
+* `users = 1`
+
+unless overridden by `pricing.yml`.
+
+### Inventory Write Rules
+
+On selection, the UI MUST write:
+
+* **Disabled**:
+
+  * remove `applications.<role_id>` entirely **OR** set `plan_id: null`
+* **Enabled – <Plan>**:
+
+  * ensure role exists under `applications`
+  * set `applications.<role_id>.plan_id: <plan_id>`
+
+Example write:
+
+```yaml
+applications:
+  web-app-nextcloud:
+    plan_id: business
+```
+
+### Visual Label in Tile
+
+The tile button label MUST always reflect the current state:
+
+* `Disabled`
+* `Community · Enabled`
+* `<Plan Label> · Enabled`
+
+### Acceptance Criteria
+
+* [ ] Dropdown is the only control for enable/disable and plan selection.
+* [ ] Selecting any entry updates `host_vars/<host>.yml` deterministically.
+* [ ] Reloading the UI restores dropdown state from inventory.
+* [ ] If `plan_id` missing, UI shows **Enabled – Community** by default.
