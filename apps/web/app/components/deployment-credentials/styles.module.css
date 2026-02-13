@@ -30,6 +30,12 @@
   gap: 14px;
 }
 
+.detailModalCard {
+  width: min(860px, 96vw);
+  max-height: min(90vh, 860px);
+  overflow: auto;
+}
+
 .removeModalCard {
   width: min(420px, 92vw);
 }
@@ -226,32 +232,275 @@
 .listRoot {
   display: grid;
   gap: 10px;
+  min-height: 0;
 }
 
-.listGrid {
+.listToolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.listToolbarMeta {
+  font-size: 12px;
+}
+
+.bulkActionShell {
+  position: relative;
+  display: inline-flex;
+}
+
+.bulkActionTrigger,
+.actionMenuTrigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.actionMenuShell {
+  position: relative;
+  display: inline-flex;
+}
+
+.actionDropdownMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 210px;
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  box-shadow: var(--deployer-shadow);
+  padding: 6px;
   display: grid;
-  grid-template-columns: var(--server-list-columns);
-  gap: 10px;
+  gap: 4px;
 }
 
-.listHeader {
-  padding: 4px 8px;
+.actionDropdownItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--bs-body-color);
+  padding: 7px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.actionDropdownItem:hover:not(:disabled) {
+  background: var(--bs-tertiary-bg);
+}
+
+.actionDropdownItem:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.actionDropdownDanger {
+  color: var(--bs-danger-text-emphasis);
+}
+
+.listTableWrap {
+  border-radius: 14px;
+  border: 1px solid var(--bs-border-color-translucent);
+  overflow-x: auto;
+  overflow-y: visible;
+  background: var(--bs-body-bg);
+}
+
+.listTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+}
+
+.listTable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bs-body-bg);
+  border-bottom: 1px solid var(--bs-border-color-translucent);
+  padding: 10px 8px;
   font-size: 11px;
   color: var(--deployer-muted-ink);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  text-align: left;
 }
 
-.listRow {
-  align-items: center;
-  padding: 10px 12px;
-  border-radius: 14px;
-  box-shadow: var(--deployer-shadow);
+.listTableRow {
+  border-bottom: 1px solid var(--bs-border-color-translucent);
+}
+
+.listTableRow td {
+  padding: 8px;
+  vertical-align: top;
+}
+
+.listTableRowSelected {
+  outline: 2px solid var(--bs-body-color);
+  outline-offset: -2px;
+}
+
+.colSelect {
+  width: 46px;
+  min-width: 46px;
+  text-align: center;
 }
 
 .rowDefault {
   border: 1px solid var(--bs-border-color-translucent);
   background: var(--bs-body-bg);
+}
+
+.listStatusCell {
+  min-height: 32px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+
+.statusReloadButton,
+.statusReloadButtonLarge {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.statusReloadButtonLarge {
+  justify-self: end;
+}
+
+.statusReloadButton:disabled,
+.statusReloadButtonLarge:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.statusReloadSpacer {
+  width: 24px;
+  height: 24px;
+}
+
+.statusDotButton {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  border: 0;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.statusDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.statusDotGreen {
+  background: #2fbf71;
+}
+
+.statusDotYellow {
+  background: #f0c44d;
+}
+
+.statusDotOrange {
+  background: #ef8a3b;
+}
+
+.statusPopoverOverlay {
+  position: fixed;
+  transform: translateX(-50%);
+  z-index: 1400;
+  width: max-content;
+  max-width: 260px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: rgba(11, 18, 34, 0.96);
+  color: var(--bs-body-color);
+  box-shadow: var(--deployer-shadow);
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.statusPopoverOverlay strong {
+  font-size: 11px;
+}
+
+.statusSummary {
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.rowActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.detailInfoButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-info-border-subtle);
+  background: var(--bs-info-bg-subtle);
+  color: var(--bs-info-text-emphasis);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.actionOverlayMenu,
+.bulkOverlayMenu {
+  position: fixed;
+  z-index: 1400;
+  min-width: 220px;
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  box-shadow: var(--deployer-shadow-strong);
+  padding: 6px;
+  display: grid;
+  gap: 4px;
 }
 
 .fieldColumn {
@@ -390,6 +639,24 @@
 
 .colorTextInput {
   min-width: 0;
+}
+
+.uploadKeyButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.fileInputHidden {
+  display: none;
 }
 
 .inputError {
@@ -623,6 +890,42 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cardPrimaryActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cardDangerActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.actionButtonDangerSoft,
+.actionButtonDanger {
+  padding: var(--server-action-padding, 6px 10px);
+  border-radius: 999px;
+  font-size: var(--server-action-font, 12px);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.actionButtonDangerSoft {
+  border-color: var(--bs-danger-border-subtle);
+  background: color-mix(in srgb, var(--bs-danger-text-emphasis) 12%, var(--bs-body-bg) 88%);
+  color: var(--bs-danger-text-emphasis);
+}
+
+.actionButtonDanger {
+  border-color: var(--bs-danger-border-subtle);
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
 }
 
 .iconDanger {
@@ -685,6 +988,51 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.detailModalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 1px solid var(--bs-border-color-translucent);
+}
+
+.detailStatusBlock {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--deployer-card-bg-soft);
+}
+
+.detailResultGrid {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--deployer-muted-ink);
+}
+
+.confirmCancelButton,
+.confirmDangerButton {
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid transparent;
+}
+
+.confirmCancelButton {
+  border-color: var(--bs-success-border-subtle);
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-success-text-emphasis);
+}
+
+.confirmDangerButton {
+  border-color: var(--bs-danger-border-subtle);
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
 }
 
 .deleteButton {

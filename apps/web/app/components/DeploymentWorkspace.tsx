@@ -55,19 +55,23 @@ type RoleAppConfigResponse = {
 function ensureUniqueDeviceMeta(servers: ServerState[]): ServerState[] {
   const usedColors = new Set<string>();
   const usedLogos = new Set<string>();
+  servers.forEach((server) => {
+    const color = normalizeDeviceColor(server.color);
+    if (color) usedColors.add(color);
+    const logo = normalizeDeviceEmoji(server.logoEmoji);
+    if (logo) usedLogos.add(logo);
+  });
   return servers.map((server) => {
     const normalizedColor = normalizeDeviceColor(server.color);
     const normalizedLogo = normalizeDeviceEmoji(server.logoEmoji);
-    const color =
-      normalizedColor && !usedColors.has(normalizedColor)
-        ? normalizedColor
-        : pickUniqueDeviceColor(usedColors);
-    const logoEmoji =
-      normalizedLogo && !usedLogos.has(normalizedLogo)
-        ? normalizedLogo
-        : pickUniqueDeviceEmoji(usedLogos);
-    usedColors.add(color);
-    usedLogos.add(logoEmoji);
+    const color = normalizedColor || pickUniqueDeviceColor(usedColors);
+    const logoEmoji = normalizedLogo || pickUniqueDeviceEmoji(usedLogos);
+    if (!normalizedColor) {
+      usedColors.add(color);
+    }
+    if (!normalizedLogo) {
+      usedLogos.add(logoEmoji);
+    }
     return {
       ...server,
       description: String(server.description || ""),
@@ -128,6 +132,7 @@ export default function DeploymentWorkspace({
   >(() => ({ [initial.alias]: new Set<string>() }));
   const [aliasRenames, setAliasRenames] = useState<AliasRename[]>([]);
   const [aliasDeletes, setAliasDeletes] = useState<string[]>([]);
+  const [aliasCleanups, setAliasCleanups] = useState<string[]>([]);
   const [selectionTouched, setSelectionTouched] = useState(false);
   const [deploySelection, setDeploySelection] = useState<Set<string>>(
     new Set<string>()
@@ -373,6 +378,9 @@ export default function DeploymentWorkspace({
     setConnectionResults({});
     setDeploySelection(new Set());
     setDeployRoleFilter(new Set());
+    setAliasRenames([]);
+    setAliasDeletes([]);
+    setAliasCleanups([]);
     setLiveJobId("");
     setLiveConnected(false);
     setLiveCanceling(false);
@@ -515,13 +523,9 @@ export default function DeploymentWorkspace({
     [servers, createServer]
   );
 
-  const removeServer = useCallback(
-    async (alias: string) => {
+  const removeServerFromClient = useCallback(
+    (alias: string) => {
       if (!alias) return;
-      if (!workspaceId || !inventoryReady) {
-        throw new Error("Workspace inventory is not ready yet.");
-      }
-      setAliasDeletes((prev) => [...prev, alias]);
       setServers((prev) => {
         const next = prev.filter((server) => server.alias !== alias);
         if (activeAlias === alias) {
@@ -540,9 +544,46 @@ export default function DeploymentWorkspace({
         delete next[alias];
         return next;
       });
+      setOpenCredentialsAlias((prev) => (prev === alias ? null : prev));
+      setDeploySelection((prev) => {
+        if (!prev.has(alias)) return prev;
+        const next = new Set(prev);
+        next.delete(alias);
+        return next;
+      });
+      setDeployedAliases((prev) => {
+        if (!prev.has(alias)) return prev;
+        const next = new Set(prev);
+        next.delete(alias);
+        return next;
+      });
       setSelectionTouched(true);
     },
-    [activeAlias, inventoryReady, workspaceId]
+    [activeAlias]
+  );
+
+  const removeServer = useCallback(
+    async (alias: string) => {
+      if (!alias) return;
+      if (!workspaceId || !inventoryReady) {
+        throw new Error("Workspace inventory is not ready yet.");
+      }
+      setAliasDeletes((prev) => [...prev, alias]);
+      removeServerFromClient(alias);
+    },
+    [inventoryReady, workspaceId, removeServerFromClient]
+  );
+
+  const cleanupServer = useCallback(
+    async (alias: string) => {
+      if (!alias) return;
+      if (!workspaceId || !inventoryReady) {
+        throw new Error("Workspace inventory is not ready yet.");
+      }
+      setAliasCleanups((prev) => [...prev, alias]);
+      removeServerFromClient(alias);
+    },
+    [inventoryReady, workspaceId, removeServerFromClient]
   );
 
   const toggleSelectedForAlias = useCallback((alias: string, id: string) => {
@@ -755,41 +796,114 @@ export default function DeploymentWorkspace({
     return Boolean(host && user && authReady);
   };
 
+  const canTestConnection = (server: ServerState) => {
+    const host = String(server.host || "").trim();
+    const user = String(server.user || "").trim();
+    const portRaw = String(server.port || "").trim();
+    const portValue = Number(portRaw);
+    const portValid =
+      Number.isInteger(portValue) && portValue >= 1 && portValue <= 65535;
+    return Boolean(host && user && portValid && !isAuthMissing(server));
+  };
+
+  const testConnectionForServer = useCallback(
+    async (server: ServerState) => {
+      if (!workspaceId || !canTestConnection(server)) return;
+      try {
+        const portRaw = String(server.port ?? "").trim();
+        const portValue = portRaw ? Number(portRaw) : null;
+        const res = await fetch(
+          `${baseUrl}/api/workspaces/${workspaceId}/test-connection`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              host: server.host,
+              port: Number.isInteger(portValue) ? portValue : undefined,
+              user: server.user,
+              auth_method: server.authMethod,
+              password: server.password || undefined,
+              private_key: server.privateKey || undefined,
+              key_passphrase: server.keyPassphrase || undefined,
+            }),
+          }
+        );
+        if (!res.ok) {
+          let message = `HTTP ${res.status}`;
+          try {
+            const data = await res.json();
+            if (typeof data?.detail === "string" && data.detail.trim()) {
+              message = data.detail.trim();
+            }
+          } catch {
+            const text = await res.text();
+            if (text.trim()) message = text.trim();
+          }
+          throw new Error(message);
+        }
+        const data = (await res.json()) as ConnectionResult;
+        handleConnectionResult(server.alias, data);
+      } catch (err: any) {
+        handleConnectionResult(server.alias, {
+          ping_ok: false,
+          ping_error: err?.message ?? "ping failed",
+          ssh_ok: false,
+          ssh_error: err?.message ?? "ssh failed",
+        });
+      }
+    },
+    [baseUrl, workspaceId, handleConnectionResult]
+  );
+
   const getConnectionState = (server: ServerState) => {
     const credentialsReady = hasCredentials(server);
     const status = connectionResults[server.alias];
-    const pingFailed = status?.ping_ok === false;
     const fullyConnected = status?.ping_ok === true && status?.ssh_ok === true;
 
     if (credentialsReady && fullyConnected) {
       return {
         rowClass: styles.serverRowHealthy,
         label: "Connected",
-        iconClass: "fa-solid fa-circle-check",
-        iconTone: styles.iconSuccess,
-      };
-    }
-    if (!credentialsReady && pingFailed) {
-      return {
-        rowClass: styles.serverRowCritical,
-        label: "Ping fail + missing credentials",
-        iconClass: "fa-solid fa-circle-xmark",
-        iconTone: styles.iconDanger,
+        toneClass: styles.statusDotGreen,
+        tooltip: "Ping and SSH checks succeeded.",
       };
     }
     if (!credentialsReady) {
       return {
         rowClass: styles.serverRowMissingCredentials,
         label: "Missing credentials",
-        iconClass: "fa-solid fa-key",
-        iconTone: styles.iconMuted,
+        toneClass: styles.statusDotOrange,
+        tooltip: "No credentials configured. Set password or SSH key before testing.",
       };
+    }
+    if (!status) {
+      return {
+        rowClass: styles.serverRowWarning,
+        label: "Not tested",
+        toneClass: styles.statusDotYellow,
+        tooltip: "No connection test result yet.",
+      };
+    }
+    if (status.ping_ok && status.ssh_ok) {
+      return {
+        rowClass: styles.serverRowHealthy,
+        label: "Connected",
+        toneClass: styles.statusDotGreen,
+        tooltip: "Ping and SSH checks succeeded.",
+      };
+    }
+    const detail: string[] = [];
+    if (!status.ping_ok) {
+      detail.push(status.ping_error?.trim() || "Ping check failed.");
+    }
+    if (!status.ssh_ok) {
+      detail.push(status.ssh_error?.trim() || "SSH check failed.");
     }
     return {
       rowClass: styles.serverRowWarning,
-      label: status ? "No SSH connection" : "Credentials ready",
-      iconClass: "fa-solid fa-bolt",
-      iconTone: styles.iconWarning,
+      label: !status.ping_ok ? "Ping failed" : "Connection failed",
+      toneClass: styles.statusDotOrange,
+      tooltip: detail.join(" ") || "Connection test failed.",
     };
   };
 
@@ -953,6 +1067,7 @@ export default function DeploymentWorkspace({
           onUpdateServer={updateServer}
           onConnectionResult={handleConnectionResult}
           onRemoveServer={removeServer}
+          onCleanupServer={cleanupServer}
           onAddServer={addServer}
           openCredentialsAlias={openCredentialsAlias}
           onOpenCredentialsAliasHandled={() => setOpenCredentialsAlias(null)}
@@ -983,6 +1098,10 @@ export default function DeploymentWorkspace({
             aliasDeletes={aliasDeletes}
             onAliasDeletesHandled={(count) =>
               setAliasDeletes((prev) => prev.slice(count))
+            }
+            aliasCleanups={aliasCleanups}
+            onAliasCleanupsHandled={(count) =>
+              setAliasCleanups((prev) => prev.slice(count))
             }
             selectionTouched={selectionTouched}
             compact
@@ -1040,7 +1159,7 @@ export default function DeploymentWorkspace({
                   <span>Port</span>
                   <span>User</span>
                   <span>Apps</span>
-                  <span>Credentials</span>
+                  <span>Edit</span>
                   <span>Select</span>
                 </div>
                 <div className={styles.serverTableRows}>
@@ -1064,21 +1183,17 @@ export default function DeploymentWorkspace({
                       !hostMissing && !userMissing && !portInvalid && !authMissing;
                     const isSelectable = hasRoles && isConfigured && !isDeployed;
                     const connectionState = getConnectionState(server);
-                    const rowStatusLabel = isDeployed
-                      ? "Deployed"
+                    const statusToneClass = isDeployed
+                      ? styles.statusDotGreen
+                      : connectionState.toneClass;
+                    const statusTooltip = isDeployed
+                      ? "Device was included in the last successful deployment."
                       : hasRoles
-                      ? connectionState.label
-                      : "No apps";
-                    const statusIconClass = isDeployed
-                      ? "fa-solid fa-check"
-                      : connectionState.iconClass;
-                    const statusIconTone = isDeployed
-                      ? styles.iconSuccess
-                      : connectionState.iconTone;
+                      ? connectionState.tooltip
+                      : "No apps selected for this device.";
                     const tintAllowed =
                       !isDeployed &&
                       isConfigured &&
-                      connectionState.rowClass !== styles.serverRowCritical &&
                       connectionState.rowClass !== styles.serverRowMissingCredentials;
                     const rowStyle = tintAllowed
                       ? createDeviceStyle(server.color, {
@@ -1106,11 +1221,19 @@ export default function DeploymentWorkspace({
                             isDeployed ? styles.statusCellDeployed : ""
                           }`}
                         >
-                          <i
-                            className={`${statusIconClass} ${statusIconTone} ${styles.statusConnectionIcon}`}
-                            aria-hidden="true"
-                          />
-                          <span className={styles.statusLabel}>{rowStatusLabel}</span>
+                          <button
+                            type="button"
+                            className={styles.statusDotButton}
+                            title={statusTooltip}
+                            aria-label={`Status: ${
+                              isDeployed ? "Deployed" : connectionState.label
+                            }`}
+                          >
+                            <span
+                              className={`${styles.statusDot} ${statusToneClass}`}
+                              aria-hidden="true"
+                            />
+                          </button>
                         </div>
                         <span className={styles.aliasCell}>
                           <span className={styles.aliasWithEmoji}>
@@ -1123,6 +1246,12 @@ export default function DeploymentWorkspace({
                             value={server.host}
                             onChange={(event) =>
                               updateServer(alias, { host: event.target.value })
+                            }
+                            onBlur={(event) =>
+                              void testConnectionForServer({
+                                ...server,
+                                host: event.currentTarget.value,
+                              })
                             }
                             placeholder="example.com"
                             className={`${styles.tableInput} ${
@@ -1145,9 +1274,16 @@ export default function DeploymentWorkspace({
                               })
                             }
                             onBlur={() =>
-                              updateServer(alias, {
-                                port: normalizePortValue(server.port) || "22",
-                              })
+                              {
+                                const normalized = normalizePortValue(server.port) || "22";
+                                updateServer(alias, {
+                                  port: normalized,
+                                });
+                                void testConnectionForServer({
+                                  ...server,
+                                  port: normalized,
+                                });
+                              }
                             }
                             placeholder="22"
                             min={1}
@@ -1172,6 +1308,12 @@ export default function DeploymentWorkspace({
                             value={server.user}
                             onChange={(event) =>
                               updateServer(alias, { user: event.target.value })
+                            }
+                            onBlur={(event) =>
+                              void testConnectionForServer({
+                                ...server,
+                                user: event.currentTarget.value,
+                              })
                             }
                             placeholder="root"
                             className={`${styles.tableInput} ${
@@ -1201,7 +1343,8 @@ export default function DeploymentWorkspace({
                             onClick={() => openCredentialsFor(alias)}
                             className={`${styles.smallButton} ${styles.smallButtonEnabled}`}
                           >
-                            Credentials
+                            <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
+                            <span>Edit</span>
                           </button>
                         </div>
                         <div>

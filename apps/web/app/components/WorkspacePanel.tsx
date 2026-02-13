@@ -29,6 +29,7 @@ import {
   extensionForPath,
   encodePath,
   hostVarsAliasesFromFiles,
+  extractRolesByAlias,
   normalizeRoles,
   rolesByAliasKey,
   sanitizeAliasFilename,
@@ -53,6 +54,8 @@ export default function WorkspacePanel({
   onAliasRenamesHandled,
   aliasDeletes,
   onAliasDeletesHandled,
+  aliasCleanups,
+  onAliasCleanupsHandled,
   selectionTouched,
   compact = false,
 }: WorkspacePanelProps) {
@@ -209,6 +212,18 @@ export default function WorkspacePanel({
     next: "",
     confirm: "",
   });
+
+  const [orphanCleanupOpen, setOrphanCleanupOpen] = useState(false);
+  const [orphanCleanupLoading, setOrphanCleanupLoading] = useState(false);
+  const [orphanCleanupBusy, setOrphanCleanupBusy] = useState(false);
+  const [orphanCleanupItems, setOrphanCleanupItems] = useState<
+    { path: string; alias: string; kind: "host_vars" | "ssh_key_private" | "ssh_key_public" }[]
+  >([]);
+  const [orphanCleanupSelected, setOrphanCleanupSelected] = useState<
+    Record<string, boolean>
+  >({});
+  const [orphanCleanupError, setOrphanCleanupError] = useState<string | null>(null);
+  const [orphanCleanupStatus, setOrphanCleanupStatus] = useState<string | null>(null);
 
   const activeAlias = (credentials.alias || "").trim();
 
@@ -701,16 +716,28 @@ export default function WorkspacePanel({
         if (inventoryReady) {
           await renameAliasInInventory(from, to);
         }
-        const fromPath = `host_vars/${sanitizeAliasFilename(from)}.yml`;
-        const toPath = `host_vars/${sanitizeAliasFilename(to)}.yml`;
-        const fromExists = files.some((entry) => entry.path === fromPath);
-        const toExists = files.some((entry) => entry.path === toPath);
-        if (fromExists && !toExists) {
+        const fromSafe = sanitizeAliasFilename(from);
+        const toSafe = sanitizeAliasFilename(to);
+
+        const tryRename = async (fromPath: string, toPath: string) => {
+          const fromExists = files.some((entry) => entry.path === fromPath);
+          const toExists = files.some((entry) => entry.path === toPath);
+          if (!fromExists || toExists) return;
           await renameWorkspaceFile(fromPath, toPath);
           if (activePath === fromPath) {
             setActivePath(toPath);
           }
-        }
+        };
+
+        await tryRename(`host_vars/${fromSafe}.yml`, `host_vars/${toSafe}.yml`);
+        await tryRename(
+          `secrets/ssh_keys/${fromSafe}`,
+          `secrets/ssh_keys/${toSafe}`
+        );
+        await tryRename(
+          `secrets/ssh_keys/${fromSafe}.pub`,
+          `secrets/ssh_keys/${toSafe}.pub`
+        );
         await refreshFiles(workspaceId);
       } catch (err: any) {
         setInventorySyncError(
@@ -749,28 +776,6 @@ export default function WorkspacePanel({
         if (inventoryReady) {
           await removeAliasFromInventory(alias);
         }
-        const hostVarsPath = `host_vars/${sanitizeAliasFilename(alias)}.yml`;
-        if (files.some((entry) => entry.path === hostVarsPath)) {
-          const res = await fetch(
-            `${baseUrl}/api/workspaces/${workspaceId}/files/${encodePath(hostVarsPath)}`,
-            { method: "DELETE" }
-          );
-          if (!res.ok) {
-            let message = `HTTP ${res.status}`;
-            try {
-              const data = await res.json();
-              if (data?.detail) message = data.detail;
-            } catch {
-              // ignore
-            }
-            throw new Error(message);
-          }
-          if (activePath === hostVarsPath) {
-            setActivePath(null);
-            setEditorValue("");
-            setEditorDirty(false);
-          }
-        }
         await refreshFiles(workspaceId);
       } catch (err: any) {
         setInventorySyncError(
@@ -787,9 +792,72 @@ export default function WorkspacePanel({
     workspaceId,
     inventoryReady,
     aliasDeletes,
+    onAliasDeletesHandled,
+  ]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    if (!aliasCleanups || aliasCleanups.length === 0) return;
+    if (deleteSyncRef.current) return;
+
+    const alias = aliasCleanups[0];
+    if (!alias) {
+      onAliasCleanupsHandled?.(1);
+      return;
+    }
+
+    const deleteFileIfExists = async (path: string) => {
+      if (!files.some((entry) => entry.path === path)) return;
+      const res = await fetch(
+        `${baseUrl}/api/workspaces/${workspaceId}/files/${encodePath(path)}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        let message = `HTTP ${res.status}`;
+        try {
+          const data = await res.json();
+          if (data?.detail) message = data.detail;
+        } catch {
+          // ignore
+        }
+        throw new Error(message);
+      }
+      if (activePath === path) {
+        setActivePath(null);
+        setEditorValue("");
+        setEditorDirty(false);
+      }
+    };
+
+    const run = async () => {
+      deleteSyncRef.current = true;
+      try {
+        if (inventoryReady) {
+          await removeAliasFromInventory(alias);
+        }
+        const safeAlias = sanitizeAliasFilename(alias);
+        await deleteFileIfExists(`host_vars/${safeAlias}.yml`);
+        await deleteFileIfExists(`secrets/ssh_keys/${safeAlias}`);
+        await deleteFileIfExists(`secrets/ssh_keys/${safeAlias}.pub`);
+        await refreshFiles(workspaceId);
+      } catch (err: any) {
+        setInventorySyncError(
+          err?.message ? `Device cleanup failed: ${err.message}` : "Device cleanup failed."
+        );
+      } finally {
+        deleteSyncRef.current = false;
+        onAliasCleanupsHandled?.(1);
+      }
+    };
+
+    void run();
+  }, [
+    workspaceId,
+    inventoryReady,
+    aliasCleanups,
     files,
     activePath,
-    onAliasDeletesHandled,
+    onAliasCleanupsHandled,
   ]);
 
   useEffect(() => {
@@ -818,6 +886,160 @@ export default function WorkspacePanel({
     activePath,
     editorDirty,
   ]);
+
+  const collectOrphanCleanupItems = async () => {
+    if (!workspaceId) {
+      throw new Error("Workspace is not ready.");
+    }
+
+    const inventoryAliases = new Set<string>();
+    if (files.some((entry) => entry.path === "inventory.yml")) {
+      const res = await fetch(
+        `${baseUrl}/api/workspaces/${workspaceId}/files/${encodePath("inventory.yml")}`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) {
+        throw new Error(`Inventory read failed (HTTP ${res.status}).`);
+      }
+      const data = await res.json();
+      const content = String(data?.content ?? "");
+      const rolesByAlias = extractRolesByAlias(content);
+      Object.keys(rolesByAlias).forEach((alias) => {
+        const key = String(alias || "").trim();
+        if (key) inventoryAliases.add(key);
+      });
+    }
+
+    const items: {
+      path: string;
+      alias: string;
+      kind: "host_vars" | "ssh_key_private" | "ssh_key_public";
+    }[] = [];
+
+    files.forEach((entry) => {
+      if (entry.is_dir) return;
+      const hostVarsMatch = entry.path.match(/^host_vars\/([^/]+)\.ya?ml$/i);
+      if (hostVarsMatch) {
+        const alias = String(hostVarsMatch[1] || "").trim();
+        if (alias && !inventoryAliases.has(alias)) {
+          items.push({ path: entry.path, alias, kind: "host_vars" });
+        }
+        return;
+      }
+      const keyMatch = entry.path.match(/^secrets\/ssh_keys\/([^/]+?)(\.pub)?$/i);
+      if (keyMatch) {
+        const alias = String(keyMatch[1] || "").trim();
+        if (alias && !inventoryAliases.has(alias)) {
+          items.push({
+            path: entry.path,
+            alias,
+            kind: keyMatch[2] ? "ssh_key_public" : "ssh_key_private",
+          });
+        }
+      }
+    });
+
+    items.sort((a, b) => a.path.localeCompare(b.path));
+    return items;
+  };
+
+  const openOrphanCleanupDialog = async () => {
+    if (!workspaceId) return;
+    setOrphanCleanupOpen(true);
+    setOrphanCleanupLoading(true);
+    setOrphanCleanupError(null);
+    setOrphanCleanupStatus(null);
+    try {
+      const items = await collectOrphanCleanupItems();
+      setOrphanCleanupItems(items);
+      const nextSelection: Record<string, boolean> = {};
+      items.forEach((item) => {
+        nextSelection[item.path] = true;
+      });
+      setOrphanCleanupSelected(nextSelection);
+    } catch (err: any) {
+      setOrphanCleanupItems([]);
+      setOrphanCleanupSelected({});
+      setOrphanCleanupError(
+        err?.message ?? "Failed to detect orphan host_vars and SSH key files."
+      );
+    } finally {
+      setOrphanCleanupLoading(false);
+    }
+  };
+
+  const toggleOrphanSelection = (path: string, checked: boolean) => {
+    setOrphanCleanupSelected((prev) => ({ ...prev, [path]: checked }));
+  };
+
+  const setOrphanSelectionAll = (checked: boolean) => {
+    setOrphanCleanupSelected((prev) => {
+      const next = { ...prev };
+      orphanCleanupItems.forEach((item) => {
+        next[item.path] = checked;
+      });
+      return next;
+    });
+  };
+
+  const deleteOrphanCleanupSelection = async () => {
+    if (!workspaceId) return;
+    const selectedPaths = orphanCleanupItems
+      .map((item) => item.path)
+      .filter((path) => orphanCleanupSelected[path]);
+    if (selectedPaths.length === 0) {
+      setOrphanCleanupError("Select at least one file to delete.");
+      return;
+    }
+    const confirmDelete = window.confirm(
+      `Delete ${selectedPaths.length} orphan file(s)? This permanently removes host_vars and/or SSH key files from this workspace and cannot be undone.`
+    );
+    if (!confirmDelete) return;
+
+    setOrphanCleanupBusy(true);
+    setOrphanCleanupError(null);
+    setOrphanCleanupStatus(null);
+    try {
+      for (const path of selectedPaths) {
+        const res = await fetch(
+          `${baseUrl}/api/workspaces/${workspaceId}/files/${encodePath(path)}`,
+          { method: "DELETE" }
+        );
+        if (!res.ok) {
+          let message = `HTTP ${res.status}`;
+          try {
+            const data = await res.json();
+            if (data?.detail) message = data.detail;
+          } catch {
+            // ignore response parse errors
+          }
+          throw new Error(message);
+        }
+        if (activePath === path) {
+          setActivePath(null);
+          setEditorValue("");
+          setEditorDirty(false);
+        }
+      }
+      await refreshFiles(workspaceId);
+      const nextItems = orphanCleanupItems.filter(
+        (item) => !selectedPaths.includes(item.path)
+      );
+      setOrphanCleanupItems(nextItems);
+      const nextSelection: Record<string, boolean> = {};
+      nextItems.forEach((item) => {
+        nextSelection[item.path] = true;
+      });
+      setOrphanCleanupSelected(nextSelection);
+      setOrphanCleanupStatus(`Deleted ${selectedPaths.length} orphan file(s).`);
+    } catch (err: any) {
+      setOrphanCleanupError(
+        err?.message ?? "Failed to delete orphan host_vars and SSH key files."
+      );
+    } finally {
+      setOrphanCleanupBusy(false);
+    }
+  };
 
   const canGenerateCredentials =
     inventoryReady &&
@@ -934,9 +1156,116 @@ export default function WorkspacePanel({
             uploadError={uploadError}
             zipError={zipError}
             uploadStatus={uploadStatus}
+            openInventoryCleanup={openOrphanCleanupDialog}
+            inventoryCleanupBusy={orphanCleanupLoading || orphanCleanupBusy}
           />
         </div>
       </Wrapper>
+      {orphanCleanupOpen ? (
+        <div
+          onClick={() => {
+            if (orphanCleanupBusy || orphanCleanupLoading) return;
+            setOrphanCleanupOpen(false);
+          }}
+          className={styles.cleanupOverlay}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className={styles.cleanupModal}
+          >
+            <div className={styles.cleanupHeader}>
+              <h3 className={styles.cleanupTitle}>Inventory cleanup</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  if (orphanCleanupBusy || orphanCleanupLoading) return;
+                  setOrphanCleanupOpen(false);
+                }}
+                className={styles.cleanupCloseButton}
+              >
+                Close
+              </button>
+            </div>
+            <p className={`text-body-secondary ${styles.cleanupHint}`}>
+              This scans for orphan `host_vars` and SSH key files that are not referenced
+              by `inventory.yml`. Deleting removes them permanently.
+            </p>
+            {orphanCleanupLoading ? (
+              <p className={`text-body-secondary ${styles.cleanupHint}`}>
+                Scanning workspace files...
+              </p>
+            ) : orphanCleanupItems.length === 0 ? (
+              <p className={`text-body-secondary ${styles.cleanupHint}`}>
+                No orphan files found.
+              </p>
+            ) : (
+              <>
+                <div className={styles.cleanupToolbar}>
+                  <button
+                    type="button"
+                    onClick={() => setOrphanSelectionAll(true)}
+                    className={styles.cleanupActionButton}
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOrphanSelectionAll(false)}
+                    className={styles.cleanupActionButton}
+                  >
+                    Deselect all
+                  </button>
+                </div>
+                <div className={styles.cleanupList}>
+                  {orphanCleanupItems.map((item) => (
+                    <label key={item.path} className={styles.cleanupItem}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(orphanCleanupSelected[item.path])}
+                        onChange={(event) =>
+                          toggleOrphanSelection(item.path, event.target.checked)
+                        }
+                      />
+                      <span className={styles.cleanupItemMeta}>
+                        <strong>{item.alias}</strong>
+                        <code>{item.path}</code>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+            {orphanCleanupError ? (
+              <p className={`text-danger ${styles.cleanupMessage}`}>{orphanCleanupError}</p>
+            ) : null}
+            {orphanCleanupStatus ? (
+              <p className={`text-success ${styles.cleanupMessage}`}>{orphanCleanupStatus}</p>
+            ) : null}
+            <div className={styles.cleanupFooter}>
+              <button
+                type="button"
+                onClick={() => {
+                  void openOrphanCleanupDialog();
+                }}
+                disabled={orphanCleanupBusy || orphanCleanupLoading}
+                className={styles.cleanupActionButton}
+              >
+                Rescan
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void deleteOrphanCleanupSelection();
+                }}
+                disabled={orphanCleanupBusy || orphanCleanupLoading}
+                className={styles.cleanupDeleteButton}
+              >
+                {orphanCleanupBusy ? "Deleting..." : "Delete selected"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <WorkspacePanelOverlays
         contextMenu={contextMenu}
         setContextMenu={setContextMenu}

@@ -314,12 +314,10 @@
 .statusCell {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
   color: var(--deployer-muted-ink);
   min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-height: 34px;
 }
 
 .statusLabel {
@@ -335,6 +333,39 @@
 
 .statusCellDeployed {
   color: var(--bs-success-text-emphasis);
+}
+
+.statusDotButton {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  border: 0;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.statusDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.statusDotGreen {
+  background: #2fbf71;
+}
+
+.statusDotYellow {
+  background: #f0c44d;
+}
+
+.statusDotOrange {
+  background: #ef8a3b;
 }
 
 .aliasCell {

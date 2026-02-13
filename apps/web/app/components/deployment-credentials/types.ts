@@ -33,7 +33,7 @@ export type ConnectionResult = {
   ssh_error?: string | null;
 };
 
-export const SERVER_VIEW_MODES = ["selection", "detail", "list"] as const;
+export const SERVER_VIEW_MODES = ["selection", "list"] as const;
 export type ServerViewMode = (typeof SERVER_VIEW_MODES)[number];
 
 export const SERVER_VIEW_CONFIG: Record<
@@ -41,7 +41,6 @@ export const SERVER_VIEW_CONFIG: Record<
   { minWidth: number; minHeight: number; dense: boolean }
 > = {
   selection: { minWidth: 260, minHeight: 190, dense: true },
-  detail: { minWidth: 320, minHeight: 260, dense: false },
   list: { minWidth: 600, minHeight: 72, dense: true },
 };
 

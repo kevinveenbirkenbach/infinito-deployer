@@ -1,5 +1,5 @@
 export const AUTH_METHODS = ["password", "private_key"];
-const ALIAS_PATTERN = /^[a-z0-9_]+$/;
+const ALIAS_PATTERN = /^[a-z0-9_-]+$/;
 
 export function createInitialState() {
   return {
@@ -32,7 +32,7 @@ export function validateForm(state) {
   if (!alias) {
     errors.alias = "Alias is required.";
   } else if (!ALIAS_PATTERN.test(alias)) {
-    errors.alias = "Alias allows only a-z, 0-9 and _.";
+    errors.alias = "Alias allows only a-z, 0-9, _ and -.";
   }
   if (!host) {
     errors.host = "Host is required.";
@@ -40,7 +40,9 @@ export function validateForm(state) {
   if (!user) {
     errors.user = "User is required.";
   }
-  if (portRaw) {
+  if (!portRaw) {
+    errors.port = "Port is required.";
+  } else {
     const portNum = Number(portRaw);
     if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
       errors.port = "Port must be an integer between 1 and 65535.";

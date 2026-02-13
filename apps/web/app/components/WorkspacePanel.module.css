@@ -46,3 +46,126 @@
   margin-right: -12px;
   margin-bottom: -12px;
 }
+
+.cleanupOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1450;
+  background: rgba(4, 10, 24, 0.78);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.cleanupModal {
+  width: min(760px, 94vw);
+  max-height: min(86vh, 760px);
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--deployer-panel-workspace-bg);
+  box-shadow: var(--deployer-shadow-strong);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.cleanupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cleanupTitle {
+  margin: 0;
+  font-size: 20px;
+}
+
+.cleanupCloseButton {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cleanupHint {
+  margin: 0;
+  font-size: 13px;
+}
+
+.cleanupToolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cleanupActionButton {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cleanupList {
+  display: grid;
+  gap: 8px;
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--deployer-card-bg-soft);
+}
+
+.cleanupItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: rgba(12, 19, 35, 0.72);
+  padding: 8px 10px;
+}
+
+.cleanupItemMeta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cleanupItemMeta code {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cleanupMessage {
+  margin: 0;
+}
+
+.cleanupFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cleanupDeleteButton {
+  border: 1px solid var(--bs-danger-border-subtle);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
+  font-size: 12px;
+  cursor: pointer;
+}

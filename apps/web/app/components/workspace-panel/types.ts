@@ -28,6 +28,8 @@ export type WorkspacePanelProps = {
   onAliasRenamesHandled?: (count: number) => void;
   aliasDeletes?: string[];
   onAliasDeletesHandled?: (count: number) => void;
+  aliasCleanups?: string[];
+  onAliasCleanupsHandled?: (count: number) => void;
   selectionTouched?: boolean;
   compact?: boolean;
 };

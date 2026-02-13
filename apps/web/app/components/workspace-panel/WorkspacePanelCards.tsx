@@ -37,6 +37,8 @@ export default function WorkspacePanelCards(props: any) {
     uploadError,
     zipError,
     uploadStatus,
+    openInventoryCleanup,
+    inventoryCleanupBusy,
   } = props;
 
   const [secretsMenuOpen, setSecretsMenuOpen] = useState(false);
@@ -304,6 +306,21 @@ export default function WorkspacePanelCards(props: any) {
                       <span className={styles.menuItemLabel}>
                         <i className="fa-solid fa-file-arrow-up" aria-hidden="true" />
                         {uploadBusy ? "Importing..." : "Import"}
+                      </span>
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      onClick={() => {
+                        setWorkspaceMenuOpen(false);
+                        openInventoryCleanup?.();
+                      }}
+                      disabled={!workspaceId || inventoryCleanupBusy}
+                      className={styles.menuItem}
+                    >
+                      <span className={styles.menuItemLabel}>
+                        <i className="fa-solid fa-broom" aria-hidden="true" />
+                        {inventoryCleanupBusy ? "Cleanup running..." : "Cleanup"}
                       </span>
                     </button>
                   </li>

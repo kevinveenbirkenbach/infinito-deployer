@@ -2,23 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { validateForm } from "../lib/deploy_form";
 import styles from "./DeploymentCredentialsForm.module.css";
 import RemoveServerModal from "./deployment-credentials/RemoveServerModal";
 import ServerCollectionView from "./deployment-credentials/ServerCollectionView";
-import ServerCredentialsModal from "./deployment-credentials/ServerCredentialsModal";
 import {
   SERVER_VIEW_CONFIG,
   SERVER_VIEW_MODES,
 } from "./deployment-credentials/types";
 import type {
   ConnectionResult,
-  FormErrors,
-  FormState,
   ServerState,
   ServerViewMode,
 } from "./deployment-credentials/types";
-import VaultPasswordModal from "./VaultPasswordModal";
+import { encodePath, sanitizeAliasFilename } from "./workspace-panel/utils";
 
 type DeploymentCredentialsFormProps = {
   baseUrl: string;
@@ -30,6 +26,7 @@ type DeploymentCredentialsFormProps = {
   onUpdateServer: (alias: string, patch: Partial<ServerState>) => void;
   onConnectionResult: (alias: string, result: ConnectionResult) => void;
   onRemoveServer: (alias: string) => Promise<void> | void;
+  onCleanupServer: (alias: string) => Promise<void> | void;
   onAddServer: (aliasHint?: string) => void;
   openCredentialsAlias?: string | null;
   onOpenCredentialsAliasHandled?: () => void;
@@ -38,7 +35,6 @@ type DeploymentCredentialsFormProps = {
 
 const SERVER_VIEW_ICONS: Record<ServerViewMode, string> = {
   selection: "fa-solid fa-object-group",
-  detail: "fa-solid fa-table-cells-large",
   list: "fa-solid fa-list",
 };
 
@@ -58,6 +54,7 @@ export default function DeploymentCredentialsForm({
   onUpdateServer,
   onConnectionResult,
   onRemoveServer,
+  onCleanupServer,
   onAddServer,
   openCredentialsAlias = null,
   onOpenCredentialsAliasHandled,
@@ -68,11 +65,12 @@ export default function DeploymentCredentialsForm({
     ? styles.root
     : `${styles.root} ${styles.wrapper}`;
 
-  const [openAlias, setOpenAlias] = useState<string | null>(null);
-  const [testBusy, setTestBusy] = useState<Record<string, boolean>>({});
+  const [requestedDetailAlias, setRequestedDetailAlias] = useState<string | null>(
+    null
+  );
   const [query, setQuery] = useState("");
   const [queryDraft, setQueryDraft] = useState("");
-  const [viewMode, setViewMode] = useState<ServerViewMode>("detail");
+  const [viewMode, setViewMode] = useState<ServerViewMode>("list");
   const [rowsOverride, setRowsOverride] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -86,50 +84,12 @@ export default function DeploymentCredentialsForm({
   const [filtersPos, setFiltersPos] = useState({ top: 0, left: 0 });
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
 
-  const [keygenBusy, setKeygenBusy] = useState(false);
-  const [keygenError, setKeygenError] = useState<string | null>(null);
-  const [keygenStatus, setKeygenStatus] = useState<string | null>(null);
-  const [passphraseEnabled, setPassphraseEnabled] = useState(false);
-  const [passwordConfirm, setPasswordConfirm] = useState("");
-
-  const [removeTarget, setRemoveTarget] = useState<string | null>(null);
-  const [removeBusy, setRemoveBusy] = useState(false);
-  const [removeError, setRemoveError] = useState<string | null>(null);
-
-  const [vaultPromptOpen, setVaultPromptOpen] = useState(false);
-  const [vaultPromptConfirm, setVaultPromptConfirm] = useState(false);
-  const [vaultPromptAction, setVaultPromptAction] = useState<
-    "keygen" | "store-password" | null
-  >(null);
-
-  const openServer = useMemo(() => {
-    if (!openAlias) return null;
-    return servers.find((server) => server.alias === openAlias) ?? null;
-  }, [openAlias, servers]);
-
-  const activeServer = useMemo(() => {
-    if (activeAlias) {
-      const found = servers.find((server) => server.alias === activeAlias);
-      if (found) return found;
-    }
-    return servers[0] ?? null;
-  }, [servers, activeAlias]);
-
-  useEffect(() => {
-    if (!openAlias) return;
-    if (!servers.some((server) => server.alias === openAlias)) {
-      setOpenAlias(null);
-    }
-  }, [openAlias, servers]);
-
-  useEffect(() => {
-    if (!openServer) return;
-    setKeygenError(null);
-    setKeygenStatus(null);
-    setKeygenBusy(false);
-    setPassphraseEnabled(false);
-    setPasswordConfirm("");
-  }, [openServer?.alias]);
+  const [pendingAction, setPendingAction] = useState<{
+    mode: "delete" | "purge";
+    aliases: string[];
+  } | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!openCredentialsAlias) return;
@@ -137,7 +97,10 @@ export default function DeploymentCredentialsForm({
       onOpenCredentialsAliasHandled?.();
       return;
     }
-    setOpenAlias(openCredentialsAlias);
+    setQuery("");
+    setQueryDraft("");
+    setPage(1);
+    setRequestedDetailAlias(openCredentialsAlias);
     if (activeAlias !== openCredentialsAlias) {
       onActiveAliasChange(openCredentialsAlias);
     }
@@ -181,27 +144,6 @@ export default function DeploymentCredentialsForm({
     return counts;
   }, [servers]);
 
-  const validationTarget: FormState | null = useMemo(() => {
-    if (!openServer) return null;
-    return {
-      alias: openServer.alias ?? "",
-      host: openServer.host ?? "",
-      port: openServer.port ?? "",
-      user: openServer.user ?? "",
-      authMethod: openServer.authMethod ?? "password",
-      password: openServer.password ?? "",
-      privateKey: openServer.privateKey ?? "",
-    };
-  }, [openServer]);
-
-  const formErrors: FormErrors = useMemo(() => {
-    if (!validationTarget) return {};
-    return validateForm(validationTarget);
-  }, [validationTarget]);
-
-  const openServerValid =
-    Object.keys(formErrors).length === 0 && validationTarget !== null;
-
   const normalizedQuery = query.trim().toLowerCase();
   const filteredServers = useMemo(() => {
     if (!normalizedQuery) return servers;
@@ -231,9 +173,12 @@ export default function DeploymentCredentialsForm({
           1,
           Math.floor((gridSize.width + gridGap) / (viewConfig.minWidth + gridGap))
         );
+  const listFixedOverhead = viewMode === "list" ? 132 : 0;
+  const baseRowHeight = viewMode === "list" ? Math.max(112, viewConfig.minHeight) : viewConfig.minHeight;
+  const rowsAvailableHeight = Math.max(0, gridSize.height - listFixedOverhead);
   const computedRows = Math.max(
     1,
-    Math.floor((gridSize.height + gridGap) / (viewConfig.minHeight + gridGap))
+    Math.floor((rowsAvailableHeight + gridGap) / (baseRowHeight + gridGap))
   );
   const rows = Math.max(1, rowsOverride ?? computedRows);
   const pageSize = Math.max(1, computedColumns * rows);
@@ -254,9 +199,6 @@ export default function DeploymentCredentialsForm({
     const start = (currentPage - 1) * pageSize;
     return filteredServers.slice(start, start + pageSize);
   }, [filteredServers, currentPage, pageSize]);
-
-  const listColumns =
-    "minmax(160px, 1.2fr) minmax(200px, 2fr) minmax(80px, 0.6fr) minmax(120px, 1fr) minmax(160px, 1.2fr) minmax(200px, 1fr)";
 
   useEffect(() => {
     setPage(1);
@@ -374,140 +316,190 @@ export default function DeploymentCredentialsForm({
 
   const handleAliasChange = (alias: string, nextAlias: string) => {
     updateServer(alias, { alias: nextAlias });
-    if (openAlias === alias) {
-      setOpenAlias(nextAlias);
-    }
   };
 
   const openDetailViewForAlias = (alias: string) => {
     if (alias && activeAlias !== alias) {
       onActiveAliasChange(alias);
     }
-    setViewMode("detail");
+    setRequestedDetailAlias(alias || null);
   };
 
-  const onAuthChange = (alias: string, next: string) => {
-    if (next === "password") {
-      updateServer(alias, { authMethod: next, privateKey: "", publicKey: "" });
-    } else {
-      updateServer(alias, { authMethod: next, password: "" });
-      setPasswordConfirm("");
-    }
-  };
-
-  const triggerVaultPrompt = (
-    action: "keygen" | "store-password",
-    requireConfirm = false
-  ) => {
-    setVaultPromptAction(action);
-    setVaultPromptConfirm(requireConfirm);
-    setVaultPromptOpen(true);
-  };
-
-  const handleKeygen = async (
-    masterPassword: string | null,
-    masterConfirm: string | null
-  ) => {
-    if (!openServer || !workspaceId) return;
-
-    if (openServer.privateKey) {
-      const ok = window.confirm("Regenerate SSH keypair for this device?");
-      if (!ok) return;
-    }
-
-    setKeygenBusy(true);
-    setKeygenError(null);
-    setKeygenStatus(null);
+  const parseErrorMessage = async (res: Response) => {
     try {
-      const res = await fetch(`${baseUrl}/api/workspaces/${workspaceId}/ssh-keys`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          alias: openServer.alias,
-          algorithm: openServer.keyAlgorithm || "ed25519",
-          with_passphrase: passphraseEnabled,
-          master_password: masterPassword || undefined,
-          master_password_confirm: masterConfirm || undefined,
-          return_passphrase: true,
-        }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `HTTP ${res.status}`);
-      }
       const data = await res.json();
-      updateServer(openServer.alias, {
-        privateKey: data.private_key || "",
-        publicKey: data.public_key || "",
-        authMethod: "private_key",
-        keyPassphrase: data.passphrase || "",
-      });
-      setKeygenStatus("SSH keypair generated.");
-    } catch (err: any) {
-      setKeygenError(err?.message ?? "key generation failed");
-    } finally {
-      setKeygenBusy(false);
-    }
-  };
-
-  const storeServerPassword = async (
-    masterPassword: string | null,
-    confirmPassword: string | null
-  ) => {
-    if (!openServer || !workspaceId) return;
-    const serverPassword = openServer.password || "";
-    if (!serverPassword) {
-      setKeygenError("Set a device password before storing it in the vault.");
-      return;
-    }
-    if (serverPassword !== passwordConfirm) {
-      setKeygenError("Device passwords do not match.");
-      return;
-    }
-    setKeygenError(null);
-    setKeygenStatus(null);
-    try {
-      const res = await fetch(`${baseUrl}/api/workspaces/${workspaceId}/vault/entries`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          master_password: masterPassword,
-          master_password_confirm: confirmPassword,
-          create_if_missing: true,
-          alias: openServer.alias,
-          server_password: serverPassword,
-        }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `HTTP ${res.status}`);
+      if (typeof data?.detail === "string" && data.detail.trim()) {
+        return data.detail.trim();
       }
-      setKeygenStatus("Device password stored in credentials vault.");
-    } catch (err: any) {
-      setKeygenError(err?.message ?? "failed to store password in vault");
+      if (typeof data?.message === "string" && data.message.trim()) {
+        return data.message.trim();
+      }
+    } catch {
+      const text = await res.text();
+      if (text.trim()) return text.trim();
+    }
+    return `HTTP ${res.status}`;
+  };
+
+  const promptMasterPassword = () => {
+    const value = window.prompt("Master password for credentials.kdbx");
+    const trimmed = String(value || "").trim();
+    if (!trimmed) {
+      throw new Error("Master password is required.");
+    }
+    return trimmed;
+  };
+
+  const readWorkspaceFileOrEmpty = async (path: string) => {
+    if (!workspaceId) return "";
+    const res = await fetch(
+      `${baseUrl}/api/workspaces/${workspaceId}/files/${encodePath(path)}`
+    );
+    if (res.status === 404) return "";
+    if (!res.ok) {
+      throw new Error(await parseErrorMessage(res));
+    }
+    const data = await res.json();
+    return String(data?.content ?? "");
+  };
+
+  const writeWorkspaceFile = async (path: string, content: string) => {
+    if (!workspaceId) {
+      throw new Error("Workspace is not ready.");
+    }
+    const res = await fetch(
+      `${baseUrl}/api/workspaces/${workspaceId}/files/${encodePath(path)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      }
+    );
+    if (!res.ok) {
+      throw new Error(await parseErrorMessage(res));
     }
   };
 
-  const handleVaultPromptSubmit = (
-    masterPassword: string,
-    confirmPassword: string | null
-  ) => {
-    setVaultPromptOpen(false);
-    const action = vaultPromptAction;
-    setVaultPromptAction(null);
-    if (!action) return;
-    if (action === "keygen") {
-      void handleKeygen(masterPassword, confirmPassword);
-      return;
+  const upsertVaultYamlKey = (
+    yamlText: string,
+    key: string,
+    vaultText: string
+  ): string => {
+    const content = String(yamlText || "").replace(/\r\n/g, "\n");
+    const keyRegex = new RegExp(`^(\\s*)${key}\\s*:\\s*!vault\\s*(\\|[-+]?)?\\s*$`);
+    const plainRegex = new RegExp(`^\\s*${key}\\s*:`);
+    const lines = content ? content.split("\n") : [];
+
+    let start = -1;
+    let end = -1;
+    for (let i = 0; i < lines.length; i += 1) {
+      const match = lines[i].match(keyRegex);
+      if (!match) continue;
+      start = i;
+      end = i;
+      const blockIndent = `${match[1] ?? ""}  `;
+      for (let j = i + 1; j < lines.length; j += 1) {
+        const next = lines[j];
+        if (j === i + 1 && !next.trim().startsWith("$ANSIBLE_VAULT")) {
+          break;
+        }
+        if (next.startsWith(blockIndent) || next.trim().startsWith("$ANSIBLE_VAULT")) {
+          end = j;
+          continue;
+        }
+        break;
+      }
+      break;
     }
-    if (action === "store-password") {
-      void storeServerPassword(masterPassword, confirmPassword);
+
+    const blockLines = [
+      `${key}: !vault |`,
+      ...String(vaultText || "")
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => `  ${line}`),
+    ];
+
+    let nextLines = [...lines];
+    if (start >= 0) {
+      nextLines.splice(start, end - start + 1, ...blockLines);
+    } else {
+      const plainIndex = nextLines.findIndex((line) => plainRegex.test(line));
+      if (plainIndex >= 0) {
+        nextLines.splice(plainIndex, 1, ...blockLines);
+      } else {
+        if (nextLines.length > 0 && nextLines[nextLines.length - 1].trim() !== "") {
+          nextLines.push("");
+        }
+        nextLines.push(...blockLines);
+      }
     }
+
+    return `${nextLines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
+  };
+
+  const saveServerPasswordToHostVars = async (alias: string, password: string) => {
+    if (!workspaceId) {
+      throw new Error("Workspace is not ready.");
+    }
+    const masterPassword = promptMasterPassword();
+    const encryptRes = await fetch(`${baseUrl}/api/workspaces/${workspaceId}/vault/encrypt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        master_password: masterPassword,
+        plaintext: password,
+      }),
+    });
+    if (!encryptRes.ok) {
+      throw new Error(await parseErrorMessage(encryptRes));
+    }
+    const encrypted = await encryptRes.json();
+    const vaultText = String(encrypted?.vault_text ?? "").trim();
+    if (!vaultText) {
+      throw new Error("Failed to encrypt server password.");
+    }
+    const hostVarsPath = `host_vars/${sanitizeAliasFilename(alias)}.yml`;
+    const current = await readWorkspaceFileOrEmpty(hostVarsPath);
+    const next = upsertVaultYamlKey(current, "ansible_password", vaultText);
+    await writeWorkspaceFile(hostVarsPath, next);
+  };
+
+  const saveKeyPassphraseToVault = async (alias: string, keyPassphrase: string) => {
+    if (!workspaceId || !keyPassphrase.trim()) return;
+    const masterPassword = promptMasterPassword();
+    const res = await fetch(`${baseUrl}/api/workspaces/${workspaceId}/vault/entries`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        master_password: masterPassword,
+        master_password_confirm: masterPassword,
+        create_if_missing: true,
+        alias,
+        key_passphrase: keyPassphrase,
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(await parseErrorMessage(res));
+    }
+  };
+
+  const canTestConnection = (server: ServerState) => {
+    const host = String(server.host || "").trim();
+    const user = String(server.user || "").trim();
+    const portRaw = String(server.port || "").trim();
+    const portValue = Number(portRaw);
+    const portValid = Boolean(portRaw && Number.isInteger(portValue) && portValue >= 1 && portValue <= 65535);
+    if (!host || !user || !portValid) return false;
+    if (server.authMethod === "private_key") {
+      return Boolean(String(server.privateKey || "").trim());
+    }
+    return Boolean(String(server.password || "").trim());
   };
 
   const testConnection = async (server: ServerState) => {
     if (!workspaceId) return;
-    setTestBusy((prev) => ({ ...prev, [server.alias]: true }));
     try {
       const portRaw = String(server.port ?? "").trim();
       const portValue = portRaw ? Number(portRaw) : null;
@@ -530,49 +522,135 @@ export default function DeploymentCredentialsForm({
       }
       const data = await res.json();
       onConnectionResult(server.alias, data);
+      return data as ConnectionResult;
     } catch (err: any) {
-      onConnectionResult(server.alias, {
+      const failedResult: ConnectionResult = {
         ping_ok: false,
         ping_error: err?.message ?? "ping failed",
         ssh_ok: false,
         ssh_error: err?.message ?? "ssh failed",
-      });
-    } finally {
-      setTestBusy((prev) => ({ ...prev, [server.alias]: false }));
+      };
+      onConnectionResult(server.alias, failedResult);
+      return failedResult;
     }
   };
 
-  const copyPublicKey = async () => {
-    if (!openServer?.publicKey) return;
-    try {
-      await navigator.clipboard.writeText(openServer.publicKey);
-      setKeygenStatus("Public key copied to clipboard.");
-    } catch (err) {
-      setKeygenError("Failed to copy public key.");
+  const generateServerKey = async (alias: string) => {
+    if (!workspaceId) {
+      throw new Error("Workspace is not ready.");
+    }
+    const server = servers.find((entry) => entry.alias === alias);
+    if (!server) {
+      throw new Error("Device not found.");
+    }
+    const masterPassword = promptMasterPassword();
+    const res = await fetch(`${baseUrl}/api/workspaces/${workspaceId}/ssh-keys`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        alias: server.alias,
+        algorithm: server.keyAlgorithm || "ed25519",
+        with_passphrase: true,
+        master_password: masterPassword,
+        master_password_confirm: masterPassword,
+        return_passphrase: true,
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(await parseErrorMessage(res));
+    }
+    const data = await res.json();
+    updateServer(server.alias, {
+      privateKey: data.private_key || "",
+      publicKey: data.public_key || "",
+      authMethod: "private_key",
+      keyPassphrase: data.passphrase || "",
+    });
+  };
+
+  const handleCredentialFieldBlur = async (payload: {
+    server: ServerState;
+    field:
+      | "host"
+      | "port"
+      | "user"
+      | "password"
+      | "passwordConfirm"
+      | "privateKey"
+      | "keyPassphrase";
+    passwordConfirm?: string;
+  }) => {
+    const { server, field, passwordConfirm: confirmValue } = payload;
+
+    if (server.authMethod === "password" && (field === "password" || field === "passwordConfirm")) {
+      const password = String(server.password || "");
+      const confirm = String(confirmValue || "");
+      if (password && confirm && password === confirm) {
+        await saveServerPasswordToHostVars(server.alias, password);
+      } else if (password && confirm && password !== confirm) {
+        throw new Error("Password confirmation mismatch.");
+      }
+    }
+
+    if (server.authMethod === "private_key" && field === "keyPassphrase") {
+      const keyPassphrase = String(server.keyPassphrase || "");
+      if (keyPassphrase.trim()) {
+        await saveKeyPassphraseToVault(server.alias, keyPassphrase);
+      }
+    }
+
+    if (canTestConnection(server)) {
+      await testConnection(server);
     }
   };
 
-  const requestRemoveServer = (alias: string) => {
-    setRemoveError(null);
-    setRemoveTarget(alias);
+  const normalizeAliases = (aliases: string[]) =>
+    Array.from(
+      new Set(
+        (Array.isArray(aliases) ? aliases : [])
+          .map((alias) => String(alias || "").trim())
+          .filter(Boolean)
+      )
+    );
+
+  const requestDeleteServers = (aliases: string[]) => {
+    const nextAliases = normalizeAliases(aliases);
+    if (nextAliases.length === 0) return;
+    setActionError(null);
+    setPendingAction({ mode: "delete", aliases: nextAliases });
   };
 
-  const confirmRemoveServer = async () => {
-    if (!removeTarget) return;
-    setRemoveBusy(true);
-    setRemoveError(null);
+  const requestPurgeServers = (aliases: string[]) => {
+    const nextAliases = normalizeAliases(aliases);
+    if (nextAliases.length === 0) return;
+    setActionError(null);
+    setPendingAction({ mode: "purge", aliases: nextAliases });
+  };
+
+  const confirmServerAction = async () => {
+    if (!pendingAction) return;
+    setActionBusy(true);
+    setActionError(null);
     try {
-      await onRemoveServer(removeTarget);
-      setRemoveTarget(null);
+      for (const alias of pendingAction.aliases) {
+        if (pendingAction.mode === "purge") {
+          await onCleanupServer(alias);
+        } else {
+          await onRemoveServer(alias);
+        }
+      }
+      setPendingAction(null);
     } catch (err: any) {
-      setRemoveError(err?.message ?? "failed to delete device");
+      setActionError(
+        err?.message ??
+          (pendingAction.mode === "purge"
+            ? "failed to purge device"
+            : "failed to delete device")
+      );
     } finally {
-      setRemoveBusy(false);
+      setActionBusy(false);
     }
   };
-
-  const detailServers = activeServer ? [activeServer] : [];
-  const visibleServers = viewMode === "detail" ? detailServers : paginatedServers;
 
   return (
     <Wrapper className={wrapperClassName}>
@@ -680,95 +758,61 @@ export default function DeploymentCredentialsForm({
           <div className={styles.contentWrap}>
             <ServerCollectionView
               viewMode={viewMode}
-              paginatedServers={visibleServers}
-              listColumns={listColumns}
+              paginatedServers={paginatedServers}
               computedColumns={computedColumns}
               aliasCounts={aliasCounts}
-              testBusy={testBusy}
               testResults={connectionResults}
               workspaceId={workspaceId}
               onAliasChange={handleAliasChange}
               onPatchServer={updateServer}
               onOpenDetail={openDetailViewForAlias}
-              onOpenCredentials={setOpenAlias}
-              onTestConnection={testConnection}
-              onRequestRemove={requestRemoveServer}
+              onGenerateKey={generateServerKey}
+              onCredentialFieldBlur={handleCredentialFieldBlur}
+              onRequestDelete={requestDeleteServers}
+              onRequestPurge={requestPurgeServers}
+              requestedDetailAlias={requestedDetailAlias}
+              onRequestedDetailAliasHandled={() => setRequestedDetailAlias(null)}
             />
           </div>
         </div>
 
-        {viewMode !== "detail" ? (
-          <div className={`text-body-secondary ${styles.pagination}`}>
-            <button
-              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-              disabled={currentPage <= 1}
-              className={`${styles.pageButton} ${
-                currentPage <= 1 ? styles.pageButtonDisabled : styles.pageButtonEnabled
-              }`}
-            >
-              Prev
-            </button>
-            <span>
-              Page {currentPage} / {pageCount}
-            </span>
-            <button
-              onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))}
-              disabled={currentPage >= pageCount}
-              className={`${styles.pageButton} ${
-                currentPage >= pageCount ? styles.pageButtonDisabled : styles.pageButtonEnabled
-              }`}
-            >
-              Next
-            </button>
-          </div>
-        ) : null}
+        <div className={`text-body-secondary ${styles.pagination}`}>
+          <button
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={currentPage <= 1}
+            className={`${styles.pageButton} ${
+              currentPage <= 1 ? styles.pageButtonDisabled : styles.pageButtonEnabled
+            }`}
+          >
+            Prev
+          </button>
+          <span>
+            Page {currentPage} / {pageCount}
+          </span>
+          <button
+            onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))}
+            disabled={currentPage >= pageCount}
+            className={`${styles.pageButton} ${
+              currentPage >= pageCount ? styles.pageButtonDisabled : styles.pageButtonEnabled
+            }`}
+          >
+            Next
+          </button>
+        </div>
       </div>
 
-      <ServerCredentialsModal
-        openServer={openServer}
-        openServerValid={openServerValid}
-        formErrors={formErrors}
-        passwordConfirm={passwordConfirm}
-        onPasswordConfirmChange={setPasswordConfirm}
-        passphraseEnabled={passphraseEnabled}
-        onPassphraseEnabledChange={setPassphraseEnabled}
-        keygenBusy={keygenBusy}
-        keygenError={keygenError}
-        keygenStatus={keygenStatus}
-        workspaceId={workspaceId}
-        onClose={() => setOpenAlias(null)}
-        onAuthChange={onAuthChange}
-        onUpdateServer={updateServer}
-        onTriggerVaultPrompt={triggerVaultPrompt}
-        onGenerateKey={() => {
-          void handleKeygen(null, null);
-        }}
-        onCopyPublicKey={copyPublicKey}
-      />
-
-      <VaultPasswordModal
-        open={vaultPromptOpen}
-        title="Unlock credentials vault"
-        requireConfirm={vaultPromptConfirm}
-        confirmLabel="Confirm master password"
-        helperText="The master password is required to write to credentials.kdbx."
-        onSubmit={handleVaultPromptSubmit}
-        onClose={() => {
-          setVaultPromptOpen(false);
-          setVaultPromptAction(null);
-        }}
-      />
-
       <RemoveServerModal
-        removeTarget={removeTarget}
-        removeBusy={removeBusy}
-        removeError={removeError}
+        mode={pendingAction?.mode ?? null}
+        targets={pendingAction?.aliases ?? []}
+        removeBusy={actionBusy}
+        removeError={actionError}
         onCancel={() => {
-          setRemoveTarget(null);
-          setRemoveError(null);
+          if (actionBusy) return;
+          setPendingAction(null);
+          setActionError(null);
         }}
         onConfirm={() => {
-          void confirmRemoveServer();
+          void confirmServerAction();
         }}
       />
       {filtersOverlay}
