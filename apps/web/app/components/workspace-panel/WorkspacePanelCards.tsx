@@ -36,7 +36,6 @@ export default function WorkspacePanelCards(props: any) {
 
   const [secretsMenuOpen, setSecretsMenuOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
-  const [secretsSubmenu, setSecretsSubmenu] = useState<"app" | null>(null);
   const [vaultResetConfirmOpen, setVaultResetConfirmOpen] = useState(false);
   const [scopeModalOpen, setScopeModalOpen] = useState(false);
   const [scopeDraft, setScopeDraft] = useState<"all" | "single">("all");
@@ -66,7 +65,6 @@ export default function WorkspacePanelCards(props: any) {
       if (menuRootRef.current?.contains(target)) return;
       setSecretsMenuOpen(false);
       setWorkspaceMenuOpen(false);
-      setSecretsSubmenu(null);
     };
     document.addEventListener("mousedown", onMouseDown);
     return () => {
@@ -91,7 +89,7 @@ export default function WorkspacePanelCards(props: any) {
     setRoleDraft(roleOptions[0]);
   }, [roleDraft, roleOptions, scopeDraft]);
 
-  const openScopeModal = (intent: "generate" | "regenerate") => {
+  const openScopeModal = () => {
     const nextScope = credentialsScope === "single" ? "single" : "all";
     const preferredAlias =
       (activeAlias && sortedAliases.includes(activeAlias) ? activeAlias : "") ||
@@ -107,14 +105,13 @@ export default function WorkspacePanelCards(props: any) {
           : preferredRoles[0] ?? ""
         : "";
 
-    setSubmitIntent(intent);
+    setSubmitIntent("generate");
     setScopeDraft(nextScope);
     setServerDraft(preferredAlias);
     setRoleDraft(preferredRole);
-    setOverwriteDraft(intent === "regenerate" ? true : forceOverwrite);
+    setOverwriteDraft(forceOverwrite);
     setSecretsMenuOpen(false);
     setWorkspaceMenuOpen(false);
-    setSecretsSubmenu(null);
     setScopeModalOpen(true);
   };
 
@@ -122,6 +119,14 @@ export default function WorkspacePanelCards(props: any) {
     scopeDraft === "single" ? (roleDraft ? [roleDraft] : []) : roleOptions;
   const canSubmitGenerate =
     canGenerateCredentials && Boolean(serverDraft) && targetRoles.length > 0;
+  const vaultStatusMessage =
+    credentialsStatus && /vault password/i.test(credentialsStatus)
+      ? credentialsStatus
+      : null;
+  const vaultErrorMessage =
+    credentialsError && /vault password/i.test(credentialsError)
+      ? credentialsError
+      : null;
 
   const confirmGenerate = () => {
     const nextScope = scopeDraft;
@@ -146,17 +151,13 @@ export default function WorkspacePanelCards(props: any) {
           <div className={styles.menuWrap}>
             <button
               onClick={() => {
-                setSecretsMenuOpen((prev) => {
-                  const next = !prev;
-                  if (!next) setSecretsSubmenu(null);
-                  return next;
-                });
+                setSecretsMenuOpen((prev) => !prev);
                 setWorkspaceMenuOpen(false);
               }}
               className={styles.menuTrigger}
             >
               <i className="fa-solid fa-key" aria-hidden="true" />
-              <span>Secrets</span>
+              <span>Credentials</span>
               <i
                 className={`fa-solid ${
                   secretsMenuOpen ? "fa-chevron-up" : "fa-chevron-down"
@@ -169,61 +170,29 @@ export default function WorkspacePanelCards(props: any) {
                 <ul className={styles.menuList}>
                   <li>
                     <button
-                      onClick={() =>
-                        setSecretsSubmenu((prev) => (prev === "app" ? null : "app"))
-                      }
+                      onClick={openScopeModal}
+                      disabled={!canGenerateCredentials}
                       className={styles.menuItem}
                     >
                       <span className={styles.menuItemLabel}>
                         <i className="fa-solid fa-cubes" aria-hidden="true" />
                         App credentials
                       </span>
-                      <i
-                        className={`fa-solid ${
-                          secretsSubmenu === "app" ? "fa-chevron-up" : "fa-chevron-down"
-                        }`}
-                        aria-hidden="true"
-                      />
                     </button>
-                    {secretsSubmenu === "app" ? (
-                      <div className={styles.submenu}>
-                        <button
-                          onClick={() => openScopeModal("generate")}
-                          disabled={!canGenerateCredentials}
-                          className={styles.submenuItem}
-                        >
-                          <i className="fa-solid fa-plus" aria-hidden="true" />
-                          Generate
-                        </button>
-                        <button
-                          onClick={() => openScopeModal("regenerate")}
-                          disabled={!canGenerateCredentials}
-                          className={styles.submenuItem}
-                        >
-                          <i className="fa-solid fa-rotate-right" aria-hidden="true" />
-                          Regenerate
-                        </button>
-                      </div>
-                    ) : null}
                   </li>
-
-                  <li className={styles.menuDivider} />
 
                   <li>
                     <button
                       onClick={() => {
                         setSecretsMenuOpen(false);
                         setWorkspaceMenuOpen(false);
-                        setSecretsSubmenu(null);
                         openMasterPasswordDialog();
                       }}
                       className={styles.menuItem}
                     >
                       <span className={styles.menuItemLabel}>
                         <i className="fa-solid fa-user-lock" aria-hidden="true" />
-                        {hasCredentialsVault
-                          ? "Master password reset"
-                          : "Master password set"}
+                        Master Passwort
                       </span>
                     </button>
                   </li>
@@ -232,7 +201,6 @@ export default function WorkspacePanelCards(props: any) {
                       onClick={() => {
                         setSecretsMenuOpen(false);
                         setWorkspaceMenuOpen(false);
-                        setSecretsSubmenu(null);
                         setVaultResetConfirmOpen(true);
                       }}
                       disabled={!hasCredentialsVault || credentialsBusy}
@@ -240,17 +208,11 @@ export default function WorkspacePanelCards(props: any) {
                     >
                       <span className={styles.menuItemLabel}>
                         <i className="fa-solid fa-arrows-rotate" aria-hidden="true" />
-                        Vault password reset
+                        Vault password
                       </span>
                     </button>
                   </li>
                 </ul>
-                {credentialsError ? (
-                  <p className={`text-danger ${styles.menuStatus}`}>{credentialsError}</p>
-                ) : null}
-                {credentialsStatus ? (
-                  <p className={`text-success ${styles.menuStatus}`}>{credentialsStatus}</p>
-                ) : null}
               </div>
             ) : null}
           </div>
@@ -346,7 +308,6 @@ export default function WorkspacePanelCards(props: any) {
               </button>
               <button
                 onClick={() => {
-                  setVaultResetConfirmOpen(false);
                   resetVaultPassword();
                 }}
                 disabled={credentialsBusy}
@@ -356,6 +317,12 @@ export default function WorkspacePanelCards(props: any) {
                 Continue
               </button>
             </div>
+            {vaultErrorMessage ? (
+              <p className={`text-danger ${styles.statusText}`}>{vaultErrorMessage}</p>
+            ) : null}
+            {vaultStatusMessage ? (
+              <p className={`text-success ${styles.statusText}`}>{vaultStatusMessage}</p>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -363,11 +330,29 @@ export default function WorkspacePanelCards(props: any) {
       {scopeModalOpen ? (
         <div onClick={() => setScopeModalOpen(false)} className={styles.modalOverlay}>
           <div onClick={(event) => event.stopPropagation()} className={styles.modalCard}>
-            <h3 className={styles.modalTitle}>
-              {submitIntent === "regenerate"
-                ? "Regenerate app credentials"
-                : "Generate app credentials"}
-            </h3>
+            <h3 className={styles.modalTitle}>App credentials</h3>
+
+            <div className={styles.radioGroup}>
+              <span className={`text-body-tertiary ${styles.label}`}>Action</span>
+              <label className={`text-body-secondary ${styles.radioLabel}`}>
+                <input
+                  type="radio"
+                  name="credentials-action-modal"
+                  checked={submitIntent === "generate"}
+                  onChange={() => setSubmitIntent("generate")}
+                />
+                Generate
+              </label>
+              <label className={`text-body-secondary ${styles.radioLabel}`}>
+                <input
+                  type="radio"
+                  name="credentials-action-modal"
+                  checked={submitIntent === "regenerate"}
+                  onChange={() => setSubmitIntent("regenerate")}
+                />
+                Regenerate
+              </label>
+            </div>
 
             <div className={styles.radioGroup}>
               <label className={`text-body-secondary ${styles.radioLabel}`}>

@@ -92,35 +92,6 @@ export default function Page() {
         </div>
       </header>
 
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 8,
-          alignItems: "center",
-          justifyContent: "flex-start",
-        }}
-      >
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {["Apps", "Toggle", "Tab", "Reload"].map((label) => (
-            <button
-              key={label}
-              style={{
-                padding: "6px 10px",
-                borderRadius: 999,
-                border: "1px solid var(--bs-border-color)",
-                background: "var(--bs-body-bg)",
-                color: "var(--bs-body-color)",
-                fontSize: 12,
-                cursor: "pointer",
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <section
         style={{
           flex: 1,
