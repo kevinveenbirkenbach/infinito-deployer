@@ -1,5 +1,10 @@
 import { extractVaultText, replaceVaultBlock } from "./utils";
 
+type CredentialsTarget = {
+  alias: string;
+  targetRoles: string[];
+};
+
 export function createWorkspacePanelVaultActions(ctx: any) {
   const {
     baseUrl,
@@ -53,6 +58,37 @@ export function createWorkspacePanelVaultActions(ctx: any) {
     return raw;
   };
 
+  const postCredentialsRequest = async (
+    targetRoles: string[],
+    force: boolean,
+    setValues: string[],
+    masterPassword: string,
+    aliasOverride?: string
+  ) => {
+    const res = await fetch(`${baseUrl}/api/workspaces/${workspaceId}/credentials`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        master_password: masterPassword,
+        selected_roles: targetRoles,
+        allow_empty_plain: allowEmptyPlain,
+        set_values: setValues.length > 0 ? setValues : undefined,
+        force,
+        alias: aliasOverride || activeAlias || undefined,
+      }),
+    });
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`;
+      try {
+        const data = await res.json();
+        if (data?.detail) message = data.detail;
+      } catch {
+        // ignore
+      }
+      throw new Error(message);
+    }
+  };
+
   const postCredentials = async (
     targetRoles: string[],
     force: boolean,
@@ -65,28 +101,13 @@ export function createWorkspacePanelVaultActions(ctx: any) {
     setCredentialsError(null);
     setCredentialsStatus(null);
     try {
-      const res = await fetch(`${baseUrl}/api/workspaces/${workspaceId}/credentials`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          master_password: masterPassword,
-          selected_roles: targetRoles,
-          allow_empty_plain: allowEmptyPlain,
-          set_values: setValues.length > 0 ? setValues : undefined,
-          force,
-          alias: aliasOverride || activeAlias || undefined,
-        }),
-      });
-      if (!res.ok) {
-        let message = `HTTP ${res.status}`;
-        try {
-          const data = await res.json();
-          if (data?.detail) message = data.detail;
-        } catch {
-          // ignore
-        }
-        throw new Error(message);
-      }
+      await postCredentialsRequest(
+        targetRoles,
+        force,
+        setValues,
+        masterPassword,
+        aliasOverride
+      );
       setCredentialsStatus("Credentials generated.");
       await refreshFiles(workspaceId);
     } catch (err: any) {
@@ -103,6 +124,7 @@ export function createWorkspacePanelVaultActions(ctx: any) {
       force?: boolean;
       alias?: string;
       targetRoles?: string[];
+      targets?: CredentialsTarget[];
     }
   ) => {
     if (!workspaceId || credentialsBusy) return;
@@ -110,6 +132,28 @@ export function createWorkspacePanelVaultActions(ctx: any) {
     const role = options?.role ?? credentialsRole;
     const force = options?.force ?? forceOverwrite;
     const alias = options?.alias || activeAlias;
+    const targets = Array.isArray(options?.targets)
+      ? options.targets
+          .map((target) => ({
+            alias: String(target.alias || "").trim(),
+            targetRoles: Array.isArray(target.targetRoles)
+              ? target.targetRoles.map((roleId) => String(roleId || "").trim()).filter(Boolean)
+              : [],
+          }))
+          .filter((target) => target.alias && target.targetRoles.length > 0)
+      : [];
+    if (targets.length > 0) {
+      setPendingCredentials({
+        roles: [],
+        force,
+        setValues: [],
+        targets,
+      });
+      setVaultPromptMode("generate");
+      setVaultPromptConfirm(false);
+      setVaultPromptOpen(true);
+      return;
+    }
     const targetRoles = options?.targetRoles ?? resolveTargetRoles(scope, role);
     if (targetRoles.length === 0) {
       setCredentialsError("Select a role to generate credentials.");
@@ -134,6 +178,38 @@ export function createWorkspacePanelVaultActions(ctx: any) {
     const mode = vaultPromptMode;
     setVaultPromptMode(null);
     if (mode === "generate" && pendingCredentials) {
+      if (Array.isArray(pendingCredentials.targets) && pendingCredentials.targets.length > 0) {
+        void (async () => {
+          if (!workspaceId || !masterPassword) return;
+          setCredentialsBusy(true);
+          setCredentialsError(null);
+          setCredentialsStatus(null);
+          try {
+            for (const target of pendingCredentials.targets || []) {
+              try {
+                await postCredentialsRequest(
+                  target.targetRoles,
+                  pendingCredentials.force,
+                  pendingCredentials.setValues,
+                  masterPassword,
+                  target.alias
+                );
+              } catch (err: any) {
+                throw new Error(`${target.alias}: ${toUserError(err, "credential generation failed")}`);
+              }
+            }
+            const updatedTargets = pendingCredentials.targets.length;
+            setCredentialsStatus(`Credentials generated for ${updatedTargets} server target(s).`);
+            await refreshFiles(workspaceId);
+          } catch (err: any) {
+            setCredentialsError(toUserError(err, "credential generation failed"));
+          } finally {
+            setCredentialsBusy(false);
+          }
+        })();
+        setPendingCredentials(null);
+        return;
+      }
       void postCredentials(
         pendingCredentials.roles,
         pendingCredentials.force,

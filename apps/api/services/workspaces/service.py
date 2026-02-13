@@ -479,7 +479,37 @@ class WorkspaceService:
 
         host_vars_path = _safe_resolve(root, host_vars_file)
         if not host_vars_path.is_file():
-            raise HTTPException(status_code=400, detail="host vars file not found")
+            host_vars_data: Dict[str, Any] = {}
+            host = str(meta.get("host") or "").strip()
+            user = str(meta.get("user") or "").strip()
+            if host:
+                host_vars_data["ansible_host"] = host
+            if user:
+                host_vars_data["ansible_user"] = user
+            try:
+                raw_port = meta.get("port")
+                if raw_port is not None:
+                    port = int(raw_port)
+                    if 1 <= port <= 65535:
+                        host_vars_data["ansible_port"] = port
+            except Exception:
+                # Keep fallback robust even when legacy metadata stores invalid port values.
+                pass
+            try:
+                safe_mkdir(host_vars_path.parent)
+                atomic_write_text(
+                    host_vars_path,
+                    yaml.safe_dump(
+                        host_vars_data,
+                        sort_keys=False,
+                        default_flow_style=False,
+                        allow_unicode=True,
+                    ),
+                )
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=500, detail=f"failed to create host vars file: {exc}"
+                )
 
         role_root = repo_roles_root()
         repo_root = _repo_root()

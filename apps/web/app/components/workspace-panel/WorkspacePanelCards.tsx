@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import styles from "./WorkspacePanelCards.module.css";
 
+type CredentialsTarget = {
+  alias: string;
+  targetRoles: string[];
+};
+
+const matrixKey = (alias: string, role: string) => `${alias}::${role}`;
+
 export default function WorkspacePanelCards(props: any) {
   const {
     generateCredentials,
@@ -15,8 +22,6 @@ export default function WorkspacePanelCards(props: any) {
     activeAlias,
     serverAliases,
     serverRolesByAlias,
-    credentialsScope,
-    credentialsRole,
     setCredentialsRole,
     setCredentialsScope,
     forceOverwrite,
@@ -38,23 +43,46 @@ export default function WorkspacePanelCards(props: any) {
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [vaultResetConfirmOpen, setVaultResetConfirmOpen] = useState(false);
   const [scopeModalOpen, setScopeModalOpen] = useState(false);
-  const [scopeDraft, setScopeDraft] = useState<"all" | "single">("all");
-  const [serverDraft, setServerDraft] = useState("");
-  const [roleDraft, setRoleDraft] = useState("");
+  const [selectionMode, setSelectionMode] = useState<"all" | "custom">("all");
+  const [matrixSelection, setMatrixSelection] = useState<Record<string, boolean>>({});
   const [overwriteDraft, setOverwriteDraft] = useState(false);
   const [submitIntent, setSubmitIntent] = useState<"generate" | "regenerate">(
     "generate"
   );
   const menuRootRef = useRef<HTMLDivElement | null>(null);
 
-  const sortedAliases = useMemo(
-    () => (Array.isArray(serverAliases) ? [...serverAliases] : []),
-    [serverAliases]
+  const sortedAliases = useMemo(() => {
+    const list = Array.isArray(serverAliases) ? [...serverAliases] : [];
+    const preferredAlias = String(activeAlias || "").trim();
+    if (!preferredAlias || !list.includes(preferredAlias)) return list;
+    return [preferredAlias, ...list.filter((alias) => alias !== preferredAlias)];
+  }, [activeAlias, serverAliases]);
+
+  const matrixAliases = useMemo(
+    () => sortedAliases.filter((alias) => (serverRolesByAlias?.[alias] ?? []).length > 0),
+    [serverRolesByAlias, sortedAliases]
   );
 
-  const roleOptions = useMemo(
-    () => (serverDraft ? serverRolesByAlias?.[serverDraft] ?? [] : []),
-    [serverDraft, serverRolesByAlias]
+  const matrixRoles = useMemo(() => {
+    const seen = new Set<string>();
+    matrixAliases.forEach((alias) => {
+      (serverRolesByAlias?.[alias] ?? []).forEach((roleId: string) => {
+        const key = String(roleId || "").trim();
+        if (key) seen.add(key);
+      });
+    });
+    return Array.from(seen);
+  }, [matrixAliases, serverRolesByAlias]);
+
+  const allTargets = useMemo<CredentialsTarget[]>(
+    () =>
+      matrixAliases
+        .map((alias) => ({
+          alias,
+          targetRoles: (serverRolesByAlias?.[alias] ?? []).filter(Boolean),
+        }))
+        .filter((target) => target.targetRoles.length > 0),
+    [matrixAliases, serverRolesByAlias]
   );
 
   useEffect(() => {
@@ -72,53 +100,48 @@ export default function WorkspacePanelCards(props: any) {
     };
   }, [secretsMenuOpen, workspaceMenuOpen]);
 
-  useEffect(() => {
-    if (!scopeModalOpen) return;
-    if (!serverDraft || !sortedAliases.includes(serverDraft)) {
-      setServerDraft(sortedAliases[0] ?? "");
-    }
-  }, [scopeModalOpen, serverDraft, sortedAliases]);
-
-  useEffect(() => {
-    if (scopeDraft !== "single") return;
-    if (roleOptions.length === 0) {
-      setRoleDraft("");
-      return;
-    }
-    if (roleOptions.includes(roleDraft)) return;
-    setRoleDraft(roleOptions[0]);
-  }, [roleDraft, roleOptions, scopeDraft]);
+  const buildFullSelection = () => {
+    const next: Record<string, boolean> = {};
+    allTargets.forEach((target) => {
+      target.targetRoles.forEach((roleId) => {
+        next[matrixKey(target.alias, roleId)] = true;
+      });
+    });
+    return next;
+  };
 
   const openScopeModal = () => {
-    const nextScope = credentialsScope === "single" ? "single" : "all";
-    const preferredAlias =
-      (activeAlias && sortedAliases.includes(activeAlias) ? activeAlias : "") ||
-      sortedAliases[0] ||
-      "";
-    const preferredRoles = preferredAlias
-      ? serverRolesByAlias?.[preferredAlias] ?? []
-      : [];
-    const preferredRole =
-      nextScope === "single"
-        ? credentialsRole && preferredRoles.includes(credentialsRole)
-          ? credentialsRole
-          : preferredRoles[0] ?? ""
-        : "";
-
     setSubmitIntent("generate");
-    setScopeDraft(nextScope);
-    setServerDraft(preferredAlias);
-    setRoleDraft(preferredRole);
+    setSelectionMode("all");
+    setMatrixSelection(buildFullSelection());
     setOverwriteDraft(forceOverwrite);
     setSecretsMenuOpen(false);
     setWorkspaceMenuOpen(false);
     setScopeModalOpen(true);
   };
 
-  const targetRoles =
-    scopeDraft === "single" ? (roleDraft ? [roleDraft] : []) : roleOptions;
+  const customTargets = useMemo<CredentialsTarget[]>(() => {
+    return matrixAliases
+      .map((alias) => {
+        const selectedRoles = (serverRolesByAlias?.[alias] ?? []).filter((roleId: string) =>
+          Boolean(matrixSelection[matrixKey(alias, roleId)])
+        );
+        return {
+          alias,
+          targetRoles: selectedRoles,
+        };
+      })
+      .filter((target) => target.targetRoles.length > 0);
+  }, [matrixAliases, matrixSelection, serverRolesByAlias]);
+
+  const selectedCellCount = useMemo(
+    () => customTargets.reduce((sum, target) => sum + target.targetRoles.length, 0),
+    [customTargets]
+  );
+
   const canSubmitGenerate =
-    canGenerateCredentials && Boolean(serverDraft) && targetRoles.length > 0;
+    canGenerateCredentials &&
+    (selectionMode === "all" ? allTargets.length > 0 : customTargets.length > 0);
   const vaultStatusMessage =
     credentialsStatus && /vault password/i.test(credentialsStatus)
       ? credentialsStatus
@@ -128,19 +151,36 @@ export default function WorkspacePanelCards(props: any) {
       ? credentialsError
       : null;
 
+  const selectAllCustomCells = () => {
+    setMatrixSelection(buildFullSelection());
+  };
+
+  const deselectAllCustomCells = () => {
+    setMatrixSelection({});
+  };
+
+  const toggleMatrixCell = (alias: string, roleId: string) => {
+    const key = matrixKey(alias, roleId);
+    setMatrixSelection((prev) => {
+      const next = { ...prev };
+      if (next[key]) {
+        delete next[key];
+      } else {
+        next[key] = true;
+      }
+      return next;
+    });
+  };
+
   const confirmGenerate = () => {
-    const nextScope = scopeDraft;
-    const nextRole = nextScope === "single" ? roleDraft : "";
     const nextForce = submitIntent === "regenerate" ? true : overwriteDraft;
-    setCredentialsScope(nextScope);
-    setCredentialsRole(nextRole);
+    const targets = selectionMode === "all" ? allTargets : customTargets;
+    setCredentialsScope("all");
+    setCredentialsRole("");
     setForceOverwrite(nextForce);
     void generateCredentials({
-      scope: nextScope,
-      role: nextRole,
       force: nextForce,
-      alias: serverDraft,
-      targetRoles,
+      targets,
     });
   };
 
@@ -329,7 +369,10 @@ export default function WorkspacePanelCards(props: any) {
 
       {scopeModalOpen ? (
         <div onClick={() => setScopeModalOpen(false)} className={styles.modalOverlay}>
-          <div onClick={(event) => event.stopPropagation()} className={styles.modalCard}>
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className={`${styles.modalCard} ${styles.modalCardLarge}`}
+          >
             <h3 className={styles.modalTitle}>App credentials</h3>
 
             <div className={styles.radioGroup}>
@@ -354,74 +397,96 @@ export default function WorkspacePanelCards(props: any) {
               </label>
             </div>
 
-            <div className={styles.radioGroup}>
-              <label className={`text-body-secondary ${styles.radioLabel}`}>
-                <input
-                  type="radio"
-                  name="credentials-scope-modal"
-                  checked={scopeDraft === "all"}
-                  onChange={() => setScopeDraft("all")}
-                />
-                All selected roles
-              </label>
-              <label className={`text-body-secondary ${styles.radioLabel}`}>
-                <input
-                  type="radio"
-                  name="credentials-scope-modal"
-                  checked={scopeDraft === "single"}
-                  onChange={() => setScopeDraft("single")}
-                />
-                Single role
-              </label>
-            </div>
-
-            <div className={styles.radioGroup}>
-              <span className={`text-body-tertiary ${styles.label}`}>Server</span>
-              <select
-                value={serverDraft}
-                onChange={(event) => setServerDraft(event.target.value)}
-                disabled={sortedAliases.length === 0}
-                className={`${styles.selectControl} ${
-                  sortedAliases.length
-                    ? styles.selectControlEnabled
-                    : styles.selectControlDisabled
+            <div className={styles.tabRow}>
+              <button
+                onClick={() => setSelectionMode("all")}
+                className={`${styles.tabButton} ${
+                  selectionMode === "all" ? styles.tabButtonActive : ""
                 }`}
               >
-                {sortedAliases.length === 0 ? (
-                  <option value="">No servers available</option>
-                ) : null}
-                {sortedAliases.map((alias: string) => (
-                  <option key={alias} value={alias}>
-                    {alias}
-                  </option>
-                ))}
-              </select>
+                All
+              </button>
+              <button
+                onClick={() => setSelectionMode("custom")}
+                className={`${styles.tabButton} ${
+                  selectionMode === "custom" ? styles.tabButtonActive : ""
+                }`}
+              >
+                Custom
+              </button>
             </div>
 
-            {scopeDraft === "single" ? (
-              <div className={styles.radioGroup}>
-                <span className={`text-body-tertiary ${styles.label}`}>Role</span>
-                <select
-                  value={roleDraft}
-                  onChange={(event) => setRoleDraft(event.target.value)}
-                  disabled={roleOptions.length === 0}
-                  className={`${styles.selectControl} ${
-                    roleOptions.length
-                      ? styles.selectControlEnabled
-                      : styles.selectControlDisabled
-                  }`}
-                >
-                  {roleOptions.length === 0 ? (
-                    <option value="">No roles selected</option>
-                  ) : null}
-                  {roleOptions.map((roleId: string) => (
-                    <option key={roleId} value={roleId}>
-                      {roleId}
-                    </option>
-                  ))}
-                </select>
+            {selectionMode === "all" ? (
+              <p className={`text-body-secondary ${styles.statusText}`}>
+                All available server-role targets will run. Regenerate recreates all of them.
+              </p>
+            ) : (
+              <div className={styles.matrixBlock}>
+                <div className={styles.matrixToolbar}>
+                  <button
+                    onClick={selectAllCustomCells}
+                    className={styles.matrixActionButton}
+                  >
+                    Select all
+                  </button>
+                  <button
+                    onClick={deselectAllCustomCells}
+                    className={styles.matrixActionButton}
+                  >
+                    Deselect all
+                  </button>
+                  <span className={`text-body-secondary ${styles.helpSmall}`}>
+                    {selectedCellCount} selected
+                  </span>
+                </div>
+                {matrixAliases.length === 0 || matrixRoles.length === 0 ? (
+                  <p className={`text-body-secondary ${styles.statusText}`}>
+                    No selected roles available.
+                  </p>
+                ) : (
+                  <div className={styles.matrixContainer}>
+                    <table className={styles.matrixTable}>
+                      <thead>
+                        <tr>
+                          <th>Role</th>
+                          {matrixAliases.map((alias) => (
+                            <th key={alias}>{alias}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {matrixRoles.map((roleId) => (
+                          <tr key={roleId}>
+                            <th>{roleId}</th>
+                            {matrixAliases.map((alias) => {
+                              const available = (serverRolesByAlias?.[alias] ?? []).includes(
+                                roleId
+                              );
+                              const cellId = matrixKey(alias, roleId);
+                              return (
+                                <td key={cellId}>
+                                  {available ? (
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(matrixSelection[cellId])}
+                                      onChange={() => toggleMatrixCell(alias, roleId)}
+                                      disabled={credentialsBusy}
+                                      className={styles.matrixCheckbox}
+                                    />
+                                  ) : (
+                                    <span className={styles.matrixUnavailable}>-</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-            ) : null}
+            )}
 
             {submitIntent !== "regenerate" ? (
               <label className={`text-body-secondary ${styles.checkboxLabel}`}>

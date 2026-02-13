@@ -99,6 +99,7 @@ export default function WorkspacePanel({
     force: boolean;
     setValues: string[];
     alias?: string;
+    targets?: { alias: string; targetRoles: string[] }[];
   } | null>(null);
   const allowEmptyPlain = false;
   const [forceOverwrite, setForceOverwrite] = useState(false);
