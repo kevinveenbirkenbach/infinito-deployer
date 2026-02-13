@@ -10,6 +10,7 @@ import { VIEW_CONFIG, VIEW_MODE_ICONS } from "./role-dashboard/constants";
 import { sortStatuses } from "./role-dashboard/helpers";
 import RoleGridView from "./role-dashboard/RoleGridView";
 import RoleListView from "./role-dashboard/RoleListView";
+import RoleLogoView from "./role-dashboard/RoleLogoView";
 import RoleVideoModal from "./role-dashboard/RoleVideoModal";
 import { VIEW_MODES } from "./role-dashboard/types";
 import styles from "./RoleDashboard.module.css";
@@ -23,19 +24,31 @@ type RoleAppConfigPayload = {
   imported_paths?: number;
 };
 
+const ROW_FILTER_OPTIONS: number[] = [1, 2, 3, 5, 10, 20, 100, 500, 1000];
+
 type RoleDashboardProps = {
   roles: Role[];
   loading: boolean;
   error: string | null;
   selected: Set<string>;
   onToggleSelected: (id: string) => void;
-  onLoadRoleAppConfig?: (roleId: string) => Promise<RoleAppConfigPayload>;
+  onLoadRoleAppConfig?: (
+    roleId: string,
+    alias?: string
+  ) => Promise<RoleAppConfigPayload>;
   onSaveRoleAppConfig?: (
     roleId: string,
-    content: string
+    content: string,
+    alias?: string
   ) => Promise<RoleAppConfigPayload>;
-  onImportRoleAppDefaults?: (roleId: string) => Promise<RoleAppConfigPayload>;
+  onImportRoleAppDefaults?: (
+    roleId: string,
+    alias?: string
+  ) => Promise<RoleAppConfigPayload>;
   activeAlias?: string;
+  serverAliases?: string[];
+  selectedByAlias?: Record<string, string[]>;
+  onToggleSelectedForAlias?: (alias: string, roleId: string) => void;
   serverSwitcher?: ReactNode;
   compact?: boolean;
 };
@@ -50,6 +63,9 @@ export default function RoleDashboard({
   onSaveRoleAppConfig,
   onImportRoleAppDefaults,
   activeAlias,
+  serverAliases,
+  selectedByAlias,
+  onToggleSelectedForAlias,
   serverSwitcher,
   compact = false,
 }: RoleDashboardProps) {
@@ -128,6 +144,40 @@ export default function RoleDashboard({
     return sortStatuses(Array.from(set));
   }, [roles]);
 
+  const matrixAliases = useMemo(() => {
+    const raw = Array.isArray(serverAliases) ? serverAliases : [];
+    const deduped = Array.from(
+      new Set(
+        raw
+          .map((alias) => String(alias || "").trim())
+          .filter(Boolean)
+      )
+    );
+    if (deduped.length > 0) return deduped;
+    const fallback = String(activeAlias || "").trim();
+    return fallback ? [fallback] : [];
+  }, [serverAliases, activeAlias]);
+
+  const selectedLookup = useMemo(() => {
+    const out: Record<string, Set<string>> = {};
+    if (selectedByAlias) {
+      Object.entries(selectedByAlias).forEach(([alias, roleIds]) => {
+        const key = String(alias || "").trim();
+        if (!key) return;
+        out[key] = new Set(
+          (Array.isArray(roleIds) ? roleIds : [])
+            .map((roleId) => String(roleId || "").trim())
+            .filter(Boolean)
+        );
+      });
+    }
+    const active = String(activeAlias || "").trim();
+    if (active && !out[active]) {
+      out[active] = new Set(selected);
+    }
+    return out;
+  }, [selectedByAlias, activeAlias, selected]);
+
   const baseFilteredRoles = useMemo(
     () =>
       filterRoles(roles, {
@@ -140,26 +190,47 @@ export default function RoleDashboard({
 
   const filteredRoles = useMemo(() => {
     if (!showSelectedOnly) return baseFilteredRoles;
+    if (viewMode === "matrix") {
+      return baseFilteredRoles.filter((role) =>
+        matrixAliases.some((alias) => selectedLookup[alias]?.has(role.id))
+      );
+    }
     return baseFilteredRoles.filter((role) => selected.has(role.id));
-  }, [baseFilteredRoles, selected, showSelectedOnly]);
+  }, [baseFilteredRoles, selected, showSelectedOnly, viewMode, matrixAliases, selectedLookup]);
 
   const viewConfig = VIEW_CONFIG[viewMode];
   const gridGap = 16;
   const widthBuffer = viewMode === "mini" ? 80 : viewConfig.horizontal ? 360 : 140;
   const minCardWidth = Math.max(viewConfig.minWidth, viewConfig.iconSize + widthBuffer);
   const computedColumns =
-    viewMode === "list"
+    viewMode === "list" || viewMode === "matrix"
       ? 1
       : Math.max(
           1,
           Math.floor((gridSize.width + gridGap) / (minCardWidth + gridGap))
         );
+  const contentHeightBuffer =
+    viewMode === "mini" ? 24 : viewMode === "matrix" ? 12 : 8;
   const computedRows = Math.max(
     1,
-    Math.floor((gridSize.height + gridGap) / (viewConfig.minHeight + gridGap))
+    Math.floor(
+      (Math.max(0, gridSize.height - contentHeightBuffer) + gridGap) /
+        (viewConfig.minHeight + gridGap)
+    )
   );
   const rows = Math.max(1, rowsOverride ?? computedRows);
   const pageSize = Math.max(1, rows * computedColumns);
+  const rowOptions = useMemo(() => {
+    const maxRows = Math.max(
+      1,
+      Math.ceil(filteredRoles.length / Math.max(1, computedColumns))
+    );
+    const next = ROW_FILTER_OPTIONS.filter((value) => value <= maxRows);
+    if (rowsOverride && !next.includes(rowsOverride)) {
+      next.push(rowsOverride);
+    }
+    return next.sort((a, b) => a - b);
+  }, [filteredRoles.length, computedColumns, rowsOverride]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRoles.length / pageSize));
   const currentPage = Math.min(page, pageCount);
@@ -168,8 +239,28 @@ export default function RoleDashboard({
     return filteredRoles.slice(start, start + pageSize);
   }, [filteredRoles, currentPage, pageSize]);
 
-  const selectedCount = selected.size;
-  const filteredSelectedCount = filteredRoles.filter((role) => selected.has(role.id)).length;
+  const selectedCount = useMemo(() => {
+    if (viewMode !== "matrix") return selected.size;
+    return matrixAliases.reduce(
+      (sum, alias) => sum + (selectedLookup[alias]?.size ?? 0),
+      0
+    );
+  }, [viewMode, selected, matrixAliases, selectedLookup]);
+
+  const filteredSelectedCount = useMemo(() => {
+    if (viewMode !== "matrix") {
+      return filteredRoles.filter((role) => selected.has(role.id)).length;
+    }
+    const allowedRoleIds = new Set(filteredRoles.map((role) => role.id));
+    let count = 0;
+    matrixAliases.forEach((alias) => {
+      selectedLookup[alias]?.forEach((roleId) => {
+        if (allowedRoleIds.has(roleId)) count += 1;
+      });
+    });
+    return count;
+  }, [viewMode, filteredRoles, selected, matrixAliases, selectedLookup]);
+
   const hiddenSelected = Math.max(0, selectedCount - filteredSelectedCount);
 
   const toggleStatus = (status: string) => {
@@ -182,6 +273,20 @@ export default function RoleDashboard({
       }
       return next;
     });
+  };
+
+  const canToggleAliasRole = (alias: string) =>
+    Boolean(onToggleSelectedForAlias) || String(activeAlias || "").trim() === alias;
+
+  const toggleSelectedByAlias = (alias: string, roleId: string) => {
+    if (!alias || !roleId) return;
+    if (onToggleSelectedForAlias) {
+      onToggleSelectedForAlias(alias, roleId);
+      return;
+    }
+    if (String(activeAlias || "").trim() === alias) {
+      onToggleSelected(roleId);
+    }
   };
 
   useEffect(() => {
@@ -270,22 +375,24 @@ export default function RoleDashboard({
     return () => window.removeEventListener("keydown", onEscape);
   }, [developerConfirmOpen, editingRole]);
 
-  const startEditRoleConfig = async (role: Role) => {
+  const startEditRoleConfig = async (role: Role, aliasOverride?: string) => {
     if (!onLoadRoleAppConfig) return;
+    const requestedAlias = String(aliasOverride || "").trim();
     setEditingRole(role);
     setEditorBusy(true);
     setEditorError(null);
     setEditorStatus(null);
+    setEditorAlias(requestedAlias);
     try {
-      const data = await onLoadRoleAppConfig(role.id);
+      const data = await onLoadRoleAppConfig(role.id, requestedAlias || undefined);
       setEditorContent(String(data?.content ?? ""));
       setEditorPath(String(data?.host_vars_path ?? ""));
-      setEditorAlias(String(data?.alias ?? ""));
+      setEditorAlias(String(data?.alias ?? requestedAlias));
     } catch (err: any) {
       setEditorError(err?.message ?? "failed to load app config");
       setEditorContent("");
       setEditorPath("");
-      setEditorAlias("");
+      setEditorAlias(requestedAlias);
     } finally {
       setEditorBusy(false);
     }
@@ -297,7 +404,11 @@ export default function RoleDashboard({
     setEditorError(null);
     setEditorStatus(null);
     try {
-      const data = await onSaveRoleAppConfig(editingRole.id, editorContent);
+      const data = await onSaveRoleAppConfig(
+        editingRole.id,
+        editorContent,
+        editorAlias || undefined
+      );
       setEditorContent(String(data?.content ?? editorContent));
       setEditorPath(String(data?.host_vars_path ?? editorPath));
       setEditorAlias(String(data?.alias ?? editorAlias));
@@ -315,7 +426,10 @@ export default function RoleDashboard({
     setEditorError(null);
     setEditorStatus(null);
     try {
-      const data = await onImportRoleAppDefaults(editingRole.id);
+      const data = await onImportRoleAppDefaults(
+        editingRole.id,
+        editorAlias || undefined
+      );
       setEditorContent(String(data?.content ?? editorContent));
       setEditorPath(String(data?.host_vars_path ?? editorPath));
       setEditorAlias(String(data?.alias ?? editorAlias));
@@ -370,13 +484,11 @@ export default function RoleDashboard({
                 className={`form-select ${styles.rowSelect}`}
               >
                 <option value="auto">Auto ({computedRows})</option>
-                {Array.from(new Set([1, 2, 3, 4, 5, 6, computedRows]))
-                  .sort((a, b) => a - b)
-                  .map((value) => (
-                    <option key={value} value={String(value)}>
-                      {value} rows
-                    </option>
-                  ))}
+                {rowOptions.map((value) => (
+                  <option key={value} value={String(value)}>
+                    {value} rows
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -469,7 +581,11 @@ export default function RoleDashboard({
                     {hiddenSelected > 0 ? ` (${hiddenSelected} hidden)` : ""}
                   </span>
                 ) : null}
-                {activeAlias ? ` · Active: ${activeAlias}` : ""}
+                {viewMode === "matrix"
+                  ? ` · Matrix: ${matrixAliases.length} servers`
+                  : activeAlias
+                    ? ` · Active: ${activeAlias}`
+                    : ""}
               </span>
             )}
           </div>
@@ -515,7 +631,7 @@ export default function RoleDashboard({
                 <span>Filters</span>
                 <i className="fa-solid fa-chevron-down" aria-hidden="true" />
               </button>
-              {serverSwitcher ? (
+              {serverSwitcher && viewMode !== "matrix" ? (
                 <div className={styles.serverSwitcherSlot}>{serverSwitcher}</div>
               ) : null}
               <div className={styles.viewModeButtons}>
@@ -573,8 +689,92 @@ export default function RoleDashboard({
             </div>
           </div>
 
-          <div className={styles.content}>
-            {viewMode === "list" ? (
+          <div
+            className={`${styles.content} ${
+              viewMode === "matrix" ? styles.contentMatrix : ""
+            }`}
+          >
+            {viewMode === "matrix" ? (
+              matrixAliases.length === 0 ? (
+                <div className={`text-body-secondary ${styles.matrixEmpty}`}>
+                  Add at least one server to use matrix selection.
+                </div>
+              ) : (
+                <div className={styles.matrixContainer}>
+                  <table className={styles.matrixTable}>
+                    <thead>
+                      <tr>
+                        <th>App</th>
+                        {matrixAliases.map((alias) => (
+                          <th key={alias}>{alias}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedRoles.map((role) => (
+                        <tr key={role.id}>
+                          <th className={styles.matrixRoleCell}>
+                            <div className={styles.matrixRoleInner}>
+                              <RoleLogoView role={role} size={28} />
+                              <div className={styles.matrixRoleText}>
+                                <span className={styles.matrixRoleName}>
+                                  {role.display_name}
+                                </span>
+                              </div>
+                            </div>
+                          </th>
+                          {matrixAliases.map((alias) => {
+                            const selectedState = Boolean(
+                              selectedLookup[alias]?.has(role.id)
+                            );
+                            const selectable = canToggleAliasRole(alias);
+                            return (
+                              <td key={`${alias}:${role.id}`}>
+                                <div className={styles.matrixCellActions}>
+                                  <label
+                                    className={`${styles.matrixSelectWrap} ${
+                                      selectable
+                                        ? ""
+                                        : styles.matrixSelectWrapDisabled
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedState}
+                                      disabled={!selectable}
+                                      onChange={() =>
+                                        toggleSelectedByAlias(alias, role.id)
+                                      }
+                                      className={styles.matrixCheckbox}
+                                    />
+                                    <span>Select</span>
+                                  </label>
+                                  {accessMode === "developer" && onLoadRoleAppConfig ? (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void startEditRoleConfig(role, alias)
+                                      }
+                                      className={styles.matrixEditButton}
+                                    >
+                                      <i
+                                        className="fa-solid fa-pen-to-square"
+                                        aria-hidden="true"
+                                      />
+                                      <span>Edit</span>
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ) : viewMode === "list" ? (
               <RoleListView
                 roles={paginatedRoles}
                 selected={selected}

@@ -63,6 +63,7 @@ export const VIEW_MODE_ICONS: Record<ViewMode, string> = {
   detail: "fa-solid fa-table-cells-large",
   list: "fa-solid fa-list",
   mini: "fa-solid fa-border-all",
+  matrix: "fa-solid fa-table",
 };
 
 export const VIEW_CONFIG: Record<ViewMode, ViewConfig> = {
@@ -92,5 +93,14 @@ export const VIEW_CONFIG: Record<ViewMode, ViewConfig> = {
     showTargets: false,
     showLinks: false,
     horizontal: false,
+  },
+  matrix: {
+    minWidth: 960,
+    minHeight: 48,
+    iconSize: 32,
+    showDescription: false,
+    showTargets: false,
+    showLinks: false,
+    horizontal: true,
   },
 };

@@ -20,7 +20,7 @@ export type Role = {
   license_url?: string | null;
 };
 
-export const VIEW_MODES = ["detail", "list", "mini"] as const;
+export const VIEW_MODES = ["detail", "list", "mini", "matrix"] as const;
 export type ViewMode = (typeof VIEW_MODES)[number];
 
 export type ViewConfig = {

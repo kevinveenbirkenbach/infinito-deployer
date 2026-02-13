@@ -42,6 +42,8 @@ const SERVER_VIEW_ICONS: Record<ServerViewMode, string> = {
   list: "fa-solid fa-list",
 };
 
+const ROW_FILTER_OPTIONS: number[] = [1, 2, 3, 5, 10, 20, 100, 500, 1000];
+
 export default function DeploymentCredentialsForm({
   baseUrl,
   workspaceId,
@@ -217,6 +219,17 @@ export default function DeploymentCredentialsForm({
   );
   const rows = Math.max(1, rowsOverride ?? computedRows);
   const pageSize = Math.max(1, computedColumns * rows);
+  const rowOptions = useMemo(() => {
+    const maxRows = Math.max(
+      1,
+      Math.ceil(filteredServers.length / Math.max(1, computedColumns))
+    );
+    const next = ROW_FILTER_OPTIONS.filter((value) => value <= maxRows);
+    if (rowsOverride && !next.includes(rowsOverride)) {
+      next.push(rowsOverride);
+    }
+    return next.sort((a, b) => a - b);
+  }, [filteredServers.length, computedColumns, rowsOverride]);
   const pageCount = Math.max(1, Math.ceil(filteredServers.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const paginatedServers = useMemo(() => {
@@ -309,13 +322,11 @@ export default function DeploymentCredentialsForm({
                 className={`form-select ${styles.rowSelect}`}
               >
                 <option value="auto">Auto ({computedRows})</option>
-                {Array.from(new Set([1, 2, 3, 4, 5, 6, computedRows]))
-                  .sort((a, b) => a - b)
-                  .map((value) => (
-                    <option key={value} value={String(value)}>
-                      {value} rows
-                    </option>
-                  ))}
+                {rowOptions.map((value) => (
+                  <option key={value} value={String(value)}>
+                    {value} rows
+                  </option>
+                ))}
               </select>
             </div>
           </div>,

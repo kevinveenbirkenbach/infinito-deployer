@@ -481,23 +481,33 @@ export default function DeploymentWorkspace({
     [activeAlias, inventoryReady, workspaceId]
   );
 
-  const toggleSelected = (id: string) => {
-    if (!activeAlias) return;
+  const toggleSelectedForAlias = useCallback((alias: string, id: string) => {
+    const targetAlias = String(alias || "").trim();
+    const roleId = String(id || "").trim();
+    if (!targetAlias || !roleId) return;
     setSelectedByAlias((prev) => {
       const next: Record<string, Set<string>> = { ...prev };
-      const set = next[activeAlias]
-        ? new Set<string>(next[activeAlias])
+      const set = next[targetAlias]
+        ? new Set<string>(next[targetAlias])
         : new Set<string>();
-      if (set.has(id)) {
-        set.delete(id);
+      if (set.has(roleId)) {
+        set.delete(roleId);
       } else {
-        set.add(id);
+        set.add(roleId);
       }
-      next[activeAlias] = set;
+      next[targetAlias] = set;
       return next;
     });
     setSelectionTouched(true);
-  };
+  }, []);
+
+  const toggleSelected = useCallback(
+    (id: string) => {
+      if (!activeAlias) return;
+      toggleSelectedForAlias(activeAlias, id);
+    },
+    [activeAlias, toggleSelectedForAlias]
+  );
 
   const toggleDeployAlias = (alias: string) => {
     if (!alias) return;
@@ -730,12 +740,12 @@ export default function DeploymentWorkspace({
   };
 
   const roleAppConfigUrl = useCallback(
-    (roleId: string, suffix = "") => {
+    (roleId: string, suffix = "", aliasOverride?: string) => {
       if (!workspaceId) {
         throw new Error("Workspace is not ready yet.");
       }
       const rid = encodeURIComponent(String(roleId || "").trim());
-      const alias = String(activeAlias || "").trim();
+      const alias = String(aliasOverride || activeAlias || "").trim();
       const query = alias ? `?alias=${encodeURIComponent(alias)}` : "";
       return `${baseUrl}/api/workspaces/${workspaceId}/roles/${rid}/app-config${suffix}${query}`;
     },
@@ -759,8 +769,8 @@ export default function DeploymentWorkspace({
   };
 
   const loadRoleAppConfig = useCallback(
-    async (roleId: string): Promise<RoleAppConfigResponse> => {
-      const url = roleAppConfigUrl(roleId);
+    async (roleId: string, aliasOverride?: string): Promise<RoleAppConfigResponse> => {
+      const url = roleAppConfigUrl(roleId, "", aliasOverride);
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) {
         throw new Error(await parseApiError(res));
@@ -771,8 +781,12 @@ export default function DeploymentWorkspace({
   );
 
   const saveRoleAppConfig = useCallback(
-    async (roleId: string, content: string): Promise<RoleAppConfigResponse> => {
-      const url = roleAppConfigUrl(roleId);
+    async (
+      roleId: string,
+      content: string,
+      aliasOverride?: string
+    ): Promise<RoleAppConfigResponse> => {
+      const url = roleAppConfigUrl(roleId, "", aliasOverride);
       const res = await fetch(url, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -787,8 +801,8 @@ export default function DeploymentWorkspace({
   );
 
   const importRoleAppDefaults = useCallback(
-    async (roleId: string): Promise<RoleAppConfigResponse> => {
-      const url = roleAppConfigUrl(roleId, "/import-defaults");
+    async (roleId: string, aliasOverride?: string): Promise<RoleAppConfigResponse> => {
+      const url = roleAppConfigUrl(roleId, "/import-defaults", aliasOverride);
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -830,6 +844,9 @@ export default function DeploymentWorkspace({
           onSaveRoleAppConfig={saveRoleAppConfig}
           onImportRoleAppDefaults={importRoleAppDefaults}
           activeAlias={activeAlias}
+          serverAliases={servers.map((server) => server.alias)}
+          selectedByAlias={selectedRolesByAlias}
+          onToggleSelectedForAlias={toggleSelectedForAlias}
           serverSwitcher={serverSwitcher}
           compact
         />

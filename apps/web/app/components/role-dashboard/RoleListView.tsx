@@ -29,7 +29,7 @@ export default function RoleListView({
   return (
     <div className={styles.listRoot}>
       <div className={`${styles.listGrid} ${styles.listHeader}`}>
-        <span>Role</span>
+        <span>App</span>
         <span>Status</span>
         <span>Targets</span>
         <span>Description</span>
@@ -56,9 +56,6 @@ export default function RoleListView({
               <RoleLogoView role={role} size={iconSize} />
               <div className={styles.listRoleText}>
                 <div className={styles.listRoleName}>{role.display_name}</div>
-                <div className={`text-body-secondary ${styles.listRoleId}`}>
-                  {role.id}
-                </div>
               </div>
             </div>
             <span

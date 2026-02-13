@@ -6,7 +6,7 @@ import { buildDeploymentPayload } from "../../../apps/web/app/lib/deployment_pay
 test("builds payload for password auth with selected aliases", () => {
   const result = buildDeploymentPayload({
     activeServer: {
-      alias: "server-1",
+      alias: "server_1",
       host: " example.com ",
       port: "",
       user: "root",
@@ -14,9 +14,9 @@ test("builds payload for password auth with selected aliases", () => {
       password: "secret",
       privateKey: "",
     },
-    selectedRolesByAlias: { "server-1": ["role-a", "role-b"], "server-2": ["role-c"] },
-    selectedAliases: ["server-1"],
-    selectableAliases: ["server-1", "server-2"],
+    selectedRolesByAlias: { server_1: ["role-a", "role-b"], server_2: ["role-c"] },
+    selectedAliases: ["server_1"],
+    selectableAliases: ["server_1", "server_2"],
     workspaceId: "ws1",
     inventoryReady: true,
   });
@@ -29,13 +29,13 @@ test("builds payload for password auth with selected aliases", () => {
   assert.equal(result.payload.auth.password, "secret");
   assert.equal(result.payload.auth.private_key, undefined);
   assert.equal(result.payload.port, undefined);
-  assert.equal(result.payload.limit, "server-1");
+  assert.equal(result.payload.limit, "server_1");
 });
 
 test("uses global role filter when provided", () => {
   const result = buildDeploymentPayload({
     activeServer: {
-      alias: "server-1",
+      alias: "server_1",
       host: "example.com",
       port: "",
       user: "root",
@@ -43,9 +43,9 @@ test("uses global role filter when provided", () => {
       password: "secret",
       privateKey: "",
     },
-    selectedRolesByAlias: { "server-1": ["role-a"], "server-2": ["role-b"] },
-    selectedAliases: ["server-1", "server-2"],
-    selectableAliases: ["server-1", "server-2"],
+    selectedRolesByAlias: { server_1: ["role-a"], server_2: ["role-b"] },
+    selectedAliases: ["server_1", "server_2"],
+    selectableAliases: ["server_1", "server_2"],
     roleFilter: ["role-z", "role-a", "role-z"],
     workspaceId: "ws1",
     inventoryReady: true,
@@ -59,7 +59,7 @@ test("uses global role filter when provided", () => {
 test("requires at least one role", () => {
   const result = buildDeploymentPayload({
     activeServer: {
-      alias: "server-1",
+      alias: "server_1",
       host: "example.com",
       port: "",
       user: "root",
@@ -67,9 +67,9 @@ test("requires at least one role", () => {
       password: "secret",
       privateKey: "",
     },
-    selectedRolesByAlias: { "server-1": [] },
-    selectedAliases: ["server-1"],
-    selectableAliases: ["server-1"],
+    selectedRolesByAlias: { server_1: [] },
+    selectedAliases: ["server_1"],
+    selectableAliases: ["server_1"],
     workspaceId: "ws1",
     inventoryReady: true,
   });
@@ -81,7 +81,7 @@ test("requires at least one role", () => {
 test("requires inventory ready", () => {
   const result = buildDeploymentPayload({
     activeServer: {
-      alias: "server-1",
+      alias: "server_1",
       host: "example.com",
       port: "",
       user: "root",
@@ -89,9 +89,9 @@ test("requires inventory ready", () => {
       password: "secret",
       privateKey: "",
     },
-    selectedRolesByAlias: { "server-1": ["role-a"] },
-    selectedAliases: ["server-1"],
-    selectableAliases: ["server-1"],
+    selectedRolesByAlias: { server_1: ["role-a"] },
+    selectedAliases: ["server_1"],
+    selectableAliases: ["server_1"],
     workspaceId: "ws1",
     inventoryReady: false,
   });
@@ -103,7 +103,7 @@ test("requires inventory ready", () => {
 test("builds payload for key auth", () => {
   const result = buildDeploymentPayload({
     activeServer: {
-      alias: "server-1",
+      alias: "server_1",
       host: "127.0.0.1",
       port: "2222",
       user: "dev",
@@ -111,9 +111,9 @@ test("builds payload for key auth", () => {
       password: "",
       privateKey: "KEYDATA",
     },
-    selectedRolesByAlias: { "server-1": ["role-a"] },
-    selectedAliases: ["server-1"],
-    selectableAliases: ["server-1", "server-2"],
+    selectedRolesByAlias: { server_1: ["role-a"] },
+    selectedAliases: ["server_1"],
+    selectableAliases: ["server_1", "server_2"],
     workspaceId: "ws1",
     inventoryReady: true,
   });
@@ -123,13 +123,13 @@ test("builds payload for key auth", () => {
   assert.equal(result.payload.auth.private_key, "KEYDATA");
   assert.equal(result.payload.auth.password, undefined);
   assert.equal(result.payload.port, 2222);
-  assert.equal(result.payload.limit, "server-1");
+  assert.equal(result.payload.limit, "server_1");
 });
 
 test("includes key passphrase when provided", () => {
   const result = buildDeploymentPayload({
     activeServer: {
-      alias: "server-1",
+      alias: "server_1",
       host: "127.0.0.1",
       port: "",
       user: "dev",
@@ -138,9 +138,9 @@ test("includes key passphrase when provided", () => {
       privateKey: "KEYDATA",
       keyPassphrase: "pass123",
     },
-    selectedRolesByAlias: { "server-1": ["role-a"] },
-    selectedAliases: ["server-1"],
-    selectableAliases: ["server-1"],
+    selectedRolesByAlias: { server_1: ["role-a"] },
+    selectedAliases: ["server_1"],
+    selectableAliases: ["server_1"],
     workspaceId: "ws1",
     inventoryReady: true,
   });
