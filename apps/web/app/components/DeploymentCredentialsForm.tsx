@@ -44,6 +44,10 @@ const SERVER_VIEW_ICONS: Record<ServerViewMode, string> = {
 
 const ROW_FILTER_OPTIONS: number[] = [1, 2, 3, 5, 10, 20, 100, 500, 1000];
 
+function formatViewLabel(mode: ServerViewMode): string {
+  return mode.charAt(0).toUpperCase() + mode.slice(1);
+}
+
 export default function DeploymentCredentialsForm({
   baseUrl,
   workspaceId,
@@ -75,9 +79,12 @@ export default function DeploymentCredentialsForm({
   const controlsRef = useRef<HTMLDivElement | null>(null);
   const filtersButtonRef = useRef<HTMLButtonElement | null>(null);
   const filtersPopoverRef = useRef<HTMLDivElement | null>(null);
+  const viewButtonRef = useRef<HTMLButtonElement | null>(null);
+  const viewPopoverRef = useRef<HTMLDivElement | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filtersPos, setFiltersPos] = useState({ top: 0, left: 0 });
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
 
   const [keygenBusy, setKeygenBusy] = useState(false);
   const [keygenError, setKeygenError] = useState<string | null>(null);
@@ -99,6 +106,14 @@ export default function DeploymentCredentialsForm({
     if (!openAlias) return null;
     return servers.find((server) => server.alias === openAlias) ?? null;
   }, [openAlias, servers]);
+
+  const activeServer = useMemo(() => {
+    if (activeAlias) {
+      const found = servers.find((server) => server.alias === activeAlias);
+      if (found) return found;
+    }
+    return servers[0] ?? null;
+  }, [servers, activeAlias]);
 
   useEffect(() => {
     if (!openAlias) return;
@@ -301,6 +316,26 @@ export default function DeploymentCredentialsForm({
     };
   }, [filtersOpen]);
 
+  useEffect(() => {
+    if (!viewMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (viewPopoverRef.current?.contains(target)) return;
+      if (viewButtonRef.current?.contains(target)) return;
+      setViewMenuOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setViewMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [viewMenuOpen]);
+
   const filtersOverlay =
     filtersOpen && typeof document !== "undefined"
       ? createPortal(
@@ -342,6 +377,13 @@ export default function DeploymentCredentialsForm({
     if (openAlias === alias) {
       setOpenAlias(nextAlias);
     }
+  };
+
+  const openDetailViewForAlias = (alias: string) => {
+    if (alias && activeAlias !== alias) {
+      onActiveAliasChange(alias);
+    }
+    setViewMode("detail");
   };
 
   const onAuthChange = (alias: string, next: string) => {
@@ -529,6 +571,9 @@ export default function DeploymentCredentialsForm({
     }
   };
 
+  const detailServers = activeServer ? [activeServer] : [];
+  const visibleServers = viewMode === "detail" ? detailServers : paginatedServers;
+
   return (
     <Wrapper className={wrapperClassName}>
       {!compact ? (
@@ -590,22 +635,44 @@ export default function DeploymentCredentialsForm({
                 <i className="fa-solid fa-plus" aria-hidden="true" />
                 <span>Add</span>
               </button>
-              <div className={styles.modeButtons}>
-                {SERVER_VIEW_MODES.map((mode) => {
-                  const active = viewMode === mode;
-                  return (
-                    <button
-                      key={mode}
-                      onClick={() => setViewMode(mode)}
-                      className={`${styles.modeButton} ${
-                        active ? styles.modeButtonActive : ""
-                      }`}
-                    >
-                      <i className={SERVER_VIEW_ICONS[mode]} aria-hidden="true" />
-                      <span>{mode}</span>
-                    </button>
-                  );
-                })}
+              <div className={styles.viewModeControl}>
+                <button
+                  ref={viewButtonRef}
+                  onClick={() => setViewMenuOpen((prev) => !prev)}
+                  className={`${styles.modeButton} ${styles.modeButtonActive}`}
+                  aria-haspopup="menu"
+                  aria-expanded={viewMenuOpen}
+                >
+                  <i className={SERVER_VIEW_ICONS[viewMode]} aria-hidden="true" />
+                  <span>{formatViewLabel(viewMode)}</span>
+                  <i className="fa-solid fa-chevron-down" aria-hidden="true" />
+                </button>
+                {viewMenuOpen ? (
+                  <div
+                    ref={viewPopoverRef}
+                    className={styles.viewModeMenu}
+                    role="menu"
+                  >
+                    {SERVER_VIEW_MODES.map((mode) => {
+                      const active = viewMode === mode;
+                      return (
+                        <button
+                          key={mode}
+                          onClick={() => {
+                            setViewMode(mode);
+                            setViewMenuOpen(false);
+                          }}
+                          className={`${styles.viewModeMenuItem} ${
+                            active ? styles.viewModeMenuItemActive : ""
+                          }`}
+                        >
+                          <i className={SERVER_VIEW_ICONS[mode]} aria-hidden="true" />
+                          <span>{formatViewLabel(mode)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -613,7 +680,7 @@ export default function DeploymentCredentialsForm({
           <div className={styles.contentWrap}>
             <ServerCollectionView
               viewMode={viewMode}
-              paginatedServers={paginatedServers}
+              paginatedServers={visibleServers}
               listColumns={listColumns}
               computedColumns={computedColumns}
               aliasCounts={aliasCounts}
@@ -622,6 +689,7 @@ export default function DeploymentCredentialsForm({
               workspaceId={workspaceId}
               onAliasChange={handleAliasChange}
               onPatchServer={updateServer}
+              onOpenDetail={openDetailViewForAlias}
               onOpenCredentials={setOpenAlias}
               onTestConnection={testConnection}
               onRequestRemove={requestRemoveServer}
@@ -629,29 +697,31 @@ export default function DeploymentCredentialsForm({
           </div>
         </div>
 
-        <div className={`text-body-secondary ${styles.pagination}`}>
-          <button
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            disabled={currentPage <= 1}
-            className={`${styles.pageButton} ${
-              currentPage <= 1 ? styles.pageButtonDisabled : styles.pageButtonEnabled
-            }`}
-          >
-            Prev
-          </button>
-          <span>
-            Page {currentPage} / {pageCount}
-          </span>
-          <button
-            onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))}
-            disabled={currentPage >= pageCount}
-            className={`${styles.pageButton} ${
-              currentPage >= pageCount ? styles.pageButtonDisabled : styles.pageButtonEnabled
-            }`}
-          >
-            Next
-          </button>
-        </div>
+        {viewMode !== "detail" ? (
+          <div className={`text-body-secondary ${styles.pagination}`}>
+            <button
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage <= 1}
+              className={`${styles.pageButton} ${
+                currentPage <= 1 ? styles.pageButtonDisabled : styles.pageButtonEnabled
+              }`}
+            >
+              Prev
+            </button>
+            <span>
+              Page {currentPage} / {pageCount}
+            </span>
+            <button
+              onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))}
+              disabled={currentPage >= pageCount}
+              className={`${styles.pageButton} ${
+                currentPage >= pageCount ? styles.pageButtonDisabled : styles.pageButtonEnabled
+              }`}
+            >
+              Next
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <ServerCredentialsModal

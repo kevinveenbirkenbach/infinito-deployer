@@ -28,6 +28,7 @@ type ServerCollectionViewProps = {
   workspaceId: string | null;
   onAliasChange: (alias: string, nextAlias: string) => void;
   onPatchServer: (alias: string, patch: Partial<ServerState>) => void;
+  onOpenDetail: (alias: string) => void;
   onOpenCredentials: (alias: string) => void;
   onTestConnection: (server: ServerState) => void;
   onRequestRemove: (alias: string) => void;
@@ -56,6 +57,7 @@ export default function ServerCollectionView({
   workspaceId,
   onAliasChange,
   onPatchServer,
+  onOpenDetail,
   onOpenCredentials,
   onTestConnection,
   onRequestRemove,
@@ -451,6 +453,12 @@ export default function ServerCollectionView({
               </div>
               <div className={styles.actionRow}>
                 <button
+                  onClick={() => onOpenDetail(server.alias)}
+                  className={styles.actionButtonSoft}
+                >
+                  Detail
+                </button>
+                <button
                   onClick={() => onOpenCredentials(server.alias)}
                   className={styles.actionButtonSolid}
                 >
@@ -710,6 +718,14 @@ export default function ServerCollectionView({
               </div>
 
               <div className={styles.cardFooter}>
+                {viewMode !== "detail" ? (
+                  <button
+                    onClick={() => onOpenDetail(server.alias)}
+                    className={styles.actionButtonSecondary}
+                  >
+                    Detail
+                  </button>
+                ) : null}
                 <button
                   onClick={() => onOpenCredentials(server.alias)}
                   className={styles.actionButtonPrimary}

@@ -28,6 +28,10 @@ type RoleAppConfigPayload = {
 
 const ROW_FILTER_OPTIONS: number[] = [1, 2, 3, 5, 10, 20, 100, 500, 1000];
 
+function formatViewLabel(mode: ViewMode): string {
+  return mode.charAt(0).toUpperCase() + mode.slice(1);
+}
+
 type RoleDashboardProps = {
   roles: Role[];
   loading: boolean;
@@ -88,11 +92,14 @@ export default function RoleDashboard({
   const controlsRef = useRef<HTMLDivElement | null>(null);
   const filtersButtonRef = useRef<HTMLButtonElement | null>(null);
   const filtersPopoverRef = useRef<HTMLDivElement | null>(null);
+  const viewButtonRef = useRef<HTMLButtonElement | null>(null);
+  const viewPopoverRef = useRef<HTMLDivElement | null>(null);
   const modeRootRef = useRef<HTMLDivElement | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filtersPos, setFiltersPos] = useState({ top: 0, left: 0 });
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [accessMode, setAccessMode] = useState<"customer" | "developer">("customer");
   const [developerConfirmOpen, setDeveloperConfirmOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
@@ -359,6 +366,28 @@ export default function RoleDashboard({
       window.removeEventListener("scroll", closeOnViewportChange, true);
     };
   }, [filtersOpen]);
+
+  useEffect(() => {
+    if (!viewMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (viewPopoverRef.current?.contains(target)) return;
+      if (viewButtonRef.current?.contains(target)) return;
+      setViewMenuOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setViewMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [viewMenuOpen]);
 
   useEffect(() => {
     if (!modeMenuOpen) return;
@@ -655,24 +684,44 @@ export default function RoleDashboard({
               {serverSwitcher && viewMode !== "matrix" ? (
                 <div className={styles.serverSwitcherSlot}>{serverSwitcher}</div>
               ) : null}
-              <div className={styles.viewModeButtons}>
-                {VIEW_MODES.map((mode) => {
-                  const active = viewMode === mode;
-                  return (
-                    <button
-                      key={mode}
-                      onClick={() => setViewMode(mode)}
-                      title={`${mode} view`}
-                      aria-label={`${mode} view`}
-                      className={`${styles.viewModeButton} ${
-                        active ? styles.viewModeButtonActive : ""
-                      }`}
-                    >
-                      <i className={VIEW_MODE_ICONS[mode]} aria-hidden="true" />
-                      <span>{mode}</span>
-                    </button>
-                  );
-                })}
+              <div className={styles.viewModeControl}>
+                <button
+                  ref={viewButtonRef}
+                  onClick={() => setViewMenuOpen((prev) => !prev)}
+                  className={`${styles.viewModeButton} ${styles.viewModeButtonActive}`}
+                  aria-haspopup="menu"
+                  aria-expanded={viewMenuOpen}
+                >
+                  <i className={VIEW_MODE_ICONS[viewMode]} aria-hidden="true" />
+                  <span>{formatViewLabel(viewMode)}</span>
+                  <i className="fa-solid fa-chevron-down" aria-hidden="true" />
+                </button>
+                {viewMenuOpen ? (
+                  <div
+                    ref={viewPopoverRef}
+                    className={styles.viewModeMenu}
+                    role="menu"
+                  >
+                    {VIEW_MODES.map((mode) => {
+                      const active = viewMode === mode;
+                      return (
+                        <button
+                          key={mode}
+                          onClick={() => {
+                            setViewMode(mode);
+                            setViewMenuOpen(false);
+                          }}
+                          className={`${styles.viewModeMenuItem} ${
+                            active ? styles.viewModeMenuItemActive : ""
+                          }`}
+                        >
+                          <i className={VIEW_MODE_ICONS[mode]} aria-hidden="true" />
+                          <span>{formatViewLabel(mode)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </div>
               <div ref={modeRootRef} className={styles.modeControl}>
                 <button
