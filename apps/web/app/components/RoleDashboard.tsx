@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
+import CodeMirror from "@uiw/react-codemirror";
+import { yaml as yamlLang } from "@codemirror/lang-yaml";
 import { filterRoles } from "../lib/role_filter";
 import { VIEW_CONFIG, VIEW_MODE_ICONS } from "./role-dashboard/constants";
 import { sortStatuses } from "./role-dashboard/helpers";
@@ -13,12 +15,26 @@ import { VIEW_MODES } from "./role-dashboard/types";
 import styles from "./RoleDashboard.module.css";
 import type { Role, ViewMode } from "./role-dashboard/types";
 
+type RoleAppConfigPayload = {
+  role_id: string;
+  alias: string;
+  host_vars_path: string;
+  content: string;
+  imported_paths?: number;
+};
+
 type RoleDashboardProps = {
   roles: Role[];
   loading: boolean;
   error: string | null;
   selected: Set<string>;
   onToggleSelected: (id: string) => void;
+  onLoadRoleAppConfig?: (roleId: string) => Promise<RoleAppConfigPayload>;
+  onSaveRoleAppConfig?: (
+    roleId: string,
+    content: string
+  ) => Promise<RoleAppConfigPayload>;
+  onImportRoleAppDefaults?: (roleId: string) => Promise<RoleAppConfigPayload>;
   activeAlias?: string;
   serverSwitcher?: ReactNode;
   compact?: boolean;
@@ -30,6 +46,9 @@ export default function RoleDashboard({
   error,
   selected,
   onToggleSelected,
+  onLoadRoleAppConfig,
+  onSaveRoleAppConfig,
+  onImportRoleAppDefaults,
   activeAlias,
   serverSwitcher,
   compact = false,
@@ -49,9 +68,21 @@ export default function RoleDashboard({
   const controlsRef = useRef<HTMLDivElement | null>(null);
   const filtersButtonRef = useRef<HTMLButtonElement | null>(null);
   const filtersPopoverRef = useRef<HTMLDivElement | null>(null);
+  const modeRootRef = useRef<HTMLDivElement | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filtersPos, setFiltersPos] = useState({ top: 0, left: 0 });
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const [accessMode, setAccessMode] = useState<"customer" | "developer">("customer");
+  const [developerConfirmOpen, setDeveloperConfirmOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [editorContent, setEditorContent] = useState("");
+  const [editorPath, setEditorPath] = useState("");
+  const [editorAlias, setEditorAlias] = useState("");
+  const [editorBusy, setEditorBusy] = useState(false);
+  const [editorError, setEditorError] = useState<string | null>(null);
+  const [editorStatus, setEditorStatus] = useState<string | null>(null);
+  const editorExtensions = useMemo(() => [yamlLang()], []);
   const [activeVideo, setActiveVideo] = useState<{
     url: string;
     title: string;
@@ -202,6 +233,118 @@ export default function RoleDashboard({
       window.removeEventListener("scroll", closeOnViewportChange, true);
     };
   }, [filtersOpen]);
+
+  useEffect(() => {
+    if (!modeMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (modeRootRef.current?.contains(target)) return;
+      setModeMenuOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setModeMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [modeMenuOpen]);
+
+  useEffect(() => {
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (developerConfirmOpen) {
+        setDeveloperConfirmOpen(false);
+        return;
+      }
+      if (editingRole) {
+        setEditingRole(null);
+      }
+    };
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
+  }, [developerConfirmOpen, editingRole]);
+
+  const startEditRoleConfig = async (role: Role) => {
+    if (!onLoadRoleAppConfig) return;
+    setEditingRole(role);
+    setEditorBusy(true);
+    setEditorError(null);
+    setEditorStatus(null);
+    try {
+      const data = await onLoadRoleAppConfig(role.id);
+      setEditorContent(String(data?.content ?? ""));
+      setEditorPath(String(data?.host_vars_path ?? ""));
+      setEditorAlias(String(data?.alias ?? ""));
+    } catch (err: any) {
+      setEditorError(err?.message ?? "failed to load app config");
+      setEditorContent("");
+      setEditorPath("");
+      setEditorAlias("");
+    } finally {
+      setEditorBusy(false);
+    }
+  };
+
+  const saveRoleConfig = async () => {
+    if (!editingRole || !onSaveRoleAppConfig) return;
+    setEditorBusy(true);
+    setEditorError(null);
+    setEditorStatus(null);
+    try {
+      const data = await onSaveRoleAppConfig(editingRole.id, editorContent);
+      setEditorContent(String(data?.content ?? editorContent));
+      setEditorPath(String(data?.host_vars_path ?? editorPath));
+      setEditorAlias(String(data?.alias ?? editorAlias));
+      setEditorStatus("Saved.");
+    } catch (err: any) {
+      setEditorError(err?.message ?? "failed to save app config");
+    } finally {
+      setEditorBusy(false);
+    }
+  };
+
+  const importRoleDefaults = async () => {
+    if (!editingRole || !onImportRoleAppDefaults) return;
+    setEditorBusy(true);
+    setEditorError(null);
+    setEditorStatus(null);
+    try {
+      const data = await onImportRoleAppDefaults(editingRole.id);
+      setEditorContent(String(data?.content ?? editorContent));
+      setEditorPath(String(data?.host_vars_path ?? editorPath));
+      setEditorAlias(String(data?.alias ?? editorAlias));
+      const imported = Number(data?.imported_paths ?? 0);
+      setEditorStatus(
+        imported > 0
+          ? `Imported ${imported} missing paths from config/main.yml.`
+          : "No missing defaults to import."
+      );
+    } catch (err: any) {
+      setEditorError(err?.message ?? "failed to import defaults");
+    } finally {
+      setEditorBusy(false);
+    }
+  };
+
+  const switchMode = (mode: "customer" | "developer") => {
+    if (mode === accessMode) {
+      setModeMenuOpen(false);
+      return;
+    }
+    setModeMenuOpen(false);
+    if (mode === "developer") {
+      setDeveloperConfirmOpen(true);
+      return;
+    }
+    setAccessMode("customer");
+    setEditingRole(null);
+  };
 
   const filtersOverlay =
     filtersOpen && typeof document !== "undefined"
@@ -394,6 +537,39 @@ export default function RoleDashboard({
                   );
                 })}
               </div>
+              <div ref={modeRootRef} className={styles.modeControl}>
+                <button
+                  onClick={() => setModeMenuOpen((prev) => !prev)}
+                  className={`${styles.modeButton} ${
+                    accessMode === "customer"
+                      ? styles.modeButtonCustomer
+                      : styles.modeButtonDeveloper
+                  }`}
+                  aria-haspopup="menu"
+                  aria-expanded={modeMenuOpen}
+                >
+                  <i className="fa-solid fa-sliders" aria-hidden="true" />
+                  <span>Mode:</span>
+                  <span>{accessMode === "customer" ? "Customer" : "Developer"}</span>
+                  <i className="fa-solid fa-chevron-down" aria-hidden="true" />
+                </button>
+                {modeMenuOpen ? (
+                  <div className={styles.modeMenu} role="menu">
+                    <button
+                      onClick={() => switchMode("customer")}
+                      className={styles.modeMenuItem}
+                    >
+                      <span>Customer</span>
+                    </button>
+                    <button
+                      onClick={() => switchMode("developer")}
+                      className={styles.modeMenuItem}
+                    >
+                      <span>Developer</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
 
@@ -404,6 +580,10 @@ export default function RoleDashboard({
                 selected={selected}
                 iconSize={viewConfig.iconSize}
                 onToggleSelected={onToggleSelected}
+                developerMode={accessMode === "developer"}
+                onEditRoleConfig={
+                  onLoadRoleAppConfig ? (role) => void startEditRoleConfig(role) : undefined
+                }
                 onOpenVideo={(url, title) => setActiveVideo({ url, title })}
               />
             ) : (
@@ -411,6 +591,10 @@ export default function RoleDashboard({
                 roles={paginatedRoles}
                 selected={selected}
                 onToggleSelected={onToggleSelected}
+                developerMode={accessMode === "developer"}
+                onEditRoleConfig={
+                  onLoadRoleAppConfig ? (role) => void startEditRoleConfig(role) : undefined
+                }
                 viewMode={viewMode}
                 viewConfig={viewConfig}
                 computedColumns={computedColumns}
@@ -447,6 +631,110 @@ export default function RoleDashboard({
       </div>
 
       <RoleVideoModal activeVideo={activeVideo} onClose={() => setActiveVideo(null)} />
+      {developerConfirmOpen ? (
+        <div
+          onClick={() => setDeveloperConfirmOpen(false)}
+          className={styles.modeConfirmOverlay}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className={styles.modeConfirmCard}
+          >
+            <div className={styles.modeConfirmTitleRow}>
+              <i
+                className={`fa-solid fa-triangle-exclamation ${styles.modeConfirmIcon}`}
+                aria-hidden="true"
+              />
+              <h3 className={styles.modeConfirmTitle}>Enable Developer mode?</h3>
+            </div>
+            <p className={styles.modeConfirmText}>
+              Developer mode unlocks direct app configuration editing. Wrong values
+              can cause misconfigurations.
+            </p>
+            <div className={styles.modeConfirmActions}>
+              <button
+                onClick={() => setDeveloperConfirmOpen(false)}
+                className={`${styles.modeActionButton} ${styles.modeActionButtonSuccess}`}
+              >
+                <i className="fa-solid fa-circle-check" aria-hidden="true" />
+                <span>Cancel</span>
+              </button>
+              <button
+                onClick={() => {
+                  setDeveloperConfirmOpen(false);
+                  setAccessMode("developer");
+                }}
+                className={`${styles.modeActionButton} ${styles.modeActionButtonDanger}`}
+              >
+                <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
+                <span>Enable</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {editingRole ? (
+        <div onClick={() => setEditingRole(null)} className={styles.configEditorOverlay}>
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className={styles.configEditorCard}
+          >
+            <div className={styles.configEditorHeader}>
+              <div>
+                <h3 className={styles.configEditorTitle}>
+                  Edit app config: {editingRole.display_name}
+                </h3>
+                <p className={`text-body-secondary ${styles.configEditorMeta}`}>
+                  {editorAlias ? `Alias: ${editorAlias} · ` : ""}
+                  {editorPath || "host_vars file"}
+                </p>
+              </div>
+            </div>
+            <div className={styles.configEditorSurface}>
+              <CodeMirror
+                value={editorContent}
+                height="100%"
+                editable={!editorBusy}
+                extensions={editorExtensions}
+                onChange={(value) => {
+                  setEditorContent(value);
+                  setEditorStatus(null);
+                  setEditorError(null);
+                }}
+                className={styles.configEditorCodeMirror}
+              />
+            </div>
+            {editorError ? (
+              <p className={`text-danger ${styles.configEditorMessage}`}>{editorError}</p>
+            ) : null}
+            {editorStatus ? (
+              <p className={`text-success ${styles.configEditorMessage}`}>{editorStatus}</p>
+            ) : null}
+            <div className={styles.configEditorActions}>
+              <button
+                onClick={() => void importRoleDefaults()}
+                disabled={editorBusy || !onImportRoleAppDefaults}
+                className={styles.modeActionButton}
+              >
+                {editorBusy ? "Working..." : "Import defaults"}
+              </button>
+              <button
+                onClick={() => setEditingRole(null)}
+                className={styles.modeActionButton}
+              >
+                Close
+              </button>
+              <button
+                onClick={() => void saveRoleConfig()}
+                disabled={editorBusy || !onSaveRoleAppConfig}
+                className={`${styles.modeActionButton} ${styles.modeActionButtonPrimary}`}
+              >
+                {editorBusy ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {filtersOverlay}
     </Wrapper>
   );

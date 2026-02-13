@@ -12,6 +12,8 @@ type RoleGridViewProps = {
   roles: Role[];
   selected: Set<string>;
   onToggleSelected: (id: string) => void;
+  developerMode?: boolean;
+  onEditRoleConfig?: (role: Role) => void;
   viewMode: ViewMode;
   viewConfig: ViewConfig;
   computedColumns: number;
@@ -23,6 +25,8 @@ export default function RoleGridView({
   roles,
   selected,
   onToggleSelected,
+  developerMode = false,
+  onEditRoleConfig,
   viewMode,
   viewConfig,
   computedColumns,
@@ -87,16 +91,27 @@ export default function RoleGridView({
                     </div>
                   ) : null}
                 </div>
-                <button
-                  onClick={() => onToggleSelected(role.id)}
-                  className={`${styles.selectButton} ${
-                    selectedState
-                      ? styles.selectButtonSelected
-                      : styles.selectButtonDefault
-                  }`}
-                >
-                  {selectedState ? "Selected" : "Select"}
-                </button>
+                <div className={styles.roleActionButtons}>
+                  {developerMode && onEditRoleConfig ? (
+                    <button
+                      onClick={() => onEditRoleConfig(role)}
+                      className={`${styles.selectButton} ${styles.selectButtonDefault}`}
+                    >
+                      <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
+                      <span>Edit</span>
+                    </button>
+                  ) : null}
+                  <button
+                    onClick={() => onToggleSelected(role.id)}
+                    className={`${styles.selectButton} ${
+                      selectedState
+                        ? styles.selectButtonSelected
+                        : styles.selectButtonDefault
+                    }`}
+                  >
+                    {selectedState ? "Selected" : "Select"}
+                  </button>
+                </div>
               </div>
 
               {viewConfig.showLinks ? (
@@ -142,6 +157,18 @@ export default function RoleGridView({
                   <i className="fa-solid fa-check" aria-hidden="true" />
                 </span>
               ) : null}
+              {developerMode && onEditRoleConfig ? (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onEditRoleConfig(role);
+                  }}
+                  className={styles.miniEditButton}
+                >
+                  <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
+                </button>
+              ) : null}
               {showTooltip ? (
                 <div className={styles.miniTooltip}>
                   <div className={styles.tooltipTitle}>{role.display_name}</div>
@@ -176,16 +203,27 @@ export default function RoleGridView({
           >
             <div className={styles.detailHeader}>
               {logo}
-              <button
-                onClick={() => onToggleSelected(role.id)}
-                className={`${styles.selectButton} ${
-                  selectedState
-                    ? styles.selectButtonSelected
-                    : styles.selectButtonDefault
-                }`}
-              >
-                {selectedState ? "Selected" : "Select"}
-              </button>
+              <div className={styles.roleActionButtons}>
+                {developerMode && onEditRoleConfig ? (
+                  <button
+                    onClick={() => onEditRoleConfig(role)}
+                    className={`${styles.selectButton} ${styles.selectButtonDefault}`}
+                  >
+                    <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
+                    <span>Edit</span>
+                  </button>
+                ) : null}
+                <button
+                  onClick={() => onToggleSelected(role.id)}
+                  className={`${styles.selectButton} ${
+                    selectedState
+                      ? styles.selectButtonSelected
+                      : styles.selectButtonDefault
+                  }`}
+                >
+                  {selectedState ? "Selected" : "Select"}
+                </button>
+              </div>
             </div>
 
             <div>

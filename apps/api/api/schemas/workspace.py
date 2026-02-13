@@ -44,6 +44,21 @@ class WorkspaceFileWriteIn(BaseModel):
     content: str
 
 
+class WorkspaceRoleAppConfigIn(BaseModel):
+    content: str = Field(default="", description="YAML mapping for applications.<role>")
+
+
+class WorkspaceRoleAppConfigOut(BaseModel):
+    role_id: str
+    alias: str
+    host_vars_path: str
+    content: str
+
+
+class WorkspaceRoleAppConfigImportOut(WorkspaceRoleAppConfigOut):
+    imported_paths: int = 0
+
+
 class WorkspaceFileRenameIn(BaseModel):
     new_path: str = Field(..., min_length=1)
 

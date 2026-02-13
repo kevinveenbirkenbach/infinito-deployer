@@ -32,6 +32,9 @@ from api.schemas.workspace import (
     WorkspaceFileRenameOut,
     WorkspaceDirCreateOut,
     WorkspaceFileWriteIn,
+    WorkspaceRoleAppConfigIn,
+    WorkspaceRoleAppConfigOut,
+    WorkspaceRoleAppConfigImportOut,
     WorkspaceGenerateIn,
     WorkspaceGenerateOut,
     WorkspaceUploadOut,
@@ -98,6 +101,55 @@ def write_file(
 ) -> WorkspaceFileOut:
     _svc().write_file(workspace_id, path, payload.content)
     return WorkspaceFileOut(path=path, content=payload.content)
+
+
+@router.get(
+    "/{workspace_id}/roles/{role_id}/app-config",
+    response_model=WorkspaceRoleAppConfigOut,
+)
+def read_role_app_config(
+    workspace_id: str, role_id: str, alias: str | None = None
+) -> WorkspaceRoleAppConfigOut:
+    data = _svc().read_role_app_config(
+        workspace_id=workspace_id,
+        role_id=role_id,
+        alias=alias,
+    )
+    return WorkspaceRoleAppConfigOut(**data)
+
+
+@router.put(
+    "/{workspace_id}/roles/{role_id}/app-config",
+    response_model=WorkspaceRoleAppConfigOut,
+)
+def write_role_app_config(
+    workspace_id: str,
+    role_id: str,
+    payload: WorkspaceRoleAppConfigIn,
+    alias: str | None = None,
+) -> WorkspaceRoleAppConfigOut:
+    data = _svc().write_role_app_config(
+        workspace_id=workspace_id,
+        role_id=role_id,
+        alias=alias,
+        content=payload.content,
+    )
+    return WorkspaceRoleAppConfigOut(**data)
+
+
+@router.post(
+    "/{workspace_id}/roles/{role_id}/app-config/import-defaults",
+    response_model=WorkspaceRoleAppConfigImportOut,
+)
+def import_role_app_defaults(
+    workspace_id: str, role_id: str, alias: str | None = None
+) -> WorkspaceRoleAppConfigImportOut:
+    data = _svc().import_role_app_defaults(
+        workspace_id=workspace_id,
+        role_id=role_id,
+        alias=alias,
+    )
+    return WorkspaceRoleAppConfigImportOut(**data)
 
 
 @router.post(

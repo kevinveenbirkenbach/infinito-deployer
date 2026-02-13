@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import os
 import re
 import shutil
@@ -40,7 +41,64 @@ INVENTORY_FILENAME = "inventory.yml"
 
 _HIDDEN_FILES = {WORKSPACE_META_FILENAME}
 _ID_RE = re.compile(r"^[a-z0-9]{6,32}$")
+_ROLE_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _VAULT_BLOCK_START_RE = re.compile(r"^([ \t]*).*!vault\s*\|.*$")
+
+
+class _TaggedYamlValue:
+    def __init__(self, tag: str, value: Any, style: str | None = None) -> None:
+        self.tag = tag
+        self.value = value
+        self.style = style
+
+
+class _WorkspaceYamlLoader(yaml.SafeLoader):
+    pass
+
+
+class _WorkspaceYamlDumper(yaml.SafeDumper):
+    pass
+
+
+def _construct_unknown_yaml_tag(
+    loader: _WorkspaceYamlLoader, node: yaml.Node
+) -> _TaggedYamlValue:
+    if isinstance(node, yaml.ScalarNode):
+        value = loader.construct_scalar(node)
+        return _TaggedYamlValue(node.tag, value, style=node.style)
+    if isinstance(node, yaml.SequenceNode):
+        value = loader.construct_sequence(node)
+        return _TaggedYamlValue(node.tag, value)
+    if isinstance(node, yaml.MappingNode):
+        value = loader.construct_mapping(node)
+        return _TaggedYamlValue(node.tag, value)
+    return _TaggedYamlValue(node.tag, None)
+
+
+def _represent_tagged_yaml_value(
+    dumper: _WorkspaceYamlDumper, data: _TaggedYamlValue
+) -> yaml.Node:
+    value = data.value
+    if isinstance(value, dict):
+        return dumper.represent_mapping(data.tag, value)
+    if isinstance(value, list):
+        return dumper.represent_sequence(data.tag, value)
+    style = data.style
+    scalar_value = str(value)
+    if data.tag == "!vault":
+        lines = [
+            line.strip()
+            for line in scalar_value.replace("\r\n", "\n").split("\n")
+            if line.strip()
+        ]
+        scalar_value = "\n".join(lines)
+        # Force literal block style for vault payloads to avoid quoted multiline output.
+        style = "|"
+    return dumper.represent_scalar(data.tag, scalar_value, style=style)
+
+
+_WorkspaceYamlLoader.add_constructor(None, _construct_unknown_yaml_tag)
+_WorkspaceYamlDumper.add_representer(_TaggedYamlValue, _represent_tagged_yaml_value)
 
 
 def _now_iso() -> str:
@@ -176,6 +234,69 @@ def _apply_cli_host_vars_defaults(host_vars_path: Path, host: str) -> None:
         )
 
 
+def _sanitize_role_id(raw: str) -> str:
+    role_id = (raw or "").strip()
+    if not role_id or not _ROLE_ID_RE.match(role_id):
+        raise HTTPException(status_code=400, detail="invalid role id")
+    return role_id
+
+
+def _load_yaml_mapping(path: Path) -> Dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        loaded = yaml.load(
+            path.read_text(encoding="utf-8", errors="replace"),
+            Loader=_WorkspaceYamlLoader,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400, detail=f"invalid YAML in {path.as_posix()}: {exc}"
+        ) from exc
+    if loaded is None:
+        return {}
+    if not isinstance(loaded, dict):
+        raise HTTPException(
+            status_code=400,
+            detail=f"YAML root must be a mapping in {path.as_posix()}",
+        )
+    return loaded
+
+
+def _dump_yaml_mapping(data: Dict[str, Any]) -> str:
+    return yaml.dump(
+        data,
+        Dumper=_WorkspaceYamlDumper,
+        sort_keys=False,
+        default_flow_style=False,
+        allow_unicode=True,
+    )
+
+
+def _dump_yaml_fragment(value: Any) -> str:
+    dumped = yaml.dump(
+        {} if value is None else value,
+        Dumper=_WorkspaceYamlDumper,
+        sort_keys=False,
+        default_flow_style=False,
+        allow_unicode=True,
+    )
+    return dumped if dumped.endswith("\n") else f"{dumped}\n"
+
+
+def _merge_missing(dst: Dict[str, Any], src: Dict[str, Any]) -> int:
+    added = 0
+    for key, value in src.items():
+        if key not in dst:
+            dst[key] = copy.deepcopy(value)
+            added += 1
+            continue
+        existing = dst.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            added += _merge_missing(existing, value)
+    return added
+
+
 class WorkspaceService:
     def __init__(self) -> None:
         _ensure_workspace_root()
@@ -258,6 +379,177 @@ class WorkspaceService:
             atomic_write_text(target, content)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"failed to write file: {exc}")
+
+    def _resolve_host_vars_path(
+        self, root: Path, meta: Dict[str, Any], alias: str | None
+    ) -> tuple[Path, str]:
+        alias_value = (alias or meta.get("alias") or "").strip()
+        if alias_value:
+            return (
+                root / "host_vars" / f"{_sanitize_host_filename(alias_value)}.yml",
+                alias_value,
+            )
+
+        host_vars_file = str(meta.get("host_vars_file") or "").strip()
+        if host_vars_file:
+            try:
+                resolved = _safe_resolve(root, host_vars_file)
+                inferred = Path(host_vars_file).stem or "host"
+                return resolved, inferred
+            except HTTPException:
+                pass
+
+        host_value = str(meta.get("host") or "").strip()
+        if host_value:
+            return (
+                root / "host_vars" / f"{_sanitize_host_filename(host_value)}.yml",
+                host_value,
+            )
+
+        raise HTTPException(status_code=400, detail="host vars target not resolved")
+
+    def _ensure_host_vars_file(
+        self, path: Path, meta: Dict[str, Any], alias: str | None
+    ) -> None:
+        if path.is_file():
+            return
+        data: Dict[str, Any] = {}
+        host_value = str(meta.get("host") or "").strip()
+        user_value = str(meta.get("user") or "").strip()
+        if host_value:
+            data["ansible_host"] = host_value
+        if user_value:
+            data["ansible_user"] = user_value
+        try:
+            raw_port = meta.get("port")
+            if raw_port is not None:
+                port = int(raw_port)
+                if 1 <= port <= 65535:
+                    data["ansible_port"] = port
+        except Exception:
+            pass
+
+        safe_mkdir(path.parent)
+        try:
+            atomic_write_text(path, _dump_yaml_mapping(data))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"failed to create host vars file: {exc}"
+            ) from exc
+
+    def _ensure_role_exists(self, role_id: str) -> None:
+        role_dir = repo_roles_root() / role_id
+        if not role_dir.is_dir():
+            raise HTTPException(status_code=404, detail=f"role not found: {role_id}")
+
+    def _load_role_defaults(self, role_id: str) -> Dict[str, Any]:
+        role_dir = repo_roles_root() / role_id
+        if not role_dir.is_dir():
+            raise HTTPException(status_code=404, detail=f"role not found: {role_id}")
+        defaults_path = role_dir / "config" / "main.yml"
+        if not defaults_path.is_file():
+            return {}
+        return _load_yaml_mapping(defaults_path)
+
+    def _read_role_app_context(
+        self, workspace_id: str, role_id: str, alias: str | None
+    ) -> tuple[Path, Path, str, Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+        rid = _sanitize_role_id(role_id)
+        self._ensure_role_exists(rid)
+        root = self.ensure(workspace_id)
+        meta = _load_meta(root)
+        host_vars_path, alias_value = self._resolve_host_vars_path(root, meta, alias)
+        self._ensure_host_vars_file(host_vars_path, meta, alias)
+        host_vars_data = _load_yaml_mapping(host_vars_path)
+        applications = host_vars_data.get("applications")
+        if applications is None:
+            applications = {}
+            host_vars_data["applications"] = applications
+        if not isinstance(applications, dict):
+            raise HTTPException(
+                status_code=400,
+                detail="host_vars applications section must be a mapping",
+            )
+        section = applications.get(rid)
+        if section is None:
+            section = {}
+        if not isinstance(section, dict):
+            raise HTTPException(
+                status_code=400,
+                detail=f"applications.{rid} must be a mapping",
+            )
+        return root, host_vars_path, alias_value, host_vars_data, applications, section
+
+    def read_role_app_config(
+        self, workspace_id: str, role_id: str, alias: str | None
+    ) -> Dict[str, Any]:
+        rid = _sanitize_role_id(role_id)
+        root, host_vars_path, alias_value, _host_vars_data, _applications, section = (
+            self._read_role_app_context(workspace_id, rid, alias)
+        )
+        return {
+            "role_id": rid,
+            "alias": alias_value,
+            "host_vars_path": host_vars_path.relative_to(root).as_posix(),
+            "content": _dump_yaml_fragment(section),
+        }
+
+    def write_role_app_config(
+        self, workspace_id: str, role_id: str, alias: str | None, content: str
+    ) -> Dict[str, Any]:
+        rid = _sanitize_role_id(role_id)
+        root, host_vars_path, alias_value, host_vars_data, applications, _section = (
+            self._read_role_app_context(workspace_id, rid, alias)
+        )
+        parsed = yaml.load(
+            (content or "").strip() or "{}",
+            Loader=_WorkspaceYamlLoader,
+        )
+        if parsed is None:
+            parsed = {}
+        if not isinstance(parsed, dict):
+            raise HTTPException(
+                status_code=400,
+                detail=f"applications.{rid} must be a YAML mapping",
+            )
+        applications[rid] = parsed
+        try:
+            atomic_write_text(host_vars_path, _dump_yaml_mapping(host_vars_data))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"failed to write host vars file: {exc}"
+            ) from exc
+        return {
+            "role_id": rid,
+            "alias": alias_value,
+            "host_vars_path": host_vars_path.relative_to(root).as_posix(),
+            "content": _dump_yaml_fragment(parsed),
+        }
+
+    def import_role_app_defaults(
+        self, workspace_id: str, role_id: str, alias: str | None
+    ) -> Dict[str, Any]:
+        rid = _sanitize_role_id(role_id)
+        defaults = self._load_role_defaults(rid)
+        root, host_vars_path, alias_value, host_vars_data, applications, section = (
+            self._read_role_app_context(workspace_id, rid, alias)
+        )
+        imported_paths = _merge_missing(section, defaults)
+        applications[rid] = section
+        if imported_paths > 0:
+            try:
+                atomic_write_text(host_vars_path, _dump_yaml_mapping(host_vars_data))
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=500, detail=f"failed to write host vars file: {exc}"
+                ) from exc
+        return {
+            "role_id": rid,
+            "alias": alias_value,
+            "host_vars_path": host_vars_path.relative_to(root).as_posix(),
+            "content": _dump_yaml_fragment(section),
+            "imported_paths": imported_paths,
+        }
 
     def create_dir(self, workspace_id: str, rel_path: str) -> str:
         root = self.ensure(workspace_id)

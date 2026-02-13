@@ -93,9 +93,12 @@
 .toolbarButton {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   gap: 6px;
   white-space: nowrap;
   padding: 8px 12px;
+  height: 38px;
   border-radius: 999px;
   font-size: 12px;
   cursor: pointer;
@@ -112,6 +115,72 @@
   align-items: center;
 }
 
+.modeControl {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.modeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  gap: 6px;
+  white-space: nowrap;
+  padding: 8px 12px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.modeButtonCustomer {
+  border-color: var(--bs-success-border-subtle);
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-success-text-emphasis);
+}
+
+.modeButtonDeveloper {
+  border-color: var(--bs-warning-border-subtle);
+  background: var(--bs-warning-bg-subtle);
+  color: var(--bs-warning-text-emphasis);
+}
+
+.modeMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 150px;
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  box-shadow: var(--deployer-shadow-strong);
+  z-index: 120;
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+}
+
+.modeMenuItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--bs-body-color);
+  padding: 7px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.modeMenuItem:hover {
+  background: var(--bs-tertiary-bg);
+}
+
 .viewModeButtons {
   display: flex;
   gap: 6px;
@@ -121,9 +190,12 @@
 .viewModeButton {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   gap: 6px;
   white-space: nowrap;
-  padding: 6px 12px;
+  padding: 8px 12px;
+  height: 38px;
   border-radius: 999px;
   border: 1px solid var(--bs-border-color);
   background: var(--bs-body-bg);
@@ -224,4 +296,147 @@
 .pageButtonDisabled {
   background: var(--deployer-disabled-bg);
   color: var(--deployer-disabled-text);
+}
+
+.modeConfirmOverlay,
+.configEditorOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 10, 18, 0.84);
+  display: grid;
+  place-items: center;
+  z-index: 220;
+}
+
+.modeConfirmCard {
+  width: min(520px, 92vw);
+  border-radius: 16px;
+  border: 1px solid var(--bs-warning-border-subtle);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bs-warning-text-emphasis) 24%, var(--bs-body-bg) 76%) 0%,
+    color-mix(in srgb, var(--bs-warning-text-emphasis) 20%, var(--bs-body-bg) 80%) 100%
+  );
+  box-shadow: var(--deployer-shadow-strong);
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.modeConfirmTitleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modeConfirmIcon {
+  color: var(--bs-warning-text-emphasis);
+  font-size: 20px;
+}
+
+.modeConfirmTitle {
+  margin: 0;
+  font-size: 20px;
+  color: var(--bs-warning-text-emphasis);
+}
+
+.modeConfirmText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--bs-warning-text-emphasis);
+}
+
+.modeConfirmActions,
+.configEditorActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modeActionButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  padding: 7px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.modeActionButtonDanger {
+  border-color: var(--bs-danger-border-subtle);
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
+}
+
+.modeActionButtonSuccess {
+  border-color: var(--bs-success-border-subtle);
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-success-text-emphasis);
+}
+
+.modeActionButtonPrimary {
+  border-color: var(--bs-body-color);
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+}
+
+.configEditorCard {
+  width: min(1120px, 96vw);
+  height: min(84vh, 840px);
+  border-radius: 16px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  box-shadow: var(--deployer-shadow-strong);
+  padding: 16px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 10px;
+}
+
+.configEditorHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.configEditorTitle {
+  margin: 0;
+  font-size: 18px;
+}
+
+.configEditorMeta {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.configEditorSurface {
+  width: 100%;
+  min-height: 0;
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color);
+  overflow: hidden;
+}
+
+.configEditorCodeMirror {
+  height: 100%;
+  font-size: 13px;
+}
+
+.configEditorCodeMirror :global(.cm-editor) {
+  height: 100%;
+}
+
+.configEditorCodeMirror :global(.cm-scroller) {
+  overflow: auto;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+}
+
+.configEditorMessage {
+  margin: 0;
+  font-size: 12px;
 }

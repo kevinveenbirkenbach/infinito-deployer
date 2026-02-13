@@ -5,7 +5,9 @@
 .trigger {
   list-style: none;
   cursor: pointer;
+  box-sizing: border-box;
   padding: 8px 12px;
+  height: 38px;
   border-radius: 999px;
   border: 1px solid var(--bs-border-color);
   background: var(--bs-body-bg);

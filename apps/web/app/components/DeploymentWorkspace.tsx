@@ -47,6 +47,14 @@ type DeploymentWorkspaceProps = {
   onJobCreated?: (jobId: string) => void;
 };
 
+type RoleAppConfigResponse = {
+  role_id: string;
+  alias: string;
+  host_vars_path: string;
+  content: string;
+  imported_paths?: number;
+};
+
 export default function DeploymentWorkspace({
   baseUrl,
   onJobCreated,
@@ -721,6 +729,78 @@ export default function DeploymentWorkspace({
     setActivePanel("server");
   };
 
+  const roleAppConfigUrl = useCallback(
+    (roleId: string, suffix = "") => {
+      if (!workspaceId) {
+        throw new Error("Workspace is not ready yet.");
+      }
+      const rid = encodeURIComponent(String(roleId || "").trim());
+      const alias = String(activeAlias || "").trim();
+      const query = alias ? `?alias=${encodeURIComponent(alias)}` : "";
+      return `${baseUrl}/api/workspaces/${workspaceId}/roles/${rid}/app-config${suffix}${query}`;
+    },
+    [activeAlias, baseUrl, workspaceId]
+  );
+
+  const parseApiError = async (res: Response) => {
+    let message = `HTTP ${res.status}`;
+    try {
+      const data = await res.json();
+      if (typeof data?.detail === "string" && data.detail.trim()) {
+        message = data.detail;
+      }
+    } catch {
+      const text = await res.text();
+      if (text?.trim()) {
+        message = text.trim();
+      }
+    }
+    return message;
+  };
+
+  const loadRoleAppConfig = useCallback(
+    async (roleId: string): Promise<RoleAppConfigResponse> => {
+      const url = roleAppConfigUrl(roleId);
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) {
+        throw new Error(await parseApiError(res));
+      }
+      return (await res.json()) as RoleAppConfigResponse;
+    },
+    [roleAppConfigUrl]
+  );
+
+  const saveRoleAppConfig = useCallback(
+    async (roleId: string, content: string): Promise<RoleAppConfigResponse> => {
+      const url = roleAppConfigUrl(roleId);
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      if (!res.ok) {
+        throw new Error(await parseApiError(res));
+      }
+      return (await res.json()) as RoleAppConfigResponse;
+    },
+    [roleAppConfigUrl]
+  );
+
+  const importRoleAppDefaults = useCallback(
+    async (roleId: string): Promise<RoleAppConfigResponse> => {
+      const url = roleAppConfigUrl(roleId, "/import-defaults");
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        throw new Error(await parseApiError(res));
+      }
+      return (await res.json()) as RoleAppConfigResponse;
+    },
+    [roleAppConfigUrl]
+  );
+
   const serverSwitcher = (
     <DeploymentWorkspaceServerSwitcher
       currentAlias={activeAlias}
@@ -746,6 +826,9 @@ export default function DeploymentWorkspace({
           error={rolesError}
           selected={new Set<string>(selectedRoles)}
           onToggleSelected={toggleSelected}
+          onLoadRoleAppConfig={loadRoleAppConfig}
+          onSaveRoleAppConfig={saveRoleAppConfig}
+          onImportRoleAppDefaults={importRoleAppDefaults}
           activeAlias={activeAlias}
           serverSwitcher={serverSwitcher}
           compact

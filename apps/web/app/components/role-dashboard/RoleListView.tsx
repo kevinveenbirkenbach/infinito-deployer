@@ -12,6 +12,8 @@ type RoleListViewProps = {
   selected: Set<string>;
   iconSize: number;
   onToggleSelected: (id: string) => void;
+  developerMode?: boolean;
+  onEditRoleConfig?: (role: Role) => void;
   onOpenVideo: (url: string, title: string) => void;
 };
 
@@ -20,6 +22,8 @@ export default function RoleListView({
   selected,
   iconSize,
   onToggleSelected,
+  developerMode = false,
+  onEditRoleConfig,
   onOpenVideo,
 }: RoleListViewProps) {
   return (
@@ -76,14 +80,25 @@ export default function RoleListView({
             <div className={styles.horizontalLinks}>
               <RoleQuickLinks role={role} onOpenVideo={onOpenVideo} />
             </div>
-            <button
-              onClick={() => onToggleSelected(role.id)}
-              className={`${styles.selectButton} ${
-                selectedState ? styles.selectButtonSelected : styles.selectButtonDefault
-              }`}
-            >
-              {selectedState ? "Selected" : "Select"}
-            </button>
+            <div className={styles.listPickActions}>
+              {developerMode && onEditRoleConfig ? (
+                <button
+                  onClick={() => onEditRoleConfig(role)}
+                  className={`${styles.selectButton} ${styles.selectButtonDefault}`}
+                >
+                  <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
+                  <span>Edit</span>
+                </button>
+              ) : null}
+              <button
+                onClick={() => onToggleSelected(role.id)}
+                className={`${styles.selectButton} ${
+                  selectedState ? styles.selectButtonSelected : styles.selectButtonDefault
+                }`}
+              >
+                {selectedState ? "Selected" : "Select"}
+              </button>
+            </div>
           </div>
         );
       })}
