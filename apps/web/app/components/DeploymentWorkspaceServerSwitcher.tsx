@@ -1,20 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import type { CSSProperties } from "react";
 import styles from "./DeploymentWorkspaceServerSwitcher.module.css";
-
-type ServerState = {
-  alias: string;
-  host: string;
-  port: string;
-  user: string;
-  authMethod: string;
-  password: string;
-  privateKey: string;
-  publicKey: string;
-  keyAlgorithm: string;
-  keyPassphrase: string;
-};
+import { hexToRgba } from "./deployment-credentials/device-visuals";
+import type { ServerState } from "./deployment-credentials/types";
 
 type ServerSwitcherProps = {
   currentAlias: string;
@@ -32,6 +22,10 @@ export default function DeploymentWorkspaceServerSwitcher({
   onOpenServerTab,
 }: ServerSwitcherProps) {
   const detailsRef = useRef<HTMLDetailsElement | null>(null);
+  const currentDevice = useMemo(
+    () => servers.find((server) => server.alias === currentAlias) ?? null,
+    [currentAlias, servers]
+  );
 
   const close = () => {
     if (detailsRef.current) {
@@ -49,6 +43,16 @@ export default function DeploymentWorkspaceServerSwitcher({
     onOpenServerTab();
     close();
   };
+
+  const buildStyle = (server: ServerState, active: boolean): CSSProperties => {
+    const border = hexToRgba(server.color, active ? 0.92 : 0.6);
+    const background = hexToRgba(server.color, active ? 0.34 : 0.18);
+    return {
+      ...(border ? { borderColor: border } : {}),
+      ...(background ? { backgroundColor: background } : {}),
+    };
+  };
+  const triggerStyle = currentDevice ? buildStyle(currentDevice, true) : undefined;
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -75,14 +79,16 @@ export default function DeploymentWorkspaceServerSwitcher({
 
   return (
     <details ref={detailsRef} className={styles.switcher}>
-      <summary className={styles.trigger}>
-        <i className="fa-solid fa-server" aria-hidden="true" />
-        <span>Server: {currentAlias || "none"}</span>
+      <summary className={styles.trigger} style={triggerStyle}>
+        <span className={styles.aliasWithEmoji}>
+          <span aria-hidden="true">{currentDevice?.logoEmoji || "💻"}</span>
+          <span>{currentAlias || "none"}</span>
+        </span>
         <i className="fa-solid fa-chevron-down" aria-hidden="true" />
       </summary>
       <div className={styles.menu}>
         {servers.length === 0 ? (
-          <div className={`text-body-secondary ${styles.empty}`}>No servers yet.</div>
+          <div className={`text-body-secondary ${styles.empty}`}>No devices yet.</div>
         ) : (
           servers.map((server) => (
             <button
@@ -92,14 +98,18 @@ export default function DeploymentWorkspaceServerSwitcher({
               className={`${styles.serverButton} ${
                 currentAlias === server.alias ? styles.serverButtonActive : ""
               }`}
+              style={buildStyle(server, currentAlias === server.alias)}
             >
-              {server.alias}
+              <span className={styles.aliasWithEmoji}>
+                <span aria-hidden="true">{server.logoEmoji || "💻"}</span>
+                <span>{server.alias}</span>
+              </span>
             </button>
           ))
         )}
         <button type="button" onClick={handleCreate} className={styles.newButton}>
           <i className="fa-solid fa-plus" aria-hidden="true" />
-          <span>New</span>
+          <span>New device</span>
         </button>
       </div>
     </details>

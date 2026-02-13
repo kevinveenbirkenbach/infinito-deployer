@@ -1,8 +1,11 @@
 export type ServerState = {
   alias: string;
+  description: string;
   host: string;
   port: string;
   user: string;
+  color: string;
+  logoEmoji: string;
   authMethod: string;
   password: string;
   privateKey: string;

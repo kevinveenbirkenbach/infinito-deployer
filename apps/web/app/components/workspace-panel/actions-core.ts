@@ -8,6 +8,10 @@ import {
   rolesByAliasKey,
   sanitizeAliasFilename,
 } from "./utils";
+import {
+  normalizeDeviceColor,
+  normalizeDeviceEmoji,
+} from "../deployment-credentials/device-visuals";
 
 export function createWorkspacePanelCoreActions(ctx: any) {
   const {
@@ -762,12 +766,15 @@ export function createWorkspacePanelCoreActions(ctx: any) {
     const host = credentials.host?.trim() || "";
     const portRaw = credentials.port?.trim() || "";
     const user = credentials.user?.trim() || "";
+    const description = credentials.description?.trim() || "";
+    const color = normalizeDeviceColor(credentials.color) || "";
+    const logoEmoji = normalizeDeviceEmoji(credentials.logoEmoji) || "";
     const targetPath =
       hostVarsPath ||
       (activeAlias ? `host_vars/${sanitizeAliasFilename(activeAlias)}.yml` : null);
     if (!targetPath) return;
     if (activePath === targetPath && editorDirty) return;
-    if (!host && !user) return;
+    if (!host && !user && !description && !color && !logoEmoji) return;
 
     try {
       let data: Record<string, any> = {};
@@ -784,6 +791,41 @@ export function createWorkspacePanelCoreActions(ctx: any) {
       }
       if (user && data.ansible_user !== user) {
         data.ansible_user = user;
+        changed = true;
+      }
+      if (description) {
+        if (data.description !== description) {
+          data.description = description;
+          changed = true;
+        }
+      } else if (Object.prototype.hasOwnProperty.call(data, "description")) {
+        delete data.description;
+        changed = true;
+      }
+      if (color && data.color !== color) {
+        data.color = color;
+        changed = true;
+      }
+      if (logoEmoji) {
+        const currentLogo: Record<string, any> =
+          data.logo && typeof data.logo === "object" ? { ...data.logo } : {};
+        if (currentLogo.emoji !== logoEmoji) {
+          currentLogo.emoji = logoEmoji;
+          changed = true;
+        }
+        data.logo = currentLogo;
+      } else if (
+        data.logo &&
+        typeof data.logo === "object" &&
+        Object.prototype.hasOwnProperty.call(data.logo, "emoji")
+      ) {
+        const nextLogo: Record<string, any> = { ...data.logo };
+        delete nextLogo.emoji;
+        if (Object.keys(nextLogo).length === 0) {
+          delete data.logo;
+        } else {
+          data.logo = nextLogo;
+        }
         changed = true;
       }
       const prevPort = lastPortRef.current;
@@ -832,6 +874,16 @@ export function createWorkspacePanelCoreActions(ctx: any) {
       const data = (YAML.parse(content) ?? {}) as Record<string, any>;
       const nextHost = typeof data.ansible_host === "string" ? data.ansible_host : "";
       const nextUser = typeof data.ansible_user === "string" ? data.ansible_user : "";
+      const nextDescription =
+        typeof data.description === "string" ? data.description : "";
+      const nextColor =
+        typeof data.color === "string" ? normalizeDeviceColor(data.color) || "" : "";
+      const nextLogoEmoji =
+        data.logo &&
+        typeof data.logo === "object" &&
+        typeof data.logo.emoji === "string"
+          ? normalizeDeviceEmoji(data.logo.emoji) || ""
+          : "";
       let nextPort = "";
       if (typeof data.ansible_port === "number") {
         nextPort = Number.isFinite(data.ansible_port) ? String(data.ansible_port) : "";
@@ -852,8 +904,23 @@ export function createWorkspacePanelCoreActions(ctx: any) {
         if (nextPort !== credentials.port) {
           patch.port = nextPort;
         }
-      } else if (credentials.port) {
-        patch.port = "";
+      }
+      if (nextDescription !== credentials.description) {
+        patch.description = nextDescription;
+      }
+      if (nextColor) {
+        if (nextColor !== credentials.color) {
+          patch.color = nextColor;
+        }
+      } else if (credentials.color) {
+        patch.color = "";
+      }
+      if (nextLogoEmoji) {
+        if (nextLogoEmoji !== credentials.logoEmoji) {
+          patch.logoEmoji = nextLogoEmoji;
+        }
+      } else if (credentials.logoEmoji) {
+        patch.logoEmoji = "";
       }
       if (Object.keys(patch).length > 0) {
         onCredentialsPatch(patch);

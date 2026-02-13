@@ -10,7 +10,17 @@ import DeploymentWorkspaceServerSwitcher from "./DeploymentWorkspaceServerSwitch
 import styles from "./DeploymentWorkspace.module.css";
 import { createInitialState } from "../lib/deploy_form";
 import { buildDeploymentPayload } from "../lib/deployment_payload";
-import type { ConnectionResult } from "./deployment-credentials/types";
+import {
+  hexToRgba,
+  normalizeDeviceColor,
+  normalizeDeviceEmoji,
+  pickUniqueDeviceColor,
+  pickUniqueDeviceEmoji,
+} from "./deployment-credentials/device-visuals";
+import type {
+  ConnectionResult,
+  ServerState,
+} from "./deployment-credentials/types";
 
 type Role = {
   id: string;
@@ -25,19 +35,6 @@ type Role = {
   homepage?: string | null;
   issue_tracker_url?: string | null;
   license_url?: string | null;
-};
-
-type ServerState = {
-  alias: string;
-  host: string;
-  port: string;
-  user: string;
-  authMethod: string;
-  password: string;
-  privateKey: string;
-  publicKey: string;
-  keyAlgorithm: string;
-  keyPassphrase: string;
 };
 
 type AliasRename = { from: string; to: string };
@@ -55,6 +52,49 @@ type RoleAppConfigResponse = {
   imported_paths?: number;
 };
 
+function ensureUniqueDeviceMeta(servers: ServerState[]): ServerState[] {
+  const usedColors = new Set<string>();
+  const usedLogos = new Set<string>();
+  return servers.map((server) => {
+    const normalizedColor = normalizeDeviceColor(server.color);
+    const normalizedLogo = normalizeDeviceEmoji(server.logoEmoji);
+    const color =
+      normalizedColor && !usedColors.has(normalizedColor)
+        ? normalizedColor
+        : pickUniqueDeviceColor(usedColors);
+    const logoEmoji =
+      normalizedLogo && !usedLogos.has(normalizedLogo)
+        ? normalizedLogo
+        : pickUniqueDeviceEmoji(usedLogos);
+    usedColors.add(color);
+    usedLogos.add(logoEmoji);
+    return {
+      ...server,
+      description: String(server.description || ""),
+      color,
+      logoEmoji,
+    };
+  });
+}
+
+function createDeviceStyle(
+  color: string,
+  {
+    backgroundAlpha,
+    borderAlpha,
+    outlineAlpha,
+  }: { backgroundAlpha: number; borderAlpha: number; outlineAlpha?: number }
+): CSSProperties {
+  const background = hexToRgba(color, backgroundAlpha);
+  const border = hexToRgba(color, borderAlpha);
+  const outline = hexToRgba(color, outlineAlpha ?? borderAlpha);
+  return {
+    ...(background ? { "--device-row-bg": background } : {}),
+    ...(border ? { "--device-row-border": border } : {}),
+    ...(outline ? { "--device-row-outline": outline } : {}),
+  } as CSSProperties;
+}
+
 export default function DeploymentWorkspace({
   baseUrl,
   onJobCreated,
@@ -66,9 +106,14 @@ export default function DeploymentWorkspace({
   const [servers, setServers] = useState<ServerState[]>([
     {
       alias: initial.alias,
+      description: initial.description,
       host: initial.host,
       port: initial.port,
       user: initial.user,
+      color: pickUniqueDeviceColor(new Set<string>()),
+      logoEmoji:
+        normalizeDeviceEmoji(initial.logoEmoji) ||
+        pickUniqueDeviceEmoji(new Set<string>()),
       authMethod: initial.authMethod,
       password: initial.password,
       privateKey: initial.privateKey,
@@ -171,18 +216,31 @@ export default function DeploymentWorkspace({
   }, [activeAlias]);
 
   const createServer = useCallback(
-    (alias: string): ServerState => ({
-      alias,
-      host: "",
-      port: "",
-      user: "",
-      authMethod: "password",
-      password: "",
-      privateKey: "",
-      publicKey: "",
-      keyAlgorithm: "ed25519",
-      keyPassphrase: "",
-    }),
+    (alias: string, existingServers: ServerState[] = []): ServerState => {
+      const usedColors = new Set<string>();
+      const usedLogos = new Set<string>();
+      existingServers.forEach((server) => {
+        const color = normalizeDeviceColor(server.color);
+        if (color) usedColors.add(color);
+        const logo = normalizeDeviceEmoji(server.logoEmoji);
+        if (logo) usedLogos.add(logo);
+      });
+      return {
+        alias,
+        description: "",
+        host: "",
+        port: "22",
+        user: "root",
+        color: pickUniqueDeviceColor(usedColors),
+        logoEmoji: pickUniqueDeviceEmoji(usedLogos),
+        authMethod: "password",
+        password: "",
+        privateKey: "",
+        publicKey: "",
+        keyAlgorithm: "ed25519",
+        keyPassphrase: "",
+      };
+    },
     []
   );
 
@@ -368,8 +426,12 @@ export default function DeploymentWorkspace({
           .filter((alias) => !seen.has(alias))
           .sort((a, b) => a.localeCompare(b))
           .forEach((alias) => ordered.push(alias));
-
-        return ordered.map((alias) => byAlias.get(alias) ?? createServer(alias));
+        const nextServers: ServerState[] = [];
+        ordered.forEach((alias) => {
+          const existing = byAlias.get(alias);
+          nextServers.push(existing ?? createServer(alias, nextServers));
+        });
+        return ensureUniqueDeviceMeta(nextServers);
       });
 
       if (!activeAlias) {
@@ -401,7 +463,7 @@ export default function DeploymentWorkspace({
           ...patch,
           alias: shouldRename ? nextAliasRaw : prev[idx].alias,
         };
-        return next;
+        return ensureUniqueDeviceMeta(next);
       });
 
       if (shouldRename) {
@@ -437,14 +499,16 @@ export default function DeploymentWorkspace({
   const addServer = useCallback(
     (_aliasHint?: string) => {
       const existing = new Set(servers.map((server) => server.alias));
-      let alias = "server";
+      let alias = "device";
       let idx = 2;
       while (existing.has(alias)) {
-        alias = `server-${idx}`;
+        alias = `device-${idx}`;
         idx += 1;
       }
 
-      setServers((prev) => [...prev, createServer(alias)]);
+      setServers((prev) =>
+        ensureUniqueDeviceMeta([...prev, createServer(alias, prev)])
+      );
       setSelectedByAlias((prev) => ({ ...prev, [alias]: new Set<string>() }));
       setActiveAlias(alias);
     },
@@ -463,7 +527,7 @@ export default function DeploymentWorkspace({
         if (activeAlias === alias) {
           setActiveAlias(next[0]?.alias ?? "");
         }
-        return next;
+        return ensureUniqueDeviceMeta(next);
       });
       setSelectedByAlias((prev) => {
         const next: Record<string, Set<string>> = { ...prev };
@@ -629,9 +693,12 @@ export default function DeploymentWorkspace({
   const credentials = useMemo(() => {
     return {
       alias: activeServer?.alias ?? "",
+      description: activeServer?.description ?? "",
       host: activeServer?.host ?? "",
       port: activeServer?.port ?? "",
       user: activeServer?.user ?? "",
+      color: activeServer?.color ?? "",
+      logoEmoji: activeServer?.logoEmoji ?? "",
       authMethod: activeServer?.authMethod ?? "password",
     };
   }, [activeServer]);
@@ -666,6 +733,14 @@ export default function DeploymentWorkspace({
     if (!raw) return false;
     const num = Number(raw);
     return !Number.isInteger(num) || num < 1 || num > 65535;
+  };
+
+  const normalizePortValue = (value: string | number | null | undefined) => {
+    const digits = String(value ?? "").replace(/[^\d]/g, "");
+    if (!digits) return "";
+    const parsed = Number.parseInt(digits, 10);
+    if (!Number.isInteger(parsed)) return "";
+    return String(Math.min(65535, Math.max(1, parsed)));
   };
 
   const isAuthMissing = (server: ServerState) =>
@@ -825,6 +900,17 @@ export default function DeploymentWorkspace({
     />
   );
 
+  const serverMetaByAlias = useMemo(
+    () =>
+      Object.fromEntries(
+        servers.map((server) => [
+          server.alias,
+          { logoEmoji: server.logoEmoji || "💻", color: server.color || "" },
+        ])
+      ) as Record<string, { logoEmoji?: string | null; color?: string | null }>,
+    [servers]
+  );
+
   const panels: {
     key: "store" | "server" | "inventory" | "deploy";
     title: string;
@@ -845,6 +931,7 @@ export default function DeploymentWorkspace({
           onImportRoleAppDefaults={importRoleAppDefaults}
           activeAlias={activeAlias}
           serverAliases={servers.map((server) => server.alias)}
+          serverMetaByAlias={serverMetaByAlias}
           selectedByAlias={selectedRolesByAlias}
           onToggleSelectedForAlias={toggleSelectedForAlias}
           serverSwitcher={serverSwitcher}
@@ -854,7 +941,7 @@ export default function DeploymentWorkspace({
     },
     {
       key: "server",
-      title: "Hardware",
+      title: "Devices",
       content: (
         <DeploymentCredentialsForm
           baseUrl={baseUrl}
@@ -916,7 +1003,7 @@ export default function DeploymentWorkspace({
                 deployViewTab === "live-log" ? styles.deployTabButtonActive : ""
               }`}
             >
-              Deploy targets
+              Deploy devices
             </button>
             <button
               type="button"
@@ -941,14 +1028,14 @@ export default function DeploymentWorkspace({
             >
               <div className={styles.serverTableCard} style={deployTableStyle}>
                 <div className={styles.serverTableTop}>
-                  <span className={styles.serverTableTitle}>Deploy targets</span>
+                  <span className={styles.serverTableTitle}>Deploy devices</span>
                   <span className={`text-body-secondary ${styles.serverTableMeta}`}>
                     {deploySelection.size} selected
                   </span>
                 </div>
                 <div className={styles.serverTableHeader}>
                   <span>Status</span>
-                  <span>Alias</span>
+                  <span>Device</span>
                   <span>Host</span>
                   <span>Port</span>
                   <span>User</span>
@@ -988,6 +1075,18 @@ export default function DeploymentWorkspace({
                     const statusIconTone = isDeployed
                       ? styles.iconSuccess
                       : connectionState.iconTone;
+                    const tintAllowed =
+                      !isDeployed &&
+                      isConfigured &&
+                      connectionState.rowClass !== styles.serverRowCritical &&
+                      connectionState.rowClass !== styles.serverRowMissingCredentials;
+                    const rowStyle = tintAllowed
+                      ? createDeviceStyle(server.color, {
+                          backgroundAlpha: 0.16,
+                          borderAlpha: 0.56,
+                          outlineAlpha: 0.86,
+                        })
+                      : undefined;
                     const roleText = hasRoles ? `${filteredRoles.length} apps` : "—";
                     const roleTitle = hasRoles
                       ? filteredRoles.sort().join(", ")
@@ -997,7 +1096,10 @@ export default function DeploymentWorkspace({
                         key={alias}
                         className={`${styles.serverRow} ${
                           connectionState.rowClass
-                        } ${isSelected ? styles.serverRowSelected : ""}`}
+                        } ${isSelected ? styles.serverRowSelected : ""} ${
+                          tintAllowed ? styles.serverRowTinted : ""
+                        }`}
+                        style={rowStyle}
                       >
                         <div
                           className={`${styles.statusCell} ${
@@ -1010,7 +1112,12 @@ export default function DeploymentWorkspace({
                           />
                           <span className={styles.statusLabel}>{rowStatusLabel}</span>
                         </div>
-                        <span className={styles.aliasCell}>{alias}</span>
+                        <span className={styles.aliasCell}>
+                          <span className={styles.aliasWithEmoji}>
+                            <span aria-hidden="true">{server.logoEmoji || "💻"}</span>
+                            <span>{alias}</span>
+                          </span>
+                        </span>
                         <div className={styles.tableInputWrap}>
                           <input
                             value={server.host}
@@ -1030,11 +1137,22 @@ export default function DeploymentWorkspace({
                         </div>
                         <div className={styles.tableInputWrap}>
                           <input
+                            type="number"
                             value={server.port}
                             onChange={(event) =>
-                              updateServer(alias, { port: event.target.value })
+                              updateServer(alias, {
+                                port: normalizePortValue(event.target.value),
+                              })
+                            }
+                            onBlur={() =>
+                              updateServer(alias, {
+                                port: normalizePortValue(server.port) || "22",
+                              })
                             }
                             placeholder="22"
+                            min={1}
+                            max={65535}
+                            step={1}
                             inputMode="numeric"
                             className={`${styles.tableInput} ${
                               portInvalid ? styles.tableInputMissing : ""
@@ -1071,7 +1189,7 @@ export default function DeploymentWorkspace({
                           {appsMissing ? (
                             <span
                               className={styles.cellAlert}
-                              title="Select at least one app for this server."
+                              title="Select at least one app for this device."
                             >
                               !
                             </span>
@@ -1254,7 +1372,7 @@ export default function DeploymentWorkspace({
                 <h3 className={styles.rolePickerTitle}>Deploy App Filter</h3>
                 <p className={`text-body-secondary ${styles.rolePickerHint}`}>
                   Selected apps are passed as <code>--id</code> for all selected
-                  servers.
+                  devices.
                 </p>
               </div>
               <button

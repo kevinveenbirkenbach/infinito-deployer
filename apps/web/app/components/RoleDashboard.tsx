@@ -8,6 +8,8 @@ import { yaml as yamlLang } from "@codemirror/lang-yaml";
 import { filterRoles } from "../lib/role_filter";
 import { VIEW_CONFIG, VIEW_MODE_ICONS } from "./role-dashboard/constants";
 import { sortStatuses } from "./role-dashboard/helpers";
+import { hexToRgba } from "./deployment-credentials/device-visuals";
+import EnableDropdown from "./role-dashboard/EnableDropdown";
 import RoleGridView from "./role-dashboard/RoleGridView";
 import RoleListView from "./role-dashboard/RoleListView";
 import RoleLogoView from "./role-dashboard/RoleLogoView";
@@ -47,6 +49,7 @@ type RoleDashboardProps = {
   ) => Promise<RoleAppConfigPayload>;
   activeAlias?: string;
   serverAliases?: string[];
+  serverMetaByAlias?: Record<string, { logoEmoji?: string | null; color?: string | null }>;
   selectedByAlias?: Record<string, string[]>;
   onToggleSelectedForAlias?: (alias: string, roleId: string) => void;
   serverSwitcher?: ReactNode;
@@ -64,6 +67,7 @@ export default function RoleDashboard({
   onImportRoleAppDefaults,
   activeAlias,
   serverAliases,
+  serverMetaByAlias,
   selectedByAlias,
   onToggleSelectedForAlias,
   serverSwitcher,
@@ -157,6 +161,23 @@ export default function RoleDashboard({
     const fallback = String(activeAlias || "").trim();
     return fallback ? [fallback] : [];
   }, [serverAliases, activeAlias]);
+
+  const matrixColumnStyleByAlias = useMemo(() => {
+    const out: Record<string, CSSProperties> = {};
+    matrixAliases.forEach((alias) => {
+      const color = String(serverMetaByAlias?.[alias]?.color || "").trim();
+      const cellBg = hexToRgba(color, 0.14);
+      const headBg = hexToRgba(color, 0.24);
+      const border = hexToRgba(color, 0.58);
+      if (!cellBg && !headBg && !border) return;
+      out[alias] = {
+        ...(cellBg ? { "--matrix-device-col-bg": cellBg } : {}),
+        ...(headBg ? { "--matrix-device-col-head-bg": headBg } : {}),
+        ...(border ? { "--matrix-device-col-border": border } : {}),
+      } as CSSProperties;
+    });
+    return out;
+  }, [matrixAliases, serverMetaByAlias]);
 
   const selectedLookup = useMemo(() => {
     const out: Record<string, Set<string>> = {};
@@ -505,7 +526,7 @@ export default function RoleDashboard({
                       targetFilter === target ? styles.pillButtonActive : ""
                     }`}
                   >
-                    {target}
+                    {target === "server" ? "device" : target}
                   </button>
                 ))}
               </div>
@@ -538,7 +559,7 @@ export default function RoleDashboard({
               <div className={styles.groupButtons}>
                 {[
                   { key: "all", label: "all", active: !showSelectedOnly },
-                  { key: "selected", label: "selected", active: showSelectedOnly },
+                  { key: "selected", label: "enabled", active: showSelectedOnly },
                 ].map((item) => (
                   <button
                     key={item.key}
@@ -577,12 +598,12 @@ export default function RoleDashboard({
                 {selectedCount > 0 ? (
                   <span>
                     {" "}
-                    · Selected {selectedCount}
+                    · Enabled {selectedCount}
                     {hiddenSelected > 0 ? ` (${hiddenSelected} hidden)` : ""}
                   </span>
                 ) : null}
                 {viewMode === "matrix"
-                  ? ` · Matrix: ${matrixAliases.length} servers`
+                  ? ` · Matrix: ${matrixAliases.length} devices`
                   : activeAlias
                     ? ` · Active: ${activeAlias}`
                     : ""}
@@ -697,7 +718,7 @@ export default function RoleDashboard({
             {viewMode === "matrix" ? (
               matrixAliases.length === 0 ? (
                 <div className={`text-body-secondary ${styles.matrixEmpty}`}>
-                  Add at least one server to use matrix selection.
+                  Add at least one device to use matrix selection.
                 </div>
               ) : (
                 <div className={styles.matrixContainer}>
@@ -706,7 +727,18 @@ export default function RoleDashboard({
                       <tr>
                         <th>App</th>
                         {matrixAliases.map((alias) => (
-                          <th key={alias}>{alias}</th>
+                          <th
+                            key={alias}
+                            className={styles.matrixAliasColumnHead}
+                            style={matrixColumnStyleByAlias[alias]}
+                          >
+                            <span className={styles.matrixAliasHead}>
+                              <span aria-hidden="true">
+                                {serverMetaByAlias?.[alias]?.logoEmoji || "💻"}
+                              </span>
+                              <span>{alias}</span>
+                            </span>
+                          </th>
                         ))}
                       </tr>
                     </thead>
@@ -729,26 +761,28 @@ export default function RoleDashboard({
                             );
                             const selectable = canToggleAliasRole(alias);
                             return (
-                              <td key={`${alias}:${role.id}`}>
+                              <td
+                                key={`${alias}:${role.id}`}
+                                className={styles.matrixAliasColumnCell}
+                                style={matrixColumnStyleByAlias[alias]}
+                              >
                                 <div className={styles.matrixCellActions}>
-                                  <label
-                                    className={`${styles.matrixSelectWrap} ${
-                                      selectable
-                                        ? ""
-                                        : styles.matrixSelectWrapDisabled
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedState}
-                                      disabled={!selectable}
-                                      onChange={() =>
-                                        toggleSelectedByAlias(alias, role.id)
+                                  <EnableDropdown
+                                    enabled={selectedState}
+                                    disabled={!selectable}
+                                    compact
+                                    contextLabel={`device "${alias}" for "${role.display_name}"`}
+                                    onEnable={() => {
+                                      if (!selectedState) {
+                                        toggleSelectedByAlias(alias, role.id);
                                       }
-                                      className={styles.matrixCheckbox}
-                                    />
-                                    <span>Select</span>
-                                  </label>
+                                    }}
+                                    onDisable={() => {
+                                      if (selectedState) {
+                                        toggleSelectedByAlias(alias, role.id);
+                                      }
+                                    }}
+                                  />
                                   {accessMode === "developer" && onLoadRoleAppConfig ? (
                                     <button
                                       type="button"

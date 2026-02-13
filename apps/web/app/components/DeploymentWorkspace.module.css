@@ -302,8 +302,13 @@
 }
 
 .serverRowSelected {
-  outline: 2px solid var(--bs-body-color);
+  outline: 2px solid var(--device-row-outline, var(--bs-body-color));
   outline-offset: -2px;
+}
+
+.serverRowTinted {
+  background: var(--device-row-bg);
+  border-color: var(--device-row-border);
 }
 
 .statusCell {
@@ -337,6 +342,13 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.aliasWithEmoji {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .roleCell {

@@ -774,7 +774,7 @@ export default function WorkspacePanel({
         await refreshFiles(workspaceId);
       } catch (err: any) {
         setInventorySyncError(
-          err?.message ? `Server delete failed: ${err.message}` : "Server delete failed."
+          err?.message ? `Device delete failed: ${err.message}` : "Device delete failed."
         );
       } finally {
         deleteSyncRef.current = false;
@@ -797,9 +797,12 @@ export default function WorkspacePanel({
     void syncHostVarsFromCredentials(editorDirty);
   }, [
     workspaceId,
+    credentials.description,
     credentials.host,
     credentials.port,
     credentials.user,
+    credentials.color,
+    credentials.logoEmoji,
     hostVarsPath,
     activePath,
     editorDirty,

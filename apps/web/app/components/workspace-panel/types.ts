@@ -7,9 +7,12 @@ export type FileEntry = {
 
 export type CredentialsState = {
   alias: string;
+  description: string;
   host: string;
   port: string;
   user: string;
+  color: string;
+  logoEmoji: string;
   authMethod: string;
 };
 

@@ -33,7 +33,7 @@ export default function RemoveServerModal({
         className={`${styles.modalCard} ${styles.removeModalCard}`}
       >
         <div>
-          <h3 className={styles.modalTitle}>Delete server</h3>
+          <h3 className={styles.modalTitle}>Delete device</h3>
           <p className={`text-body-secondary ${styles.modalHint}`}>
             Remove <strong>{removeTarget}</strong> from inventory and delete its host_vars
             file?

@@ -259,6 +259,78 @@
   gap: 4px;
 }
 
+.aliasInputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aliasEmojiPreview {
+  width: 1.35em;
+  min-width: 1.35em;
+  text-align: center;
+  font-size: 15px;
+}
+
+.metaInlineRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.emojiPickerShell {
+  position: relative;
+  display: inline-flex;
+}
+
+.emojiPickerTrigger {
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.emojiPickerTriggerOpen {
+  border-color: var(--bs-body-color);
+}
+
+.emojiPickerMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 24;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  box-shadow: var(--deployer-shadow);
+}
+
+.emojiPickerMenu :global(em-emoji-picker) {
+  width: 340px;
+  height: 390px;
+  --em-rgb-background: 12, 19, 35;
+  --em-rgb-color: 226, 232, 240;
+  --em-rgb-input: 16, 25, 44;
+  --em-rgb-border: 64, 88, 120;
+  --em-rgb-accent: 79, 166, 231;
+  --em-border-radius: 10px;
+  --em-font-family: var(--font-body);
+  --em-category-icon-size: 18px;
+  --em-emoji-size: 1.35rem;
+}
+
+.emojiPickerMenu :global(.search) {
+  background: rgba(12, 19, 35, 0.92);
+}
+
 .inputSmall {
   width: 100%;
   padding: 6px 8px;
@@ -266,6 +338,58 @@
   border: 1px solid var(--bs-border-color);
   background: var(--bs-body-bg);
   font-size: 12px;
+}
+
+.emojiInput {
+  max-width: 68px;
+  text-align: center;
+}
+
+.colorInputRowCompact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.colorPickerInput {
+  width: 46px;
+  height: 38px;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 3px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 10px;
+  background: var(--bs-body-bg);
+  cursor: pointer;
+}
+
+.colorPickerInput::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.colorPickerInput::-webkit-color-swatch {
+  border: 0;
+  border-radius: 7px;
+}
+
+.colorPickerInput::-moz-color-swatch {
+  border: 0;
+  border-radius: 7px;
+}
+
+.identityAliasInput {
+  height: 38px;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 0 10px;
+}
+
+.colorTextInput {
+  min-width: 0;
 }
 
 .inputError {
@@ -449,7 +573,7 @@
 .statusCard {
   padding: 10px;
   border-radius: 12px;
-  background: var(--deployer-card-bg-soft);
+  background: var(--device-status-bg, var(--deployer-card-bg-soft));
   font-size: 12px;
   display: grid;
   gap: 6px;
@@ -497,7 +621,8 @@
 .cardFooter {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .iconDanger {
@@ -521,6 +646,11 @@
   background: rgba(220, 53, 69, 0.14);
 }
 
+.rowTinted {
+  border-color: var(--device-row-border);
+  background: var(--device-row-bg);
+}
+
 .rowStateWarning {
   border-color: rgba(255, 193, 7, 0.58);
   background: rgba(255, 193, 7, 0.14);
@@ -534,6 +664,11 @@
 .cardStateDanger {
   border-color: rgba(220, 53, 69, 0.6);
   background: rgba(220, 53, 69, 0.14);
+}
+
+.cardTinted {
+  border-color: var(--device-card-border);
+  background: var(--device-card-bg);
 }
 
 .cardStateWarning {

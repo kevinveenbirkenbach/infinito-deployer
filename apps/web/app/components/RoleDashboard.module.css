@@ -332,6 +332,22 @@
   z-index: 3;
 }
 
+.matrixAliasHead {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.matrixAliasColumnHead {
+  background: var(--matrix-device-col-head-bg, var(--deployer-panel-catalog-bg));
+  border-right-color: var(--matrix-device-col-border, var(--bs-border-color-translucent));
+}
+
+.matrixAliasColumnCell {
+  background: var(--matrix-device-col-bg, var(--bs-body-bg));
+  border-right-color: var(--matrix-device-col-border, var(--bs-border-color-translucent));
+}
+
 .matrixRoleCell {
   position: sticky;
   left: 0;

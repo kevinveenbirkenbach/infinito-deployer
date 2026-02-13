@@ -193,9 +193,12 @@ export default function DeploymentCredentialsForm({
     return servers.filter((server) => {
       const haystack = [
         server.alias,
+        server.description,
         server.host,
         server.user,
         server.port,
+        server.color,
+        server.logoEmoji,
         server.authMethod,
       ]
         .map((value) => String(value || "").toLowerCase())
@@ -366,7 +369,7 @@ export default function DeploymentCredentialsForm({
     if (!openServer || !workspaceId) return;
 
     if (openServer.privateKey) {
-      const ok = window.confirm("Regenerate SSH keypair for this server?");
+      const ok = window.confirm("Regenerate SSH keypair for this device?");
       if (!ok) return;
     }
 
@@ -412,11 +415,11 @@ export default function DeploymentCredentialsForm({
     if (!openServer || !workspaceId) return;
     const serverPassword = openServer.password || "";
     if (!serverPassword) {
-      setKeygenError("Set a server password before storing it in the vault.");
+      setKeygenError("Set a device password before storing it in the vault.");
       return;
     }
     if (serverPassword !== passwordConfirm) {
-      setKeygenError("Server passwords do not match.");
+      setKeygenError("Device passwords do not match.");
       return;
     }
     setKeygenError(null);
@@ -437,7 +440,7 @@ export default function DeploymentCredentialsForm({
         const text = await res.text();
         throw new Error(text || `HTTP ${res.status}`);
       }
-      setKeygenStatus("Server password stored in credentials vault.");
+      setKeygenStatus("Device password stored in credentials vault.");
     } catch (err: any) {
       setKeygenError(err?.message ?? "failed to store password in vault");
     }
@@ -520,7 +523,7 @@ export default function DeploymentCredentialsForm({
       await onRemoveServer(removeTarget);
       setRemoveTarget(null);
     } catch (err: any) {
-      setRemoveError(err?.message ?? "failed to delete server");
+      setRemoveError(err?.message ?? "failed to delete device");
     } finally {
       setRemoveBusy(false);
     }
@@ -530,10 +533,10 @@ export default function DeploymentCredentialsForm({
     <Wrapper className={wrapperClassName}>
       {!compact ? (
         <div className={styles.header}>
-          <div className={styles.headerLeft}>
-            <h2 className={`text-body ${styles.title}`}>Server</h2>
+            <div className={styles.headerLeft}>
+            <h2 className={`text-body ${styles.title}`}>Device</h2>
             <p className={`text-body-secondary ${styles.subtitle}`}>
-              Configure server connections for deployments. Secrets can be stored in
+              Configure device connections for deployments. Secrets can be stored in
               the workspace vault and are never persisted in browser storage.
             </p>
           </div>
@@ -560,8 +563,8 @@ export default function DeploymentCredentialsForm({
                     applySearch();
                   }
                 }}
-                placeholder="Search servers"
-                aria-label="Search servers"
+                placeholder="Search devices"
+                aria-label="Search devices"
                 className={`form-control ${styles.search}`}
               />
               <button

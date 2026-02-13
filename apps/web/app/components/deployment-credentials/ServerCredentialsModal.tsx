@@ -59,9 +59,9 @@ export default function ServerCredentialsModal({
       >
         <div className={styles.modalHeader}>
           <div>
-            <h3 className={styles.modalTitle}>Server · {openServer.alias}</h3>
+            <h3 className={styles.modalTitle}>Device · {openServer.alias}</h3>
             <p className={`text-body-secondary ${styles.modalHint}`}>
-              Configure password or SSH key access for this server.
+              Configure password or SSH key access for this device.
             </p>
           </div>
           <button onClick={onClose} className={styles.closeButton}>

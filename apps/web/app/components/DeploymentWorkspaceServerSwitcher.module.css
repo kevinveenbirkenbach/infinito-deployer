@@ -19,6 +19,13 @@
   white-space: nowrap;
 }
 
+.aliasWithEmoji {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .menu {
   position: absolute;
   left: 0;

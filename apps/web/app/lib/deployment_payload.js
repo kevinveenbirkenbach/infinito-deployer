@@ -69,7 +69,7 @@ export function buildDeploymentPayload({
   }
 
   if (normalizedSelected.length === 0) {
-    errors.deployScope = "Select at least one server to deploy.";
+    errors.deployScope = "Select at least one device to deploy.";
   }
 
   const hasErrors = Object.keys(errors).length > 0;

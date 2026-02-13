@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { colorForStatus, displayTargets } from "./helpers";
+import EnableDropdown from "./EnableDropdown";
 import RoleLogoView from "./RoleLogoView";
 import RoleQuickLinks from "./RoleQuickLinks";
 import styles from "./styles.module.css";
@@ -87,14 +88,16 @@ export default function RoleListView({
                   <span>Edit</span>
                 </button>
               ) : null}
-              <button
-                onClick={() => onToggleSelected(role.id)}
-                className={`${styles.selectButton} ${
-                  selectedState ? styles.selectButtonSelected : styles.selectButtonDefault
-                }`}
-              >
-                {selectedState ? "Selected" : "Select"}
-              </button>
+              <EnableDropdown
+                enabled={selectedState}
+                onEnable={() => {
+                  if (!selectedState) onToggleSelected(role.id);
+                }}
+                onDisable={() => {
+                  if (selectedState) onToggleSelected(role.id);
+                }}
+                contextLabel={`the active device for "${role.display_name}"`}
+              />
             </div>
           </div>
         );

@@ -199,7 +199,7 @@ export function createWorkspacePanelVaultActions(ctx: any) {
               }
             }
             const updatedTargets = pendingCredentials.targets.length;
-            setCredentialsStatus(`Credentials generated for ${updatedTargets} server target(s).`);
+            setCredentialsStatus(`Credentials generated for ${updatedTargets} device target(s).`);
             await refreshFiles(workspaceId);
           } catch (err: any) {
             setCredentialsError(toUserError(err, "credential generation failed"));

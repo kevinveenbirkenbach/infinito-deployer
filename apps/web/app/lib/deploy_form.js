@@ -3,10 +3,13 @@ const ALIAS_PATTERN = /^[a-z0-9_]+$/;
 
 export function createInitialState() {
   return {
-    alias: "server",
+    alias: "device",
+    description: "",
     host: "",
-    port: "",
-    user: "",
+    port: "22",
+    user: "root",
+    color: "#89CFF0",
+    logoEmoji: "💻",
     authMethod: "password",
     password: "",
     privateKey: "",

@@ -7,12 +7,12 @@ import {
   isFormValid,
 } from "../../../apps/web/app/lib/deploy_form.js";
 
-test("initial state is invalid and empty", () => {
+test("initial state keeps required defaults and is invalid", () => {
   const state = createInitialState();
   assert.ok(state.alias);
   assert.equal(state.host, "");
-  assert.equal(state.port, "");
-  assert.equal(state.user, "");
+  assert.equal(state.port, "22");
+  assert.equal(state.user, "root");
   assert.equal(state.password, "");
   assert.equal(state.privateKey, "");
   assert.equal(state.publicKey, "");
