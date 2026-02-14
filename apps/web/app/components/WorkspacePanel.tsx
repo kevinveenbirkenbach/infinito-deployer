@@ -1085,8 +1085,8 @@ export default function WorkspacePanel({
     canGenerate,
     generateBusy,
     workspaceLoading,
-    activeRoles,
-    activeAlias,
+    selectedRolesByAlias,
+    hostVarsAliases,
     activePath,
     editorDirty,
   ]);

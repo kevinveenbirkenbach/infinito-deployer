@@ -864,7 +864,6 @@ export function createWorkspacePanelCoreActions(ctx: any) {
 
   const syncInventoryWithSelection = async (editorDirty: boolean) => {
     if (!workspaceId || !inventoryReady) return;
-    if (!activeAlias) return;
     if (activePath === "inventory.yml" && editorDirty) return;
 
     try {
@@ -877,43 +876,61 @@ export function createWorkspacePanelCoreActions(ctx: any) {
       const childrenNode =
         allNode.children && typeof allNode.children === "object" ? allNode.children : {};
 
-      const desiredRoles = new Set(activeRoles);
+      const mergedSelection = mergeRolesByAlias(selectedRolesByAlias);
+      const managedAliases = new Set(
+        Object.keys(mergedSelection)
+          .map((alias) => String(alias || "").trim())
+          .filter(Boolean)
+      );
+      const desiredHostsByRole: Record<string, Set<string>> = {};
+      managedAliases.forEach((alias) => {
+        const roles = normalizeRoles(mergedSelection[alias] || []);
+        roles.forEach((roleId) => {
+          if (!desiredHostsByRole[roleId]) {
+            desiredHostsByRole[roleId] = new Set<string>();
+          }
+          desiredHostsByRole[roleId].add(alias);
+        });
+      });
       let changed = false;
       const nextChildren: Record<string, any> = { ...childrenNode };
+      const roleIdsToProcess = new Set<string>([
+        ...Object.keys(childrenNode),
+        ...Object.keys(desiredHostsByRole),
+      ]);
 
-      activeRoles.forEach((roleId: string) => {
-        const existing = childrenNode?.[roleId];
-        const nextEntry =
-          existing && typeof existing === "object" ? { ...existing } : {};
+      roleIdsToProcess.forEach((roleId) => {
+        const existing = nextChildren[roleId];
+        const entry = existing && typeof existing === "object" ? { ...existing } : {};
         const hosts =
-          nextEntry.hosts && typeof nextEntry.hosts === "object"
-            ? { ...nextEntry.hosts }
+          entry.hosts && typeof entry.hosts === "object"
+            ? { ...entry.hosts }
             : {};
-        if (!hosts[activeAlias]) {
-          hosts[activeAlias] = {};
-          changed = true;
-        }
-        nextEntry.hosts = hosts;
-        nextChildren[roleId] = nextEntry;
-      });
+        const desiredAliasesForRole = desiredHostsByRole[roleId] || new Set<string>();
 
-      Object.keys(nextChildren).forEach((roleId) => {
-        const entry = nextChildren[roleId];
-        if (!entry || typeof entry !== "object") return;
-        const hosts =
-          entry.hosts && typeof entry.hosts === "object" ? { ...entry.hosts } : null;
-        if (!hosts) return;
-        if (desiredRoles.has(roleId)) return;
-        if (Object.prototype.hasOwnProperty.call(hosts, activeAlias)) {
-          delete hosts[activeAlias];
-          changed = true;
-        }
+        desiredAliasesForRole.forEach((alias) => {
+          if (!Object.prototype.hasOwnProperty.call(hosts, alias)) {
+            hosts[alias] = {};
+            changed = true;
+          }
+        });
+
+        Object.keys(hosts).forEach((alias) => {
+          if (managedAliases.has(alias) && !desiredAliasesForRole.has(alias)) {
+            delete hosts[alias];
+            changed = true;
+          }
+        });
+
         if (Object.keys(hosts).length === 0) {
-          delete nextChildren[roleId];
-          changed = true;
-        } else {
-          nextChildren[roleId] = { ...entry, hosts };
+          if (Object.prototype.hasOwnProperty.call(nextChildren, roleId)) {
+            delete nextChildren[roleId];
+            changed = true;
+          }
+          return;
         }
+
+        nextChildren[roleId] = { ...entry, hosts };
       });
 
       if (!changed) return;
