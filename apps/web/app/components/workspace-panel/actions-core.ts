@@ -12,6 +12,7 @@ import {
   normalizeDeviceColor,
   normalizeDeviceEmoji,
 } from "../deployment-credentials/device-visuals";
+import { buildCredentialsPatchFromHostVarsData } from "../../lib/device_meta";
 
 export function createWorkspacePanelCoreActions(ctx: any) {
   const {
@@ -1096,61 +1097,7 @@ export function createWorkspacePanelCoreActions(ctx: any) {
     try {
       const content = await readWorkspaceFile(hostVarsPath);
       const data = (YAML.parse(content) ?? {}) as Record<string, any>;
-      const nextHost = typeof data.ansible_host === "string" ? data.ansible_host : "";
-      const nextUser = typeof data.ansible_user === "string" ? data.ansible_user : "";
-      const nextDescription =
-        typeof data.description === "string" ? data.description : "";
-      const nextPrimaryDomain =
-        typeof data.DOMAIN_PRIMARY === "string" ? data.DOMAIN_PRIMARY : "";
-      const nextColor =
-        typeof data.color === "string" ? normalizeDeviceColor(data.color) || "" : "";
-      const nextLogoEmoji =
-        data.logo &&
-        typeof data.logo === "object" &&
-        typeof data.logo.emoji === "string"
-          ? normalizeDeviceEmoji(data.logo.emoji) || ""
-          : "";
-      let nextPort = "";
-      if (typeof data.ansible_port === "number") {
-        nextPort = Number.isFinite(data.ansible_port) ? String(data.ansible_port) : "";
-      } else if (typeof data.ansible_port === "string") {
-        const parsed = Number(data.ansible_port);
-        if (Number.isInteger(parsed)) {
-          nextPort = String(parsed);
-        }
-      }
-      const patch: Record<string, string> = {};
-      if (nextHost && nextHost !== credentials.host) {
-        patch.host = nextHost;
-      }
-      if (nextUser && nextUser !== credentials.user) {
-        patch.user = nextUser;
-      }
-      if (nextPort) {
-        if (nextPort !== credentials.port) {
-          patch.port = nextPort;
-        }
-      }
-      if (nextDescription !== credentials.description) {
-        patch.description = nextDescription;
-      }
-      if (nextPrimaryDomain !== credentials.primaryDomain) {
-        patch.primaryDomain = nextPrimaryDomain;
-      }
-      if (nextColor) {
-        if (nextColor !== credentials.color) {
-          patch.color = nextColor;
-        }
-      } else if (credentials.color) {
-        patch.color = "";
-      }
-      if (nextLogoEmoji) {
-        if (nextLogoEmoji !== credentials.logoEmoji) {
-          patch.logoEmoji = nextLogoEmoji;
-        }
-      } else if (credentials.logoEmoji) {
-        patch.logoEmoji = "";
-      }
+      const patch = buildCredentialsPatchFromHostVarsData(data, credentials);
       if (Object.keys(patch).length > 0) {
         onCredentialsPatch(patch);
       }

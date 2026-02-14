@@ -11,6 +11,11 @@ import DeploymentWorkspaceServerSwitcher from "./DeploymentWorkspaceServerSwitch
 import ProviderOrderPanel from "./ProviderOrderPanel";
 import styles from "./DeploymentWorkspace.module.css";
 import { createInitialState } from "../lib/deploy_form";
+import {
+  createServerPlaceholder,
+  normalizePersistedDeviceMeta,
+  parseHostVarsServerPatchData,
+} from "../lib/device_meta";
 import { buildDeploymentPayload } from "../lib/deployment_payload";
 import {
   hexToRgba,
@@ -74,35 +79,6 @@ type RoleAppConfigResponse = {
   imported_paths?: number;
 };
 
-function ensureUniqueDeviceMeta(servers: ServerState[]): ServerState[] {
-  const usedColors = new Set<string>();
-  const usedLogos = new Set<string>();
-  servers.forEach((server) => {
-    const color = normalizeDeviceColor(server.color);
-    if (color) usedColors.add(color);
-    const logo = normalizeDeviceEmoji(server.logoEmoji);
-    if (logo) usedLogos.add(logo);
-  });
-  return servers.map((server) => {
-    const normalizedColor = normalizeDeviceColor(server.color);
-    const normalizedLogo = normalizeDeviceEmoji(server.logoEmoji);
-    const color = normalizedColor || pickUniqueDeviceColor(usedColors);
-    const logoEmoji = normalizedLogo || pickUniqueDeviceEmoji(usedLogos);
-    if (!normalizedColor) {
-      usedColors.add(color);
-    }
-    if (!normalizedLogo) {
-      usedLogos.add(logoEmoji);
-    }
-    return {
-      ...server,
-      description: String(server.description || ""),
-      color,
-      logoEmoji,
-    };
-  });
-}
-
 function createDeviceStyle(
   color: string,
   {
@@ -119,6 +95,13 @@ function createDeviceStyle(
     ...(border ? { "--device-row-border": border } : {}),
     ...(outline ? { "--device-row-outline": outline } : {}),
   } as CSSProperties;
+}
+
+function encodeWorkspacePath(path: string): string {
+  return String(path || "")
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
 }
 
 const PANEL_QUERY_TO_KEY: Record<
@@ -357,6 +340,104 @@ export default function DeploymentWorkspace({
     }
     return servers[0] ?? null;
   }, [servers, activeAlias]);
+
+  const serverAliasKey = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          servers
+            .map((server) => String(server.alias || "").trim())
+            .filter(Boolean)
+        )
+      )
+        .sort((a, b) => a.localeCompare(b))
+        .join("|"),
+    [servers]
+  );
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    const aliases = serverAliasKey
+      ? serverAliasKey.split("|").map((alias) => String(alias || "").trim()).filter(Boolean)
+      : [];
+    if (aliases.length === 0) return;
+
+    let cancelled = false;
+    const loadServerMetaFromHostVars = async () => {
+      try {
+        const listRes = await fetch(`${baseUrl}/api/workspaces/${workspaceId}/files`, {
+          cache: "no-store",
+        });
+        if (!listRes.ok) return;
+        const listData = await listRes.json();
+        const files = Array.isArray(listData?.files) ? listData.files : [];
+        const hostVarsPathByAlias = new Map<string, string>();
+
+        files.forEach((entry: any) => {
+          if (!entry || entry.is_dir) return;
+          const path = String(entry.path || "");
+          const match = path.match(/^host_vars\/([^/]+)\.ya?ml$/i);
+          if (!match) return;
+          const alias = String(match[1] || "").trim();
+          if (!alias || hostVarsPathByAlias.has(alias)) return;
+          hostVarsPathByAlias.set(alias, path);
+        });
+
+        const patchByAlias: Record<string, Partial<ServerState>> = {};
+        await Promise.all(
+          aliases.map(async (alias) => {
+            const hostVarsPath = hostVarsPathByAlias.get(alias);
+            if (!hostVarsPath) return;
+            const fileRes = await fetch(
+              `${baseUrl}/api/workspaces/${workspaceId}/files/${encodeWorkspacePath(
+                hostVarsPath
+              )}`,
+              { cache: "no-store" }
+            );
+            if (!fileRes.ok) return;
+            const fileData = await fileRes.json();
+            const parsed = (YAML.parse(String(fileData?.content ?? "")) ?? {}) as Record<
+              string,
+              unknown
+            >;
+            const patch = parseHostVarsServerPatchData(parsed);
+            if (Object.keys(patch).length > 0) {
+              patchByAlias[alias] = patch;
+            }
+          })
+        );
+
+        if (cancelled || Object.keys(patchByAlias).length === 0) return;
+        setServers((prev) => {
+          let changed = false;
+          const next = prev.map((server) => {
+            const patch = patchByAlias[server.alias];
+            if (!patch) return server;
+            const merged: ServerState = { ...server, ...patch };
+            const same =
+              merged.host === server.host &&
+              merged.port === server.port &&
+              merged.user === server.user &&
+              merged.description === server.description &&
+              merged.primaryDomain === server.primaryDomain &&
+              merged.color === server.color &&
+              merged.logoEmoji === server.logoEmoji;
+            if (same) return server;
+            changed = true;
+            return merged;
+          });
+          return changed ? normalizePersistedDeviceMeta(next) : prev;
+        });
+      } catch {
+        // ignore hydration failures and keep current in-memory state
+      }
+    };
+
+    void loadServerMetaFromHostVars();
+    return () => {
+      cancelled = true;
+    };
+  }, [baseUrl, workspaceId, serverAliasKey]);
 
   const selectedRolesByAlias = useMemo(() => {
     const out: Record<string, string[]> = {};
@@ -648,16 +729,16 @@ export default function DeploymentWorkspace({
         const nextServers: ServerState[] = [];
         ordered.forEach((alias) => {
           const existing = byAlias.get(alias);
-          nextServers.push(existing ?? createServer(alias, nextServers));
+          nextServers.push(existing ?? createServerPlaceholder(alias));
         });
-        return ensureUniqueDeviceMeta(nextServers);
+        return normalizePersistedDeviceMeta(nextServers);
       });
 
       if (!activeAlias) {
         setActiveAlias(aliases[0] ?? "");
       }
     },
-    [activeAlias, createServer, defaultPlanForRole]
+    [activeAlias, createServerPlaceholder, defaultPlanForRole]
   );
 
   const updateServer = useCallback(
@@ -682,7 +763,7 @@ export default function DeploymentWorkspace({
           ...patch,
           alias: shouldRename ? nextAliasRaw : prev[idx].alias,
         };
-        return ensureUniqueDeviceMeta(next);
+        return normalizePersistedDeviceMeta(next);
       });
 
       if (shouldRename) {
@@ -740,7 +821,7 @@ export default function DeploymentWorkspace({
       }
 
       setServers((prev) =>
-        ensureUniqueDeviceMeta([...prev, createServer(alias, prev)])
+        normalizePersistedDeviceMeta([...prev, createServer(alias, prev)])
       );
       setSelectedByAlias((prev) => ({ ...prev, [alias]: new Set<string>() }));
       setActiveAlias(alias);
@@ -757,7 +838,7 @@ export default function DeploymentWorkspace({
         if (activeAlias === alias) {
           setActiveAlias(next[0]?.alias ?? "");
         }
-        return ensureUniqueDeviceMeta(next);
+        return normalizePersistedDeviceMeta(next);
       });
       setSelectedByAlias((prev) => {
         const next: Record<string, Set<string>> = { ...prev };
@@ -1204,9 +1285,9 @@ export default function DeploymentWorkspace({
             user: patch.user,
             port: patch.port,
           };
-          return ensureUniqueDeviceMeta(next);
+          return normalizePersistedDeviceMeta(next);
         }
-        return ensureUniqueDeviceMeta([...prev, patch]);
+        return normalizePersistedDeviceMeta([...prev, patch]);
       });
       setSelectedByAlias((prev) => {
         if (prev[alias]) return prev;
