@@ -8,6 +8,7 @@ export type FileEntry = {
 export type CredentialsState = {
   alias: string;
   description: string;
+  primaryDomain: string;
   host: string;
   port: string;
   user: string;
@@ -69,6 +70,9 @@ export type VaultBlock = {
 
 export type WorkspaceListEntry = {
   id: string;
+  name?: string;
+  state?: string;
   created_at?: string | null;
+  last_modified_at?: string | null;
   last_used?: string | null;
 };

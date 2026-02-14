@@ -33,6 +33,7 @@ function formatViewLabel(mode: ViewMode): string {
 }
 
 type RoleDashboardProps = {
+  baseUrl?: string;
   roles: Role[];
   loading: boolean;
   error: string | null;
@@ -56,11 +57,18 @@ type RoleDashboardProps = {
   serverMetaByAlias?: Record<string, { logoEmoji?: string | null; color?: string | null }>;
   selectedByAlias?: Record<string, string[]>;
   onToggleSelectedForAlias?: (alias: string, roleId: string) => void;
+  selectedPlanByAlias?: Record<string, Record<string, string | null>>;
+  onSelectPlanForAlias?: (
+    alias: string,
+    roleId: string,
+    planId: string | null
+  ) => void;
   serverSwitcher?: ReactNode;
   compact?: boolean;
 };
 
 export default function RoleDashboard({
+  baseUrl,
   roles,
   loading,
   error,
@@ -74,6 +82,8 @@ export default function RoleDashboard({
   serverMetaByAlias,
   selectedByAlias,
   onToggleSelectedForAlias,
+  selectedPlanByAlias,
+  onSelectPlanForAlias,
   serverSwitcher,
   compact = false,
 }: RoleDashboardProps) {
@@ -206,6 +216,80 @@ export default function RoleDashboard({
     return out;
   }, [selectedByAlias, activeAlias, selected]);
 
+  const rolePlanOptions = useMemo(() => {
+    const out: Record<string, { id: string; label: string }[]> = {};
+    roles.forEach((role) => {
+      const pricing = role?.pricing;
+      const offerings = Array.isArray(pricing?.offerings) ? pricing.offerings : [];
+      const defaultOfferingId = String(
+        pricing?.default_offering_id || pricing?.default_offering || ""
+      ).trim();
+      const orderedOfferings = offerings
+        .slice()
+        .sort((a: any, b: any) => {
+          const aId = String(a?.id || "").trim();
+          const bId = String(b?.id || "").trim();
+          if (aId === defaultOfferingId && bId !== defaultOfferingId) return -1;
+          if (bId === defaultOfferingId && aId !== defaultOfferingId) return 1;
+          return aId.localeCompare(bId);
+        });
+      const plans = orderedOfferings.flatMap((offering: any) =>
+        Array.isArray(offering?.plans) ? offering.plans : []
+      );
+      const normalized = plans
+        .map((plan: any) => ({
+          id: String(plan?.id || "").trim(),
+          label: String(plan?.label || plan?.id || "").trim(),
+        }))
+        .filter((plan: { id: string; label: string }) => plan.id && plan.label);
+      const deduped = Array.from(
+        new Map(normalized.map((plan: { id: string; label: string }) => [plan.id, plan])).values()
+      );
+      if (!deduped.some((plan) => plan.id === "community")) {
+        deduped.unshift({ id: "community", label: "Community" });
+      }
+      out[role.id] = deduped.length > 0 ? deduped : [{ id: "community", label: "Community" }];
+    });
+    return out;
+  }, [roles]);
+
+  const defaultPlanByRole = useMemo(() => {
+    const out: Record<string, string> = {};
+    Object.entries(rolePlanOptions).forEach(([roleId, plans]) => {
+      out[roleId] =
+        plans.find((plan) => plan.id === "community")?.id ||
+        plans[0]?.id ||
+        "community";
+    });
+    return out;
+  }, [rolePlanOptions]);
+
+  const selectedPlanLookup = useMemo(() => {
+    const out: Record<string, Record<string, string | null>> = {};
+    matrixAliases.forEach((alias) => {
+      const next: Record<string, string | null> = {};
+      const selectedRoles = selectedLookup[alias] || new Set<string>();
+      const rolePlans = selectedPlanByAlias?.[alias] || {};
+      roles.forEach((role) => {
+        const roleId = role.id;
+        const selectedPlan = rolePlans?.[roleId];
+        if (selectedRoles.has(roleId)) {
+          next[roleId] = selectedPlan || defaultPlanByRole[roleId] || "community";
+        } else {
+          next[roleId] = null;
+        }
+      });
+      out[alias] = next;
+    });
+    return out;
+  }, [matrixAliases, selectedLookup, selectedPlanByAlias, roles, defaultPlanByRole]);
+
+  const activeSelectedPlanByRole = useMemo(() => {
+    const alias = String(activeAlias || "").trim();
+    if (!alias) return {};
+    return selectedPlanLookup[alias] || {};
+  }, [activeAlias, selectedPlanLookup]);
+
   const baseFilteredRoles = useMemo(
     () =>
       filterRoles(roles, {
@@ -304,7 +388,8 @@ export default function RoleDashboard({
   };
 
   const canToggleAliasRole = (alias: string) =>
-    Boolean(onToggleSelectedForAlias) || String(activeAlias || "").trim() === alias;
+    Boolean(onSelectPlanForAlias || onToggleSelectedForAlias) ||
+    String(activeAlias || "").trim() === alias;
 
   const toggleSelectedByAlias = (alias: string, roleId: string) => {
     if (!alias || !roleId) return;
@@ -314,6 +399,20 @@ export default function RoleDashboard({
     }
     if (String(activeAlias || "").trim() === alias) {
       onToggleSelected(roleId);
+    }
+  };
+
+  const selectPlanByAlias = (alias: string, roleId: string, planId: string | null) => {
+    if (!alias || !roleId) return;
+    if (onSelectPlanForAlias) {
+      onSelectPlanForAlias(alias, roleId, planId);
+      return;
+    }
+    const selectedState = Boolean(selectedLookup[alias]?.has(roleId));
+    if (planId && !selectedState) {
+      toggleSelectedByAlias(alias, roleId);
+    } else if (!planId && selectedState) {
+      toggleSelectedByAlias(alias, roleId);
     }
   };
 
@@ -820,6 +919,17 @@ export default function RoleDashboard({
                                     enabled={selectedState}
                                     disabled={!selectable}
                                     compact
+                                    plans={rolePlanOptions[role.id]}
+                                    selectedPlanId={
+                                      selectedPlanLookup[alias]?.[role.id] ?? null
+                                    }
+                                    onSelectPlan={(planId) =>
+                                      selectPlanByAlias(alias, role.id, planId)
+                                    }
+                                    roleId={role.id}
+                                    pricing={role.pricing || null}
+                                    pricingSummary={role.pricing_summary || null}
+                                    baseUrl={baseUrl}
                                     contextLabel={`device "${alias}" for "${role.display_name}"`}
                                     onEnable={() => {
                                       if (!selectedState) {
@@ -863,6 +973,12 @@ export default function RoleDashboard({
                 selected={selected}
                 iconSize={viewConfig.iconSize}
                 onToggleSelected={onToggleSelected}
+                rolePlans={rolePlanOptions}
+                selectedPlanByRole={activeSelectedPlanByRole}
+                onSelectRolePlan={(roleId, planId) =>
+                  selectPlanByAlias(String(activeAlias || "").trim(), roleId, planId)
+                }
+                baseUrl={baseUrl}
                 developerMode={accessMode === "developer"}
                 onEditRoleConfig={
                   onLoadRoleAppConfig ? (role) => void startEditRoleConfig(role) : undefined
@@ -874,6 +990,12 @@ export default function RoleDashboard({
                 roles={paginatedRoles}
                 selected={selected}
                 onToggleSelected={onToggleSelected}
+                rolePlans={rolePlanOptions}
+                selectedPlanByRole={activeSelectedPlanByRole}
+                onSelectRolePlan={(roleId, planId) =>
+                  selectPlanByAlias(String(activeAlias || "").trim(), roleId, planId)
+                }
+                baseUrl={baseUrl}
                 developerMode={accessMode === "developer"}
                 onEditRoleConfig={
                   onLoadRoleAppConfig ? (role) => void startEditRoleConfig(role) : undefined

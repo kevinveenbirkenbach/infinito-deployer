@@ -8,7 +8,7 @@ test("builds payload for password auth with selected aliases", () => {
     activeServer: {
       alias: "server_1",
       host: " example.com ",
-      port: "",
+      port: "22",
       user: "root",
       authMethod: "password",
       password: "secret",
@@ -28,7 +28,7 @@ test("builds payload for password auth with selected aliases", () => {
   assert.equal(result.payload.auth.method, "password");
   assert.equal(result.payload.auth.password, "secret");
   assert.equal(result.payload.auth.private_key, undefined);
-  assert.equal(result.payload.port, undefined);
+  assert.equal(result.payload.port, 22);
   assert.equal(result.payload.limit, "server_1");
 });
 
@@ -37,7 +37,7 @@ test("uses global role filter when provided", () => {
     activeServer: {
       alias: "server_1",
       host: "example.com",
-      port: "",
+      port: "22",
       user: "root",
       authMethod: "password",
       password: "secret",
@@ -131,7 +131,7 @@ test("includes key passphrase when provided", () => {
     activeServer: {
       alias: "server_1",
       host: "127.0.0.1",
-      port: "",
+      port: "22",
       user: "dev",
       authMethod: "private_key",
       password: "",
@@ -146,4 +146,5 @@ test("includes key passphrase when provided", () => {
   });
 
   assert.equal(result.payload.auth.passphrase, "pass123");
+  assert.equal(result.payload.port, 22);
 });

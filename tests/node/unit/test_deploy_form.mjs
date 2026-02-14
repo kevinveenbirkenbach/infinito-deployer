@@ -49,6 +49,7 @@ test("valid form passes", () => {
   const errors = validateForm({
     alias: "server_1",
     host: "127.0.0.1",
+    port: "22",
     user: "dev",
     authMethod: "password",
     password: "secret",

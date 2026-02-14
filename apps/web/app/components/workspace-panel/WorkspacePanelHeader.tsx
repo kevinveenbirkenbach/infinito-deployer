@@ -11,8 +11,11 @@ type WorkspacePanelHeaderProps = {
   workspaceList: WorkspaceListEntry[];
   workspaceError: string | null;
   inventorySyncError: string | null;
+  workspaceLoading?: boolean;
+  deletingWorkspaceId?: string | null;
   onCreateWorkspace: () => void;
   onSelectWorkspace: (id: string) => void;
+  onDeleteWorkspace?: (id: string) => void;
 };
 
 export default function WorkspacePanelHeader({
@@ -23,8 +26,11 @@ export default function WorkspacePanelHeader({
   workspaceList,
   workspaceError,
   inventorySyncError,
+  workspaceLoading = false,
+  deletingWorkspaceId = null,
   onCreateWorkspace,
   onSelectWorkspace,
+  onDeleteWorkspace,
 }: WorkspacePanelHeaderProps) {
   return (
     <>
@@ -54,8 +60,12 @@ export default function WorkspacePanelHeader({
                 Signed in as {userId}
               </p>
             </div>
-            <button onClick={onCreateWorkspace} className={styles.newWorkspaceButton}>
-              New workspace
+            <button
+              onClick={onCreateWorkspace}
+              className={styles.newWorkspaceButton}
+              disabled={workspaceLoading}
+            >
+              {workspaceLoading ? "Creating..." : "New workspace"}
             </button>
           </div>
           <div className={styles.workspaceList}>
@@ -65,24 +75,47 @@ export default function WorkspacePanelHeader({
               </div>
             ) : (
               workspaceList.map((entry) => (
-                <button
+                <div
                   key={entry.id}
-                  onClick={() => onSelectWorkspace(entry.id)}
-                  className={`${styles.workspaceItem} ${
-                    entry.id === workspaceId ? styles.workspaceItemActive : ""
+                  className={`${styles.workspaceItemRow} ${
+                    entry.id === workspaceId ? styles.workspaceItemRowActive : ""
                   }`}
                 >
-                  <span>{entry.id}</span>
-                  <span className={styles.workspaceTimestamp}>
-                    {(() => {
-                      if (!entry.last_used) return "new";
-                      const parsed = new Date(entry.last_used);
-                      return Number.isNaN(parsed.getTime())
-                        ? "new"
-                        : parsed.toLocaleString();
-                    })()}
-                  </span>
-                </button>
+                  <button
+                    onClick={() => onSelectWorkspace(entry.id)}
+                    className={`${styles.workspaceItem} ${
+                      entry.id === workspaceId ? styles.workspaceItemActive : ""
+                    }`}
+                  >
+                    <span className={styles.workspaceItemMain}>
+                      <span>{entry.name || entry.id}</span>
+                      <span className={styles.workspaceState}>
+                        {(entry.state || "draft").toLowerCase()}
+                      </span>
+                    </span>
+                    <span className={styles.workspaceTimestamp}>
+                      {(() => {
+                        const ts = entry.last_modified_at || entry.last_used || null;
+                        if (!ts) return "new";
+                        const parsed = new Date(ts);
+                        return Number.isNaN(parsed.getTime())
+                          ? "new"
+                          : parsed.toLocaleString();
+                      })()}
+                    </span>
+                  </button>
+                  {onDeleteWorkspace ? (
+                    <button
+                      type="button"
+                      className={styles.deleteWorkspaceButton}
+                      onClick={() => onDeleteWorkspace(entry.id)}
+                      disabled={deletingWorkspaceId === entry.id}
+                      title="Delete workspace"
+                    >
+                      {deletingWorkspaceId === entry.id ? "Deleting..." : "Delete"}
+                    </button>
+                  ) : null}
+                </div>
               ))
             )}
           </div>

@@ -8,6 +8,7 @@ from functools import lru_cache
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
+from api.auth import ensure_workspace_access
 from api.schemas.deployment import DeploymentRequest
 from api.schemas.deployment_job import (
     DeploymentCancelOut,
@@ -19,6 +20,7 @@ from services.job_runner.paths import job_paths
 from services.job_runner.persistence import load_json
 from services.job_runner.secrets import mask_secrets
 from services.job_runner.util import utc_iso
+from services.workspaces import WorkspaceService
 
 router = APIRouter(prefix="/deployments", tags=["deployments"])
 _TERMINAL_STATUSES = {"succeeded", "failed", "canceled"}
@@ -32,8 +34,13 @@ def _jobs() -> JobRunnerService:
     return JobRunnerService()
 
 
+@lru_cache(maxsize=1)
+def _workspaces() -> WorkspaceService:
+    return WorkspaceService()
+
+
 @router.post("", response_model=DeploymentCreateOut)
-def create_deployment(req: DeploymentRequest) -> DeploymentCreateOut:
+def create_deployment(req: DeploymentRequest, request: Request) -> DeploymentCreateOut:
     """
     Create a deployment job and start the runner subprocess.
 
@@ -41,7 +48,9 @@ def create_deployment(req: DeploymentRequest) -> DeploymentCreateOut:
       - Secrets (password/private_key) are never persisted.
       - Inventory is copied from the workspace.
     """
+    ensure_workspace_access(request, req.workspace_id, _workspaces())
     job = _jobs().create(req)
+    _workspaces().set_workspace_state(req.workspace_id, "deployed")
     return DeploymentCreateOut(job_id=job.job_id)
 
 

@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import YAML from "yaml";
 import RoleDashboard from "./RoleDashboard";
 import DeploymentCredentialsForm from "./DeploymentCredentialsForm";
 import WorkspacePanel from "./WorkspacePanel";
 import LiveDeploymentView from "./LiveDeploymentView";
 import DeploymentWorkspaceServerSwitcher from "./DeploymentWorkspaceServerSwitcher";
+import ProviderOrderPanel from "./ProviderOrderPanel";
+import UsersPanel from "./UsersPanel";
 import styles from "./DeploymentWorkspace.module.css";
 import { createInitialState } from "../lib/deploy_form";
 import { buildDeploymentPayload } from "../lib/deployment_payload";
@@ -35,6 +38,23 @@ type Role = {
   homepage?: string | null;
   issue_tracker_url?: string | null;
   license_url?: string | null;
+  pricing_summary?: {
+    default_offering_id?: string;
+    default_plan_id?: string;
+    currencies?: string[];
+    regions?: string[];
+    [key: string]: unknown;
+  } | null;
+  pricing?: {
+    default_offering_id?: string;
+    default_plan_id?: string;
+    offerings?: Array<{
+      id: string;
+      label?: string;
+      plans?: Array<{ id: string; label?: string; description?: string }>;
+    }>;
+    [key: string]: unknown;
+  } | null;
 };
 
 type AliasRename = { from: string; to: string };
@@ -111,6 +131,7 @@ export default function DeploymentWorkspace({
     {
       alias: initial.alias,
       description: initial.description,
+      primaryDomain: initial.primaryDomain || "",
       host: initial.host,
       port: initial.port,
       user: initial.user,
@@ -130,6 +151,9 @@ export default function DeploymentWorkspace({
   const [selectedByAlias, setSelectedByAlias] = useState<
     Record<string, Set<string>>
   >(() => ({ [initial.alias]: new Set<string>() }));
+  const [selectedPlansByAlias, setSelectedPlansByAlias] = useState<
+    Record<string, Record<string, string | null>>
+  >(() => ({ [initial.alias]: {} }));
   const [aliasRenames, setAliasRenames] = useState<AliasRename[]>([]);
   const [aliasDeletes, setAliasDeletes] = useState<string[]>([]);
   const [aliasCleanups, setAliasCleanups] = useState<string[]>([]);
@@ -166,8 +190,11 @@ export default function DeploymentWorkspace({
   const [openCredentialsAlias, setOpenCredentialsAlias] = useState<string | null>(
     null
   );
+  const [deviceMode, setDeviceMode] = useState<"customer" | "expert" | "developer">(
+    "customer"
+  );
   const [activePanel, setActivePanel] = useState<
-    "store" | "server" | "inventory" | "deploy"
+    "store" | "server" | "inventory" | "deploy" | "users"
   >("store");
 
   useEffect(() => {
@@ -233,6 +260,7 @@ export default function DeploymentWorkspace({
       return {
         alias,
         description: "",
+        primaryDomain: "",
         host: "",
         port: "22",
         user: "root",
@@ -269,6 +297,51 @@ export default function DeploymentWorkspace({
     () => selectedRolesByAlias[activeAlias] ?? [],
     [selectedRolesByAlias, activeAlias]
   );
+
+  const defaultPlanForRole = useCallback(
+    (roleId: string) => {
+      const role = roles.find((entry) => entry.id === roleId);
+      if (!role) return "community";
+      const pricing = role.pricing || null;
+      const offerings = Array.isArray(pricing?.offerings) ? pricing.offerings : [];
+      const defaultOfferingId = String(pricing?.default_offering_id || "").trim();
+      const offering =
+        offerings.find((item) => String(item?.id || "").trim() === defaultOfferingId) ||
+        offerings[0] ||
+        null;
+      const plans = Array.isArray((offering as any)?.plans) ? (offering as any).plans : [];
+      const defaultPlanId = String(pricing?.default_plan_id || "").trim();
+      if (defaultPlanId && plans.some((plan: any) => String(plan?.id || "").trim() === defaultPlanId)) {
+        return defaultPlanId;
+      }
+      const community = plans.find((plan: any) => String(plan?.id || "").trim() === "community");
+      if (community) return "community";
+      const first = plans[0];
+      return String(first?.id || "").trim() || "community";
+    },
+    [roles]
+  );
+
+  useEffect(() => {
+    setSelectedPlansByAlias((prev) => {
+      const next: Record<string, Record<string, string | null>> = { ...prev };
+      Object.entries(selectedByAlias).forEach(([alias, roleSet]) => {
+        const current = { ...(next[alias] || {}) };
+        roleSet.forEach((roleId) => {
+          if (!current[roleId]) {
+            current[roleId] = defaultPlanForRole(roleId);
+          }
+        });
+        Object.keys(current).forEach((roleId) => {
+          if (!roleSet.has(roleId)) {
+            current[roleId] = null;
+          }
+        });
+        next[alias] = current;
+      });
+      return next;
+    });
+  }, [selectedByAlias, defaultPlanForRole]);
 
   const selectableAliases = useMemo(() => {
     const out: string[] = [];
@@ -378,6 +451,7 @@ export default function DeploymentWorkspace({
     setConnectionResults({});
     setDeploySelection(new Set());
     setDeployRoleFilter(new Set());
+    setSelectedPlansByAlias({});
     setAliasRenames([]);
     setAliasDeletes([]);
     setAliasCleanups([]);
@@ -389,6 +463,26 @@ export default function DeploymentWorkspace({
     setConnectRequestKey(0);
     setCancelRequestKey(0);
   }, [workspaceId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!workspaceId) {
+      setDeviceMode("customer");
+      return;
+    }
+    const stored = window.localStorage.getItem(`infinito.devices.mode.${workspaceId}`);
+    if (stored === "customer" || stored === "expert" || stored === "developer") {
+      setDeviceMode(stored);
+      return;
+    }
+    setDeviceMode("customer");
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!workspaceId) return;
+    window.localStorage.setItem(`infinito.devices.mode.${workspaceId}`, deviceMode);
+  }, [workspaceId, deviceMode]);
 
   useEffect(() => {
     if (!deployRolePickerOpen) return;
@@ -419,6 +513,23 @@ export default function DeploymentWorkspace({
         });
         return next;
       });
+      setSelectedPlansByAlias((prev) => {
+        const next: Record<string, Record<string, string | null>> = { ...prev };
+        aliases.forEach((alias) => {
+          const current = { ...(next[alias] || {}) };
+          const enabled = new Set((rolesByAlias?.[alias] ?? []).map((item) => String(item || "").trim()).filter(Boolean));
+          enabled.forEach((roleId) => {
+            if (!current[roleId]) {
+              current[roleId] = defaultPlanForRole(roleId);
+            }
+          });
+          Object.keys(current).forEach((roleId) => {
+            if (!enabled.has(roleId)) current[roleId] = null;
+          });
+          next[alias] = current;
+        });
+        return next;
+      });
 
       setServers((prev) => {
         const byAlias = new Map(prev.map((server) => [server.alias, server]));
@@ -446,7 +557,7 @@ export default function DeploymentWorkspace({
         setActiveAlias(aliases[0] ?? "");
       }
     },
-    [activeAlias, createServer]
+    [activeAlias, createServer, defaultPlanForRole]
   );
 
   const updateServer = useCallback(
@@ -487,6 +598,13 @@ export default function DeploymentWorkspace({
           } else {
             next[nextAlias] = roles;
           }
+          return next;
+        });
+        setSelectedPlansByAlias((prev) => {
+          const next: Record<string, Record<string, string | null>> = { ...prev };
+          const previous = { ...(next[alias] || {}) };
+          delete next[alias];
+          next[nextAlias] = { ...(next[nextAlias] || {}), ...previous };
           return next;
         });
         if (activeAlias === alias) {
@@ -535,6 +653,11 @@ export default function DeploymentWorkspace({
       });
       setSelectedByAlias((prev) => {
         const next: Record<string, Set<string>> = { ...prev };
+        delete next[alias];
+        return next;
+      });
+      setSelectedPlansByAlias((prev) => {
+        const next: Record<string, Record<string, string | null>> = { ...prev };
         delete next[alias];
         return next;
       });
@@ -590,6 +713,8 @@ export default function DeploymentWorkspace({
     const targetAlias = String(alias || "").trim();
     const roleId = String(id || "").trim();
     if (!targetAlias || !roleId) return;
+    const currentlySelected = Boolean(selectedByAlias[targetAlias]?.has(roleId));
+    const nextEnabled = !currentlySelected;
     setSelectedByAlias((prev) => {
       const next: Record<string, Set<string>> = { ...prev };
       const set = next[targetAlias]
@@ -603,8 +728,15 @@ export default function DeploymentWorkspace({
       next[targetAlias] = set;
       return next;
     });
+    setSelectedPlansByAlias((prev) => {
+      const next: Record<string, Record<string, string | null>> = { ...prev };
+      const current = { ...(next[targetAlias] || {}) };
+      current[roleId] = nextEnabled ? current[roleId] || defaultPlanForRole(roleId) : null;
+      next[targetAlias] = current;
+      return next;
+    });
     setSelectionTouched(true);
-  }, []);
+  }, [defaultPlanForRole, selectedByAlias]);
 
   const toggleSelected = useCallback(
     (id: string) => {
@@ -735,6 +867,7 @@ export default function DeploymentWorkspace({
     return {
       alias: activeServer?.alias ?? "",
       description: activeServer?.description ?? "",
+      primaryDomain: activeServer?.primaryDomain ?? "",
       host: activeServer?.host ?? "",
       port: activeServer?.port ?? "",
       user: activeServer?.user ?? "",
@@ -928,6 +1061,58 @@ export default function DeploymentWorkspace({
     setActivePanel("server");
   };
 
+  const handleProviderOrderedServer = useCallback(
+    (device: {
+      alias: string;
+      ansible_host: string;
+      ansible_user: string;
+      ansible_port: number;
+    }) => {
+      const alias = String(device.alias || "").trim();
+      if (!alias) return;
+      setServers((prev) => {
+        const existingIndex = prev.findIndex((server) => server.alias === alias);
+        const patch: ServerState = {
+          alias,
+          description: "",
+          primaryDomain: "",
+          host: String(device.ansible_host || ""),
+          port: String(device.ansible_port || 22),
+          user: String(device.ansible_user || "root"),
+          color: pickUniqueDeviceColor(new Set(prev.map((server) => server.color))),
+          logoEmoji: pickUniqueDeviceEmoji(new Set(prev.map((server) => server.logoEmoji))),
+          authMethod: "password",
+          password: "",
+          privateKey: "",
+          publicKey: "",
+          keyAlgorithm: "ed25519",
+          keyPassphrase: "",
+        };
+        if (existingIndex >= 0) {
+          const next = [...prev];
+          next[existingIndex] = {
+            ...next[existingIndex],
+            host: patch.host,
+            user: patch.user,
+            port: patch.port,
+          };
+          return ensureUniqueDeviceMeta(next);
+        }
+        return ensureUniqueDeviceMeta([...prev, patch]);
+      });
+      setSelectedByAlias((prev) => {
+        if (prev[alias]) return prev;
+        return { ...prev, [alias]: new Set<string>() };
+      });
+      setSelectedPlansByAlias((prev) => {
+        if (prev[alias]) return prev;
+        return { ...prev, [alias]: {} };
+      });
+      setActiveAlias(alias);
+    },
+    []
+  );
+
   const roleAppConfigUrl = useCallback(
     (roleId: string, suffix = "", aliasOverride?: string) => {
       if (!workspaceId) {
@@ -989,6 +1174,63 @@ export default function DeploymentWorkspace({
     [roleAppConfigUrl]
   );
 
+  const selectRolePlanForAlias = useCallback(
+    (alias: string, roleId: string, planId: string | null) => {
+      const targetAlias = String(alias || "").trim();
+      const targetRole = String(roleId || "").trim();
+      if (!targetAlias || !targetRole) return;
+
+      const normalizedPlan = planId ? String(planId || "").trim() : null;
+      const resolvedPlan = normalizedPlan || defaultPlanForRole(targetRole);
+
+      setSelectedByAlias((prev) => {
+        const next: Record<string, Set<string>> = { ...prev };
+        const set = next[targetAlias] ? new Set(next[targetAlias]) : new Set<string>();
+        if (normalizedPlan) {
+          set.add(targetRole);
+        } else {
+          set.delete(targetRole);
+        }
+        next[targetAlias] = set;
+        return next;
+      });
+
+      setSelectedPlansByAlias((prev) => {
+        const next: Record<string, Record<string, string | null>> = { ...prev };
+        const current = { ...(next[targetAlias] || {}) };
+        current[targetRole] = normalizedPlan ? resolvedPlan : null;
+        next[targetAlias] = current;
+        return next;
+      });
+      setSelectionTouched(true);
+
+      if (!workspaceId) return;
+      void (async () => {
+        try {
+          const loaded = await loadRoleAppConfig(targetRole, targetAlias);
+          let parsed: Record<string, any> = {};
+          try {
+            const data = YAML.parse(String(loaded?.content ?? "")) ?? {};
+            if (data && typeof data === "object" && !Array.isArray(data)) {
+              parsed = data as Record<string, any>;
+            }
+          } catch {
+            parsed = {};
+          }
+          parsed.plan_id = normalizedPlan ? resolvedPlan : null;
+          await saveRoleAppConfig(
+            targetRole,
+            YAML.stringify(parsed),
+            targetAlias
+          );
+        } catch {
+          // keep UI responsive; inventory write errors are surfaced in the config editor flow
+        }
+      })();
+    },
+    [defaultPlanForRole, loadRoleAppConfig, saveRoleAppConfig, workspaceId]
+  );
+
   const importRoleAppDefaults = useCallback(
     async (roleId: string, aliasOverride?: string): Promise<RoleAppConfigResponse> => {
       const url = roleAppConfigUrl(roleId, "/import-defaults", aliasOverride);
@@ -1025,16 +1267,69 @@ export default function DeploymentWorkspace({
     [servers]
   );
 
+  const usersPanelEnabled = useMemo(() => {
+    const keycloakAliases = new Set<string>();
+    Object.entries(selectedRolesByAlias || {}).forEach(([alias, roleIds]) => {
+      const roles = Array.isArray(roleIds) ? roleIds : [];
+      if (roles.includes("web-app-keycloak")) {
+        const key = String(alias || "").trim();
+        if (key) keycloakAliases.add(key);
+      }
+    });
+    const deployedKeycloakAliases = Array.from(keycloakAliases).filter((alias) =>
+      deployedAliases.has(alias)
+    );
+    const reachableKeycloakAliases = deployedKeycloakAliases.filter((alias) => {
+      const status = connectionResults[alias];
+      return Boolean(status?.ping_ok && status?.ssh_ok);
+    });
+    return reachableKeycloakAliases.length > 0;
+  }, [selectedRolesByAlias, deployedAliases, connectionResults]);
+
+  const usersPanelDisabledReason = useMemo(() => {
+    if (servers.length === 0) {
+      return "Add at least one device first.";
+    }
+    const keycloakAliases = new Set<string>();
+    Object.entries(selectedRolesByAlias || {}).forEach(([alias, roleIds]) => {
+      const roles = Array.isArray(roleIds) ? roleIds : [];
+      if (roles.includes("web-app-keycloak")) {
+        const key = String(alias || "").trim();
+        if (key) keycloakAliases.add(key);
+      }
+    });
+    if (keycloakAliases.size === 0) {
+      return "Enable web-app-keycloak for at least one device.";
+    }
+    const deployedKeycloakAliases = Array.from(keycloakAliases).filter((alias) =>
+      deployedAliases.has(alias)
+    );
+    if (deployedKeycloakAliases.length === 0) {
+      return "Run setup successfully for a Keycloak-enabled device first.";
+    }
+    const reachable = deployedKeycloakAliases.some((alias) => {
+      const status = connectionResults[alias];
+      return Boolean(status?.ping_ok && status?.ssh_ok);
+    });
+    if (!reachable) {
+      return "Run a successful connection test for a deployed Keycloak device.";
+    }
+    return "User management requires an active deployed server with Keycloak and LDAP.";
+  }, [servers.length, selectedRolesByAlias, deployedAliases, connectionResults]);
+
   const panels: {
-    key: "store" | "server" | "inventory" | "deploy";
+    key: "store" | "server" | "inventory" | "deploy" | "users";
     title: string;
     content: ReactNode;
+    disabled?: boolean;
+    disabledReason?: string;
   }[] = [
     {
       key: "store",
       title: "Software",
       content: (
         <RoleDashboard
+          baseUrl={baseUrl}
           roles={roles}
           loading={rolesLoading}
           error={rolesError}
@@ -1048,6 +1343,8 @@ export default function DeploymentWorkspace({
           serverMetaByAlias={serverMetaByAlias}
           selectedByAlias={selectedRolesByAlias}
           onToggleSelectedForAlias={toggleSelectedForAlias}
+          selectedPlanByAlias={selectedPlansByAlias}
+          onSelectPlanForAlias={selectRolePlanForAlias}
           serverSwitcher={serverSwitcher}
           compact
         />
@@ -1057,22 +1354,38 @@ export default function DeploymentWorkspace({
       key: "server",
       title: "Devices",
       content: (
-        <DeploymentCredentialsForm
-          baseUrl={baseUrl}
-          workspaceId={workspaceId}
-          servers={servers}
-          connectionResults={connectionResults}
-          activeAlias={activeAlias}
-          onActiveAliasChange={setActiveAlias}
-          onUpdateServer={updateServer}
-          onConnectionResult={handleConnectionResult}
-          onRemoveServer={removeServer}
-          onCleanupServer={cleanupServer}
-          onAddServer={addServer}
-          openCredentialsAlias={openCredentialsAlias}
-          onOpenCredentialsAliasHandled={() => setOpenCredentialsAlias(null)}
-          compact
-        />
+        <div className={styles.serverPanelStack}>
+          {deviceMode === "developer" ? (
+            <div className={styles.serverModeHint}>
+              Developer mode keeps the existing manual device workflow unchanged.
+            </div>
+          ) : (
+            <ProviderOrderPanel
+              baseUrl={baseUrl}
+              workspaceId={workspaceId}
+              mode={deviceMode}
+              onOrderedServer={handleProviderOrderedServer}
+            />
+          )}
+          <DeploymentCredentialsForm
+            baseUrl={baseUrl}
+            workspaceId={workspaceId}
+            servers={servers}
+            connectionResults={connectionResults}
+            activeAlias={activeAlias}
+            onActiveAliasChange={setActiveAlias}
+            onUpdateServer={updateServer}
+            onConnectionResult={handleConnectionResult}
+            onRemoveServer={removeServer}
+            onCleanupServer={cleanupServer}
+            onAddServer={addServer}
+            openCredentialsAlias={openCredentialsAlias}
+            onOpenCredentialsAliasHandled={() => setOpenCredentialsAlias(null)}
+            deviceMode={deviceMode}
+            onDeviceModeChange={setDeviceMode}
+            compact
+          />
+        </div>
       ),
     },
     {
@@ -1459,47 +1772,70 @@ export default function DeploymentWorkspace({
         </div>
       ),
     },
+    {
+      key: "users",
+      title: "Users",
+      disabled: !usersPanelEnabled,
+      disabledReason: usersPanelDisabledReason,
+      content: <UsersPanel baseUrl={baseUrl} workspaceId={workspaceId} />,
+    },
   ];
 
-  const activeIndex = panels.findIndex((panel) => panel.key === activePanel);
+  const enabledPanels = panels.filter((panel) => !panel.disabled);
+  const activeIndex = enabledPanels.findIndex((panel) => panel.key === activePanel);
   const hasPrev = activeIndex > 0;
-  const hasNext = activeIndex >= 0 && activeIndex < panels.length - 1;
+  const hasNext = activeIndex >= 0 && activeIndex < enabledPanels.length - 1;
+
+  useEffect(() => {
+    if (enabledPanels.length === 0) return;
+    if (!enabledPanels.some((panel) => panel.key === activePanel)) {
+      setActivePanel(enabledPanels[0].key);
+    }
+  }, [activePanel, enabledPanels]);
 
   return (
     <div className={styles.root}>
       <div className={styles.panels}>
         {panels.map((panel) => {
-        const isOpen = activePanel === panel.key;
-        const keepMounted = panel.key === "inventory";
-        const mountContent = isOpen || keepMounted;
-        return (
-          <div
-            key={panel.key}
-            className={`${styles.panelItem} ${isOpen ? styles.panelItemOpen : ""}`}
-          >
-            <button
-              onClick={() => setActivePanel(panel.key)}
-              aria-expanded={isOpen}
-              className={`${styles.panelHeader} ${
-                isOpen ? styles.panelHeaderOpen : ""
-              }`}
+          const isDisabled = Boolean(panel.disabled);
+          const isOpen = !isDisabled && activePanel === panel.key;
+          const keepMounted = panel.key === "inventory";
+          const mountContent = isOpen || keepMounted;
+          return (
+            <div
+              key={panel.key}
+              className={`${styles.panelItem} ${isOpen ? styles.panelItemOpen : ""}`}
             >
-              <span>{panel.title}</span>
-              <span className={styles.panelIcon}>{isOpen ? "–" : "+"}</span>
-            </button>
-            {mountContent ? (
-              <div
-                className={`${styles.panelBody} ${
-                  isOpen ? styles.panelBodyOpen : ""
-                }`}
-                aria-hidden={!isOpen}
+              <button
+                onClick={() => {
+                  if (isDisabled) return;
+                  setActivePanel(panel.key);
+                }}
+                disabled={isDisabled}
+                title={isDisabled ? panel.disabledReason : undefined}
+                aria-expanded={isOpen}
+                className={`${styles.panelHeader} ${
+                  isOpen ? styles.panelHeaderOpen : ""
+                } ${isDisabled ? styles.panelHeaderDisabled : ""}`}
               >
-                {panel.content}
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
+                <span>{panel.title}</span>
+                <span className={styles.panelIcon}>
+                  {isDisabled ? "🔒" : isOpen ? "–" : "+"}
+                </span>
+              </button>
+              {mountContent ? (
+                <div
+                  className={`${styles.panelBody} ${
+                    isOpen ? styles.panelBodyOpen : ""
+                  }`}
+                  aria-hidden={!isOpen}
+                >
+                  {panel.content}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
       {deployRolePickerOpen ? (
         <div
@@ -1580,7 +1916,7 @@ export default function DeploymentWorkspace({
       <div className={styles.navRow}>
         <button
           onClick={() =>
-            hasPrev && setActivePanel(panels[activeIndex - 1].key)
+            hasPrev && setActivePanel(enabledPanels[activeIndex - 1].key)
           }
           disabled={!hasPrev}
           className={`${styles.navButton} ${styles.backButton} ${
@@ -1591,7 +1927,7 @@ export default function DeploymentWorkspace({
         </button>
         <button
           onClick={() =>
-            hasNext && setActivePanel(panels[activeIndex + 1].key)
+            hasNext && setActivePanel(enabledPanels[activeIndex + 1].key)
           }
           disabled={!hasNext}
           className={`${styles.navButton} ${styles.nextButton} ${

@@ -30,6 +30,8 @@ type DeploymentCredentialsFormProps = {
   onAddServer: (aliasHint?: string) => void;
   openCredentialsAlias?: string | null;
   onOpenCredentialsAliasHandled?: () => void;
+  deviceMode?: "customer" | "expert" | "developer";
+  onDeviceModeChange?: (mode: "customer" | "expert" | "developer") => void;
   compact?: boolean;
 };
 
@@ -41,6 +43,10 @@ const SERVER_VIEW_ICONS: Record<ServerViewMode, string> = {
 const ROW_FILTER_OPTIONS: number[] = [1, 2, 3, 5, 10, 20, 100, 500, 1000];
 
 function formatViewLabel(mode: ServerViewMode): string {
+  return mode.charAt(0).toUpperCase() + mode.slice(1);
+}
+
+function formatDeviceModeLabel(mode: "customer" | "expert" | "developer"): string {
   return mode.charAt(0).toUpperCase() + mode.slice(1);
 }
 
@@ -58,6 +64,8 @@ export default function DeploymentCredentialsForm({
   onAddServer,
   openCredentialsAlias = null,
   onOpenCredentialsAliasHandled,
+  deviceMode,
+  onDeviceModeChange,
   compact = false,
 }: DeploymentCredentialsFormProps) {
   const Wrapper = compact ? "div" : "section";
@@ -79,10 +87,13 @@ export default function DeploymentCredentialsForm({
   const filtersPopoverRef = useRef<HTMLDivElement | null>(null);
   const viewButtonRef = useRef<HTMLButtonElement | null>(null);
   const viewPopoverRef = useRef<HTMLDivElement | null>(null);
+  const modeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const modePopoverRef = useRef<HTMLDivElement | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filtersPos, setFiltersPos] = useState({ top: 0, left: 0 });
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
   const [pendingAction, setPendingAction] = useState<{
     mode: "delete" | "purge";
@@ -277,6 +288,26 @@ export default function DeploymentCredentialsForm({
       document.removeEventListener("keydown", handleEscape);
     };
   }, [viewMenuOpen]);
+
+  useEffect(() => {
+    if (!modeMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (modePopoverRef.current?.contains(target)) return;
+      if (modeButtonRef.current?.contains(target)) return;
+      setModeMenuOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setModeMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [modeMenuOpen]);
 
   const filtersOverlay =
     filtersOpen && typeof document !== "undefined"
@@ -577,7 +608,8 @@ export default function DeploymentCredentialsForm({
       | "password"
       | "passwordConfirm"
       | "privateKey"
-      | "keyPassphrase";
+      | "keyPassphrase"
+      | "primaryDomain";
     passwordConfirm?: string;
   }) => {
     const { server, field, passwordConfirm: confirmValue } = payload;
@@ -596,6 +628,21 @@ export default function DeploymentCredentialsForm({
       const keyPassphrase = String(server.keyPassphrase || "");
       if (keyPassphrase.trim()) {
         await saveKeyPassphraseToVault(server.alias, keyPassphrase);
+      }
+    }
+
+    if (field === "primaryDomain" && workspaceId) {
+      const res = await fetch(`${baseUrl}/api/providers/primary-domain`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          alias: server.alias,
+          primary_domain: String(server.primaryDomain || "").trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(await parseErrorMessage(res));
       }
     }
 
@@ -713,44 +760,91 @@ export default function DeploymentCredentialsForm({
                 <i className="fa-solid fa-plus" aria-hidden="true" />
                 <span>Add</span>
               </button>
-              <div className={styles.viewModeControl}>
-                <button
-                  ref={viewButtonRef}
-                  onClick={() => setViewMenuOpen((prev) => !prev)}
-                  className={`${styles.modeButton} ${styles.modeButtonActive}`}
-                  aria-haspopup="menu"
-                  aria-expanded={viewMenuOpen}
-                >
-                  <i className={SERVER_VIEW_ICONS[viewMode]} aria-hidden="true" />
-                  <span>{formatViewLabel(viewMode)}</span>
-                  <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-                </button>
-                {viewMenuOpen ? (
-                  <div
-                    ref={viewPopoverRef}
-                    className={styles.viewModeMenu}
-                    role="menu"
-                  >
-                    {SERVER_VIEW_MODES.map((mode) => {
-                      const active = viewMode === mode;
-                      return (
-                        <button
-                          key={mode}
-                          onClick={() => {
-                            setViewMode(mode);
-                            setViewMenuOpen(false);
-                          }}
-                          className={`${styles.viewModeMenuItem} ${
-                            active ? styles.viewModeMenuItemActive : ""
-                          }`}
-                        >
-                          <i className={SERVER_VIEW_ICONS[mode]} aria-hidden="true" />
-                          <span>{formatViewLabel(mode)}</span>
-                        </button>
-                      );
-                    })}
+              <div className={styles.controlsRight}>
+                {deviceMode && onDeviceModeChange ? (
+                  <div className={styles.deviceModeControl}>
+                    <button
+                      ref={modeButtonRef}
+                      type="button"
+                      onClick={() => setModeMenuOpen((prev) => !prev)}
+                      className={`${styles.deviceModeButton} ${
+                        deviceMode === "customer"
+                          ? styles.deviceModeButtonCustomer
+                          : deviceMode === "expert"
+                          ? styles.deviceModeButtonExpert
+                          : styles.deviceModeButtonDeveloper
+                      }`}
+                      aria-haspopup="menu"
+                      aria-expanded={modeMenuOpen}
+                    >
+                      <i className="fa-solid fa-sliders" aria-hidden="true" />
+                      <span>Mode: {formatDeviceModeLabel(deviceMode)}</span>
+                      <i className="fa-solid fa-chevron-down" aria-hidden="true" />
+                    </button>
+                    {modeMenuOpen ? (
+                      <div
+                        ref={modePopoverRef}
+                        className={styles.deviceModeMenu}
+                        role="menu"
+                      >
+                        {(["customer", "expert", "developer"] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => {
+                              onDeviceModeChange(mode);
+                              setModeMenuOpen(false);
+                            }}
+                            className={`${styles.deviceModeMenuItem} ${
+                              deviceMode === mode ? styles.deviceModeMenuItemActive : ""
+                            }`}
+                          >
+                            <span>{formatDeviceModeLabel(mode)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
+                <div className={styles.viewModeControl}>
+                  <button
+                    ref={viewButtonRef}
+                    onClick={() => setViewMenuOpen((prev) => !prev)}
+                    className={`${styles.modeButton} ${styles.modeButtonActive}`}
+                    aria-haspopup="menu"
+                    aria-expanded={viewMenuOpen}
+                  >
+                    <i className={SERVER_VIEW_ICONS[viewMode]} aria-hidden="true" />
+                    <span>{formatViewLabel(viewMode)}</span>
+                    <i className="fa-solid fa-chevron-down" aria-hidden="true" />
+                  </button>
+                  {viewMenuOpen ? (
+                    <div
+                      ref={viewPopoverRef}
+                      className={styles.viewModeMenu}
+                      role="menu"
+                    >
+                      {SERVER_VIEW_MODES.map((mode) => {
+                        const active = viewMode === mode;
+                        return (
+                          <button
+                            key={mode}
+                            onClick={() => {
+                              setViewMode(mode);
+                              setViewMenuOpen(false);
+                            }}
+                            className={`${styles.viewModeMenuItem} ${
+                              active ? styles.viewModeMenuItemActive : ""
+                            }`}
+                          >
+                            <i className={SERVER_VIEW_ICONS[mode]} aria-hidden="true" />
+                            <span>{formatViewLabel(mode)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>

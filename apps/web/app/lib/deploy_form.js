@@ -5,6 +5,7 @@ export function createInitialState() {
   return {
     alias: "device",
     description: "",
+    primaryDomain: "",
     host: "",
     port: "22",
     user: "root",

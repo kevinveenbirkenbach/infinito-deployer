@@ -45,3 +45,7 @@ class RoleOut(BaseModel):
 
     # Optional categories from roles/categories.yml (if available)
     categories: List[str] = []
+
+    # Optional pricing metadata (schema-driven)
+    pricing_summary: Optional[Dict[str, Any]] = None
+    pricing: Optional[Dict[str, Any]] = None

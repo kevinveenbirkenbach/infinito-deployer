@@ -9,20 +9,28 @@ import styles from "./styles.module.css";
 import type { Role } from "./types";
 
 type RoleListViewProps = {
+  baseUrl?: string;
   roles: Role[];
   selected: Set<string>;
   iconSize: number;
   onToggleSelected: (id: string) => void;
+  rolePlans?: Record<string, { id: string; label: string }[]>;
+  selectedPlanByRole?: Record<string, string | null>;
+  onSelectRolePlan?: (roleId: string, planId: string | null) => void;
   developerMode?: boolean;
   onEditRoleConfig?: (role: Role) => void;
   onOpenVideo: (url: string, title: string) => void;
 };
 
 export default function RoleListView({
+  baseUrl,
   roles,
   selected,
   iconSize,
   onToggleSelected,
+  rolePlans,
+  selectedPlanByRole,
+  onSelectRolePlan,
   developerMode = false,
   onEditRoleConfig,
   onOpenVideo,
@@ -90,6 +98,13 @@ export default function RoleListView({
               ) : null}
               <EnableDropdown
                 enabled={selectedState}
+                plans={rolePlans?.[role.id]}
+                selectedPlanId={selectedPlanByRole?.[role.id] ?? null}
+                onSelectPlan={(planId) => onSelectRolePlan?.(role.id, planId)}
+                roleId={role.id}
+                pricing={role.pricing || null}
+                pricingSummary={role.pricing_summary || null}
+                baseUrl={baseUrl}
                 onEnable={() => {
                   if (!selectedState) onToggleSelected(role.id);
                 }}

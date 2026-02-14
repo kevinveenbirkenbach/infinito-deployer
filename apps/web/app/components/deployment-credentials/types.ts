@@ -1,6 +1,7 @@
 export type ServerState = {
   alias: string;
   description: string;
+  primaryDomain: string;
   host: string;
   port: string;
   user: string;

@@ -1,0 +1,145 @@
+.root {
+  display: grid;
+  gap: 12px;
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.topRow button {
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.hint {
+  color: var(--bs-secondary-color);
+  font-size: 13px;
+}
+
+.error {
+  border: 1px solid rgba(200, 50, 50, 0.5);
+  background: rgba(200, 50, 50, 0.08);
+  color: #c83232;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.status {
+  border: 1px solid rgba(40, 150, 70, 0.45);
+  background: rgba(40, 150, 70, 0.09);
+  color: #2a8a46;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.disabledBox {
+  border: 1px dashed var(--bs-border-color);
+  border-radius: 10px;
+  background: var(--bs-tertiary-bg);
+  padding: 10px 12px;
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+}
+
+.disabledBox ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.serverSelectRow {
+  display: grid;
+  gap: 4px;
+}
+
+.serverSelectRow select {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+}
+
+.createForm {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.createForm input {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  font-size: 12px;
+}
+
+.createForm button {
+  border: 1px solid var(--bs-primary);
+  background: var(--bs-primary);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 7px 10px;
+}
+
+.list {
+  display: grid;
+  gap: 8px;
+}
+
+.userRow {
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 10px;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(180px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.userMeta {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.userRow input {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.actions button {
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+@media (max-width: 900px) {
+  .userRow {
+    grid-template-columns: 1fr;
+  }
+}

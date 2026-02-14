@@ -70,6 +70,9 @@ export default function WorkspacePanel({
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [deletingWorkspaceId, setDeletingWorkspaceId] = useState<string | null>(
+    null
+  );
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [inventoryReady, setInventoryReady] = useState(false);
 
@@ -458,6 +461,7 @@ export default function WorkspacePanel({
     renameWorkspaceFile,
     createWorkspace,
     initWorkspace,
+    deleteWorkspace,
     toggleDir,
     lockKdbx,
     handleKdbxSubmit,
@@ -490,6 +494,7 @@ export default function WorkspacePanel({
     onWorkspaceIdChange,
     onSelectedRolesByAliasChange,
     onCredentialsPatch,
+    setUserId,
     setWorkspaceList,
     setWorkspaceId,
     setFiles,
@@ -866,6 +871,7 @@ export default function WorkspacePanel({
   }, [
     workspaceId,
     credentials.description,
+    credentials.primaryDomain,
     credentials.host,
     credentials.port,
     credentials.user,
@@ -1075,11 +1081,32 @@ export default function WorkspacePanel({
           workspaceList={workspaceList}
           workspaceError={workspaceError}
           inventorySyncError={inventorySyncError}
+          workspaceLoading={workspaceLoading}
+          deletingWorkspaceId={deletingWorkspaceId}
           onCreateWorkspace={() => {
             void createWorkspace();
           }}
           onSelectWorkspace={(id) => {
             void selectWorkspace(id);
+          }}
+          onDeleteWorkspace={(id) => {
+            void (async () => {
+              const targetId = String(id || "").trim();
+              if (!targetId) return;
+              const confirmed = window.confirm(
+                `Delete workspace '${targetId}'? This action cannot be undone.`
+              );
+              if (!confirmed) return;
+              setWorkspaceError(null);
+              setDeletingWorkspaceId(targetId);
+              try {
+                await deleteWorkspace(targetId);
+              } catch (err: any) {
+                setWorkspaceError(err?.message ?? "failed to delete workspace");
+              } finally {
+                setDeletingWorkspaceId(null);
+              }
+            })();
           }}
         />
         <div className={styles.editorSection}>

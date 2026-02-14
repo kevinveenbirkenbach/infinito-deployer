@@ -43,6 +43,7 @@ _HIDDEN_FILES = {WORKSPACE_META_FILENAME}
 _ID_RE = re.compile(r"^[a-z0-9]{6,32}$")
 _ROLE_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _VAULT_BLOCK_START_RE = re.compile(r"^([ \t]*).*!vault\s*\|.*$")
+_WORKSPACE_STATES = {"draft", "deployed", "finished"}
 
 
 class _TaggedYamlValue:
@@ -297,11 +298,40 @@ def _merge_missing(dst: Dict[str, Any], src: Dict[str, Any]) -> int:
     return added
 
 
+def _sanitize_workspace_state(raw: Any) -> str:
+    state = str(raw or "").strip().lower()
+    if state in _WORKSPACE_STATES:
+        return state
+    return "draft"
+
+
+def _workspace_last_modified_iso(root: Path) -> str:
+    latest = 0.0
+    try:
+        latest = max(latest, root.stat().st_mtime)
+    except Exception:
+        pass
+    for dirpath, _dirnames, filenames in os.walk(root):
+        pdir = Path(dirpath)
+        try:
+            latest = max(latest, pdir.stat().st_mtime)
+        except Exception:
+            pass
+        for filename in filenames:
+            try:
+                latest = max(latest, (pdir / filename).stat().st_mtime)
+            except Exception:
+                pass
+    return utc_iso(latest or None)
+
+
 class WorkspaceService:
     def __init__(self) -> None:
         _ensure_workspace_root()
 
-    def create(self) -> Dict[str, Any]:
+    def create(
+        self, *, owner_id: str | None = None, owner_email: str | None = None
+    ) -> Dict[str, Any]:
         import uuid
 
         _ensure_workspace_root()
@@ -321,6 +351,10 @@ class WorkspaceService:
             "host": None,
             "user": None,
             "auth_method": None,
+            "owner_id": (owner_id or "").strip() or None,
+            "owner_email": (owner_email or "").strip() or None,
+            "state": "draft",
+            "updated_at": _now_iso(),
         }
         _write_meta(root, meta)
         return meta
@@ -331,6 +365,77 @@ class WorkspaceService:
         if not root.is_dir():
             raise HTTPException(status_code=404, detail="workspace not found")
         return root
+
+    def assert_workspace_access(
+        self, workspace_id: str, user_id: str | None
+    ) -> Dict[str, Any]:
+        root = self.ensure(workspace_id)
+        meta = _load_meta(root)
+        owner = str(meta.get("owner_id") or "").strip() or None
+        actor = (user_id or "").strip() or None
+
+        # Strict isolation:
+        # - authenticated users can only access their own owned workspaces
+        # - anonymous users can only access anonymous workspaces
+        if owner:
+            if actor != owner:
+                raise HTTPException(status_code=404, detail="workspace not found")
+        else:
+            if actor:
+                raise HTTPException(status_code=404, detail="workspace not found")
+        return meta
+
+    def list_for_user(self, user_id: str) -> List[Dict[str, Any]]:
+        owner = (user_id or "").strip()
+        if not owner:
+            return []
+        root = workspaces_root()
+        if not root.is_dir():
+            return []
+
+        out: List[Dict[str, Any]] = []
+        for child in sorted(root.iterdir()):
+            if not child.is_dir():
+                continue
+            workspace_id = child.name
+            try:
+                _sanitize_workspace_id(workspace_id)
+            except HTTPException:
+                continue
+            meta = _load_meta(child)
+            if str(meta.get("owner_id") or "").strip() != owner:
+                continue
+            out.append(
+                {
+                    "workspace_id": workspace_id,
+                    "name": str(meta.get("name") or workspace_id),
+                    "created_at": str(meta.get("created_at") or ""),
+                    "last_modified_at": _workspace_last_modified_iso(child),
+                    "state": _sanitize_workspace_state(meta.get("state")),
+                }
+            )
+        out.sort(
+            key=lambda item: str(item.get("last_modified_at") or ""),
+            reverse=True,
+        )
+        return out
+
+    def delete(self, workspace_id: str) -> None:
+        root = self.ensure(workspace_id)
+        try:
+            shutil.rmtree(root)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"failed to delete workspace: {exc}"
+            ) from exc
+
+    def set_workspace_state(self, workspace_id: str, state: str) -> None:
+        root = self.ensure(workspace_id)
+        normalized = _sanitize_workspace_state(state)
+        meta = _load_meta(root)
+        meta["state"] = normalized
+        meta["updated_at"] = _now_iso()
+        _write_meta(root, meta)
 
     def list_files(self, workspace_id: str) -> List[Dict[str, Any]]:
         root = self.ensure(workspace_id)
@@ -436,6 +541,109 @@ class WorkspaceService:
             raise HTTPException(
                 status_code=500, detail=f"failed to create host vars file: {exc}"
             ) from exc
+
+    def _ensure_inventory_alias(self, root: Path, alias: str) -> None:
+        inventory_path = root / INVENTORY_FILENAME
+        if inventory_path.is_file():
+            data = _load_yaml_mapping(inventory_path)
+        else:
+            data = {}
+
+        all_node = data.get("all")
+        if not isinstance(all_node, dict):
+            all_node = {}
+            data["all"] = all_node
+
+        hosts = all_node.get("hosts")
+        if not isinstance(hosts, dict):
+            hosts = {}
+            all_node["hosts"] = hosts
+
+        if alias in hosts:
+            return
+
+        hosts[alias] = {}
+        atomic_write_text(inventory_path, _dump_yaml_mapping(data))
+
+    def upsert_provider_device(
+        self,
+        workspace_id: str,
+        *,
+        alias: str,
+        host: str,
+        user: str,
+        port: int,
+        provider_metadata: Dict[str, Any],
+        primary_domain: str | None = None,
+    ) -> Dict[str, Any]:
+        root = self.ensure(workspace_id)
+        alias_value = (alias or "").strip()
+        if not alias_value:
+            raise HTTPException(status_code=400, detail="alias is required")
+        host_value = (host or "").strip()
+        user_value = (user or "").strip()
+        if not host_value or not user_value:
+            raise HTTPException(status_code=400, detail="host and user are required")
+        if port < 1 or port > 65535:
+            raise HTTPException(status_code=400, detail="port out of range")
+
+        host_vars_path = root / "host_vars" / f"{_sanitize_host_filename(alias_value)}.yml"
+        existing = _load_yaml_mapping(host_vars_path)
+        existing["ansible_host"] = host_value
+        existing["ansible_user"] = user_value
+        existing["ansible_port"] = int(port)
+
+        infinito = existing.get("infinito")
+        if not isinstance(infinito, dict):
+            infinito = {}
+        device = infinito.get("device")
+        if not isinstance(device, dict):
+            device = {}
+        for key, value in provider_metadata.items():
+            if value is None:
+                continue
+            device[str(key)] = value
+        infinito["device"] = device
+        existing["infinito"] = infinito
+
+        domain = (primary_domain or "").strip()
+        if domain:
+            existing["DOMAIN_PRIMARY"] = domain
+        else:
+            existing.pop("DOMAIN_PRIMARY", None)
+
+        safe_mkdir(host_vars_path.parent)
+        atomic_write_text(host_vars_path, _dump_yaml_mapping(existing))
+        self._ensure_inventory_alias(root, alias_value)
+
+        return {
+            "alias": alias_value,
+            "host_vars_path": host_vars_path.relative_to(root).as_posix(),
+            "primary_domain": domain or None,
+        }
+
+    def set_primary_domain(
+        self, workspace_id: str, *, alias: str, primary_domain: str | None
+    ) -> Dict[str, Any]:
+        root = self.ensure(workspace_id)
+        alias_value = (alias or "").strip()
+        if not alias_value:
+            raise HTTPException(status_code=400, detail="alias is required")
+        host_vars_path = root / "host_vars" / f"{_sanitize_host_filename(alias_value)}.yml"
+        data = _load_yaml_mapping(host_vars_path)
+        domain = (primary_domain or "").strip()
+        if domain:
+            data["DOMAIN_PRIMARY"] = domain
+        else:
+            data.pop("DOMAIN_PRIMARY", None)
+        safe_mkdir(host_vars_path.parent)
+        atomic_write_text(host_vars_path, _dump_yaml_mapping(data))
+        self._ensure_inventory_alias(root, alias_value)
+        return {
+            "alias": alias_value,
+            "host_vars_path": host_vars_path.relative_to(root).as_posix(),
+            "primary_domain": domain or None,
+        }
 
     def _ensure_role_exists(self, role_id: str) -> None:
         role_dir = repo_roles_root() / role_id

@@ -64,9 +64,26 @@
   cursor: pointer;
 }
 
+.newWorkspaceButton:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 .workspaceList {
   display: grid;
   gap: 8px;
+}
+
+.workspaceItemRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.workspaceItemRowActive {
+  outline: 1px solid var(--bs-body-color);
+  border-radius: 12px;
 }
 
 .emptyState {
@@ -88,14 +105,45 @@
   color: var(--bs-body-color);
 }
 
+.workspaceItemMain {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .workspaceItemActive {
   border: 1px solid var(--bs-body-color);
   background: var(--bs-body-color);
   color: var(--bs-body-bg);
 }
 
+.workspaceState {
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 .workspaceTimestamp {
   opacity: 0.8;
+}
+
+.deleteWorkspaceButton {
+  border: 1px solid var(--bs-danger-border-subtle);
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.deleteWorkspaceButton:disabled {
+  opacity: 0.7;
+  cursor: wait;
 }
 
 .errorTop {

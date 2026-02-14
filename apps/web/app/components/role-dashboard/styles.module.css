@@ -222,6 +222,76 @@
   color: var(--bs-danger-text-emphasis);
 }
 
+.pricingPanel {
+  margin-top: 6px;
+  border-top: 1px solid var(--bs-border-color-translucent);
+  padding-top: 8px;
+  display: grid;
+  gap: 8px;
+  min-width: 280px;
+}
+
+.pricingPanelTitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--deployer-muted-ink);
+}
+
+.pricingControlsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.pricingControlField {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--deployer-muted-ink);
+}
+
+.pricingControlField select,
+.pricingControlField input {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 12px;
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+}
+
+.pricingInputs {
+  display: grid;
+  gap: 6px;
+}
+
+.pricingCheckboxField {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--deployer-muted-ink);
+}
+
+.pricingResult {
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 10px;
+  background: var(--bs-tertiary-bg);
+  padding: 8px 10px;
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.pricingMuted {
+  color: var(--deployer-muted-ink);
+}
+
+.pricingError {
+  color: var(--bs-danger-text-emphasis);
+}
+
 .enableConfirmOverlay {
   position: fixed;
   inset: 0;

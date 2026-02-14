@@ -18,6 +18,27 @@ export type Role = {
   repository?: string | null;
   issue_tracker_url?: string | null;
   license_url?: string | null;
+  pricing_summary?: {
+    default_offering_id?: string | null;
+    default_plan_id?: string | null;
+    currencies?: string[] | null;
+    regions?: string[] | null;
+    [key: string]: unknown;
+  } | null;
+  pricing?: {
+    default_offering_id?: string | null;
+    default_plan_id?: string | null;
+    offerings?: Array<{
+      id: string;
+      label?: string | null;
+      plans?: Array<{
+        id: string;
+        label?: string | null;
+        description?: string | null;
+      }> | null;
+    }> | null;
+    [key: string]: unknown;
+  } | null;
 };
 
 export const VIEW_MODES = ["detail", "list", "mini", "matrix"] as const;

@@ -6,6 +6,37 @@
  */
 
 /**
+ * @typedef {Object} RolePricingPlan
+ * @property {string} id
+ * @property {string | null | undefined} [label]
+ * @property {string | null | undefined} [description]
+ */
+
+/**
+ * @typedef {Object} RolePricingOffering
+ * @property {string} id
+ * @property {string | null | undefined} [label]
+ * @property {RolePricingPlan[] | null | undefined} [plans]
+ */
+
+/**
+ * @typedef {Object} RolePricingSummary
+ * @property {string | null | undefined} [default_offering_id]
+ * @property {string | null | undefined} [default_plan_id]
+ * @property {string[] | null | undefined} [currencies]
+ * @property {string[] | null | undefined} [regions]
+ * @property {boolean | null | undefined} [has_setup_fee]
+ */
+
+/**
+ * @typedef {Object} RolePricing
+ * @property {string | null | undefined} [default_offering_id]
+ * @property {string | null | undefined} [default_plan_id]
+ * @property {RolePricingOffering[] | null | undefined} [offerings]
+ * @property {Object.<string, unknown> | null | undefined} [inputs]
+ */
+
+/**
  * @typedef {Object} Role
  * @property {string} id
  * @property {string} display_name
@@ -17,8 +48,11 @@
  * @property {string | null | undefined} [video]
  * @property {string | null | undefined} [forum]
  * @property {string | null | undefined} [homepage]
+ * @property {string | null | undefined} [repository]
  * @property {string | null | undefined} [issue_tracker_url]
  * @property {string | null | undefined} [license_url]
+ * @property {RolePricingSummary | null | undefined} [pricing_summary]
+ * @property {RolePricing | null | undefined} [pricing]
  */
 
 /**

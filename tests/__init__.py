@@ -46,6 +46,12 @@ except Exception:  # pragma: no cover
         def post(self, *_args, **_kwargs):
             return _route_decorator()
 
+        def put(self, *_args, **_kwargs):
+            return _route_decorator()
+
+        def delete(self, *_args, **_kwargs):
+            return _route_decorator()
+
         def include_router(self, *_args, **_kwargs):
             return None
 
@@ -72,6 +78,17 @@ except Exception:  # pragma: no cover
             return _args[0]
         return _kwargs.get("default")
 
+    def File(*_args, **_kwargs):
+        if _args:
+            return _args[0]
+        return _kwargs.get("default")
+
+    class UploadFile:
+        filename = ""
+
+        async def read(self) -> bytes:  # pragma: no cover
+            return b""
+
     class HTTPException(Exception):
         def __init__(self, status_code: int = 500, detail: str | None = None):
             super().__init__(detail or "")
@@ -87,6 +104,8 @@ except Exception:  # pragma: no cover
     fastapi_stub.HTTPException = HTTPException
     fastapi_stub.FastAPI = FastAPI
     fastapi_stub.Query = Query
+    fastapi_stub.File = File
+    fastapi_stub.UploadFile = UploadFile
     responses_stub.StreamingResponse = StreamingResponse
     cors_stub.CORSMiddleware = object
     middleware_stub.cors = cors_stub

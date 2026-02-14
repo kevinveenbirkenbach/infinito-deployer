@@ -32,6 +32,7 @@ export function createWorkspacePanelCoreActions(ctx: any) {
     onWorkspaceIdChange,
     onSelectedRolesByAliasChange,
     onCredentialsPatch,
+    setUserId,
     setWorkspaceList,
     setWorkspaceId,
     setFiles,
@@ -142,6 +143,91 @@ export function createWorkspacePanelCoreActions(ctx: any) {
     }
   };
 
+  const normalizeWorkspaceList = (items: any[]): any[] =>
+    (Array.isArray(items) ? items : [])
+      .map((entry) => {
+        const workspaceId = String(entry?.workspace_id || entry?.id || "").trim();
+        if (!workspaceId) return null;
+        return {
+          id: workspaceId,
+          name: String(entry?.name || workspaceId),
+          state: String(entry?.state || "draft").toLowerCase(),
+          created_at: entry?.created_at ?? null,
+          last_modified_at: entry?.last_modified_at ?? null,
+          last_used: entry?.last_used ?? null,
+        };
+      })
+      .filter(Boolean);
+
+  const fetchWorkspaceListFromApi = async (): Promise<{
+    supported: boolean;
+    authenticated: boolean;
+    userId: string | null;
+    workspaces: any[];
+    unauthorized: boolean;
+  }> => {
+    try {
+      const res = await fetch(`${baseUrl}/api/workspaces`, { cache: "no-store" });
+      if (res.status === 404) {
+        return {
+          supported: false,
+          authenticated: false,
+          userId: null,
+          workspaces: [],
+          unauthorized: false,
+        };
+      }
+      if (res.status === 401) {
+        return {
+          supported: true,
+          authenticated: false,
+          userId: null,
+          workspaces: [],
+          unauthorized: true,
+        };
+      }
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const authenticated = Boolean(data?.authenticated);
+      const resolvedUserId = String(data?.user_id || "").trim() || null;
+      const workspaces = normalizeWorkspaceList(data?.workspaces);
+      if (authenticated && resolvedUserId && setUserId) {
+        setUserId(resolvedUserId);
+      }
+      return {
+        supported: true,
+        authenticated,
+        userId: resolvedUserId,
+        workspaces,
+        unauthorized: false,
+      };
+    } catch {
+      return {
+        supported: false,
+        authenticated: false,
+        userId: null,
+        workspaces: [],
+        unauthorized: false,
+      };
+    }
+  };
+
+  const refreshWorkspaceListFromApi = async (): Promise<any[] | null> => {
+    const data = await fetchWorkspaceListFromApi();
+    if (!data.supported) return null;
+    if (!data.authenticated) {
+      setWorkspaceList([]);
+      return [];
+    }
+    setWorkspaceList(data.workspaces);
+    if (data.userId) {
+      saveWorkspaceList(data.userId, data.workspaces);
+    }
+    return data.workspaces;
+  };
+
   const refreshFiles = async (id: string) => {
     const res = await fetch(`${baseUrl}/api/workspaces/${id}/files`, {
       cache: "no-store",
@@ -170,10 +256,11 @@ export function createWorkspacePanelCoreActions(ctx: any) {
       await refreshFiles(id);
       setWorkspaceId(id);
       onWorkspaceIdChange?.(id);
-      if (userId) {
-        rememberWorkspace(id);
-      } else if (typeof window !== "undefined") {
+      if (typeof window !== "undefined") {
         window.localStorage.setItem(WORKSPACE_STORAGE_KEY, id);
+        if (userId) {
+          window.localStorage.setItem(`${USER_WORKSPACE_CURRENT_PREFIX}${userId}`, id);
+        }
       }
       updateWorkspaceUrl(id);
       return true;
@@ -254,7 +341,24 @@ export function createWorkspacePanelCoreActions(ctx: any) {
       setWorkspaceId(id);
       onWorkspaceIdChange?.(id);
       await refreshFiles(id);
-      if (userId) {
+      const apiContext = await fetchWorkspaceListFromApi();
+      if (apiContext.supported) {
+        if (apiContext.authenticated) {
+          setWorkspaceList(apiContext.workspaces);
+          if (apiContext.userId) {
+            saveWorkspaceList(apiContext.userId, apiContext.workspaces);
+            if (typeof window !== "undefined") {
+              window.localStorage.setItem(
+                `${USER_WORKSPACE_CURRENT_PREFIX}${apiContext.userId}`,
+                id
+              );
+            }
+          }
+        } else {
+          setWorkspaceList([]);
+        }
+      }
+      if (userId && !apiContext.supported) {
         rememberWorkspace(id, data?.created_at ?? null);
       } else if (typeof window !== "undefined") {
         window.localStorage.setItem(WORKSPACE_STORAGE_KEY, id);
@@ -271,10 +375,45 @@ export function createWorkspacePanelCoreActions(ctx: any) {
     setWorkspaceLoading(true);
     setWorkspaceError(null);
     try {
-      if (userId) {
+      const requested = readQueryParam("workspace");
+      const apiListData = await fetchWorkspaceListFromApi();
+      const apiAuthenticated = apiListData.supported && apiListData.authenticated;
+      const apiUserId = apiListData.userId || userId || null;
+
+      if (apiAuthenticated) {
+        const list = apiListData.workspaces;
+        setWorkspaceList(list);
+        if (apiUserId) {
+          saveWorkspaceList(apiUserId, list);
+        }
+        const storedCurrent =
+          typeof window !== "undefined" && apiUserId
+            ? window.localStorage.getItem(`${USER_WORKSPACE_CURRENT_PREFIX}${apiUserId}`)
+            : null;
+        const candidates = [requested, storedCurrent, list[0]?.id].filter(Boolean) as string[];
+        for (const candidate of candidates) {
+          const ok = await selectWorkspace(candidate);
+          if (ok) return;
+          if (requested && candidate === requested) {
+            setWorkspaceError(`Workspace '${requested}' not found.`);
+          }
+        }
+        await createWorkspace();
+        return;
+      }
+
+      if (apiListData.supported) {
+        if (userId && setUserId) {
+          setUserId(null);
+          setWorkspaceList([]);
+          return;
+        }
+        setWorkspaceList([]);
+      }
+
+      if (userId && !apiListData.supported) {
         const list = loadWorkspaceList(userId);
         setWorkspaceList(list);
-        const requested = readQueryParam("workspace");
         const storedCurrent =
           typeof window !== "undefined"
             ? window.localStorage.getItem(`${USER_WORKSPACE_CURRENT_PREFIX}${userId}`)
@@ -291,7 +430,6 @@ export function createWorkspacePanelCoreActions(ctx: any) {
         return;
       }
 
-      const requested = readQueryParam("workspace");
       if (requested) {
         const ok = await selectWorkspace(requested);
         if (ok) return;
@@ -313,6 +451,65 @@ export function createWorkspacePanelCoreActions(ctx: any) {
       setWorkspaceError(err?.message ?? "workspace init failed");
     } finally {
       setWorkspaceLoading(false);
+    }
+  };
+
+  const deleteWorkspace = async (id: string): Promise<void> => {
+    const targetId = String(id || "").trim();
+    if (!targetId) {
+      throw new Error("workspace id is required");
+    }
+    const res = await fetch(
+      `${baseUrl}/api/workspaces/${encodeURIComponent(targetId)}`,
+      { method: "DELETE" }
+    );
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`;
+      try {
+        const data = await res.json();
+        if (data?.detail) {
+          message = String(data.detail);
+        }
+      } catch {
+        // ignore parse errors
+      }
+      throw new Error(message);
+    }
+
+    const apiList = await refreshWorkspaceListFromApi();
+    if (!apiList) {
+      if (userId) {
+        setWorkspaceList((prev: any[]) => {
+          const next = prev.filter((entry) => entry.id !== targetId);
+          saveWorkspaceList(userId, next);
+          return next;
+        });
+      }
+    }
+
+    if (workspaceId === targetId) {
+      resetWorkspaceState();
+      setWorkspaceId(null);
+      onWorkspaceIdChange?.(null);
+      updateWorkspaceUrl(null);
+
+      const nextCandidate =
+        (Array.isArray(apiList) ? apiList : []).find((entry) => entry.id !== targetId)?.id ||
+        null;
+      if (nextCandidate) {
+        await selectWorkspace(nextCandidate);
+        return;
+      }
+      await createWorkspace();
+      return;
+    }
+
+    if (userId && typeof window !== "undefined") {
+      const currentKey = `${USER_WORKSPACE_CURRENT_PREFIX}${userId}`;
+      const currentValue = window.localStorage.getItem(currentKey);
+      if (currentValue === targetId) {
+        window.localStorage.removeItem(currentKey);
+      }
     }
   };
 
@@ -767,6 +964,7 @@ export function createWorkspacePanelCoreActions(ctx: any) {
     const portRaw = credentials.port?.trim() || "";
     const user = credentials.user?.trim() || "";
     const description = credentials.description?.trim() || "";
+    const primaryDomain = credentials.primaryDomain?.trim() || "";
     const color = normalizeDeviceColor(credentials.color) || "";
     const logoEmoji = normalizeDeviceEmoji(credentials.logoEmoji) || "";
     const targetPath =
@@ -774,7 +972,7 @@ export function createWorkspacePanelCoreActions(ctx: any) {
       (activeAlias ? `host_vars/${sanitizeAliasFilename(activeAlias)}.yml` : null);
     if (!targetPath) return;
     if (activePath === targetPath && editorDirty) return;
-    if (!host && !user && !description && !color && !logoEmoji) return;
+    if (!host && !user && !description && !primaryDomain && !color && !logoEmoji) return;
 
     try {
       let data: Record<string, any> = {};
@@ -800,6 +998,15 @@ export function createWorkspacePanelCoreActions(ctx: any) {
         }
       } else if (Object.prototype.hasOwnProperty.call(data, "description")) {
         delete data.description;
+        changed = true;
+      }
+      if (primaryDomain) {
+        if (data.DOMAIN_PRIMARY !== primaryDomain) {
+          data.DOMAIN_PRIMARY = primaryDomain;
+          changed = true;
+        }
+      } else if (Object.prototype.hasOwnProperty.call(data, "DOMAIN_PRIMARY")) {
+        delete data.DOMAIN_PRIMARY;
         changed = true;
       }
       if (color && data.color !== color) {
@@ -876,6 +1083,8 @@ export function createWorkspacePanelCoreActions(ctx: any) {
       const nextUser = typeof data.ansible_user === "string" ? data.ansible_user : "";
       const nextDescription =
         typeof data.description === "string" ? data.description : "";
+      const nextPrimaryDomain =
+        typeof data.DOMAIN_PRIMARY === "string" ? data.DOMAIN_PRIMARY : "";
       const nextColor =
         typeof data.color === "string" ? normalizeDeviceColor(data.color) || "" : "";
       const nextLogoEmoji =
@@ -907,6 +1116,9 @@ export function createWorkspacePanelCoreActions(ctx: any) {
       }
       if (nextDescription !== credentials.description) {
         patch.description = nextDescription;
+      }
+      if (nextPrimaryDomain !== credentials.primaryDomain) {
+        patch.primaryDomain = nextPrimaryDomain;
       }
       if (nextColor) {
         if (nextColor !== credentials.color) {
@@ -943,6 +1155,7 @@ export function createWorkspacePanelCoreActions(ctx: any) {
     renameWorkspaceFile,
     createWorkspace,
     initWorkspace,
+    deleteWorkspace,
     toggleDir,
     lockKdbx,
     loadKdbx,

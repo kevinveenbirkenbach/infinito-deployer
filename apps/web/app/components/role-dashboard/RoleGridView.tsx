@@ -10,9 +10,13 @@ import styles from "./styles.module.css";
 import type { Role, ViewConfig, ViewMode } from "./types";
 
 type RoleGridViewProps = {
+  baseUrl?: string;
   roles: Role[];
   selected: Set<string>;
   onToggleSelected: (id: string) => void;
+  rolePlans?: Record<string, { id: string; label: string }[]>;
+  selectedPlanByRole?: Record<string, string | null>;
+  onSelectRolePlan?: (roleId: string, planId: string | null) => void;
   developerMode?: boolean;
   onEditRoleConfig?: (role: Role) => void;
   viewMode: ViewMode;
@@ -23,9 +27,13 @@ type RoleGridViewProps = {
 };
 
 export default function RoleGridView({
+  baseUrl,
   roles,
   selected,
   onToggleSelected,
+  rolePlans,
+  selectedPlanByRole,
+  onSelectRolePlan,
   developerMode = false,
   onEditRoleConfig,
   viewMode,
@@ -104,6 +112,13 @@ export default function RoleGridView({
                   ) : null}
                   <EnableDropdown
                     enabled={selectedState}
+                    plans={rolePlans?.[role.id]}
+                    selectedPlanId={selectedPlanByRole?.[role.id] ?? null}
+                    onSelectPlan={(planId) => onSelectRolePlan?.(role.id, planId)}
+                    roleId={role.id}
+                    pricing={role.pricing || null}
+                    pricingSummary={role.pricing_summary || null}
+                    baseUrl={baseUrl}
                     onEnable={() => {
                       if (!selectedState) onToggleSelected(role.id);
                     }}
@@ -216,6 +231,13 @@ export default function RoleGridView({
                 ) : null}
                 <EnableDropdown
                   enabled={selectedState}
+                  plans={rolePlans?.[role.id]}
+                  selectedPlanId={selectedPlanByRole?.[role.id] ?? null}
+                  onSelectPlan={(planId) => onSelectRolePlan?.(role.id, planId)}
+                  roleId={role.id}
+                  pricing={role.pricing || null}
+                  pricingSummary={role.pricing_summary || null}
+                  baseUrl={baseUrl}
                   onEnable={() => {
                     if (!selectedState) onToggleSelected(role.id);
                   }}

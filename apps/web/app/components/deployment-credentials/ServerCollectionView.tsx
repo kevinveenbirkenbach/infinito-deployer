@@ -43,7 +43,8 @@ type ServerCollectionViewProps = {
       | "password"
       | "passwordConfirm"
       | "privateKey"
-      | "keyPassphrase";
+      | "keyPassphrase"
+      | "primaryDomain";
     passwordConfirm?: string;
   }) => Promise<void> | void;
   onRequestDelete: (aliases: string[]) => void;
@@ -679,7 +680,8 @@ export default function ServerCollectionView({
       | "password"
       | "passwordConfirm"
       | "privateKey"
-      | "keyPassphrase",
+      | "keyPassphrase"
+      | "primaryDomain",
     passwordConfirm?: string
   ) => {
     setDetailActionError(null);
@@ -982,6 +984,23 @@ export default function ServerCollectionView({
                       })
                     }
                     placeholder="Optional description"
+                    className={styles.fieldInput}
+                  />
+                </div>
+
+                <div className={styles.fieldWrap}>
+                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>
+                    Primary domain
+                  </label>
+                  <input
+                    value={detailServer.primaryDomain || ""}
+                    onChange={(event) =>
+                      onPatchServer(detailServer.alias, {
+                        primaryDomain: event.target.value,
+                      })
+                    }
+                    onBlur={() => emitCredentialBlur(detailServer, "primaryDomain")}
+                    placeholder="example.org"
                     className={styles.fieldInput}
                   />
                 </div>
@@ -1385,6 +1404,7 @@ export default function ServerCollectionView({
                   <th>Host</th>
                   <th>Port</th>
                   <th>User</th>
+                  <th>Primary domain</th>
                   <th>Status</th>
                   <th>Action</th>
                 </tr>
@@ -1492,6 +1512,17 @@ export default function ServerCollectionView({
                           className={`${styles.inputSmall} ${
                             validation.userMissing ? styles.inputError : ""
                           }`}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          value={server.primaryDomain || ""}
+                          onChange={(event) =>
+                            onPatchServer(server.alias, { primaryDomain: event.target.value })
+                          }
+                          onBlur={() => emitCredentialBlur(server, "primaryDomain")}
+                          placeholder="example.org"
+                          className={styles.inputSmall}
                         />
                       </td>
                       <td>{renderStatusCell(server, indicator)}</td>
@@ -1670,6 +1701,21 @@ export default function ServerCollectionView({
                   {validation.userMissing ? (
                     <p className="text-danger">User is required.</p>
                   ) : null}
+                </div>
+
+                <div className={styles.fieldWrap}>
+                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>
+                    Primary domain
+                  </label>
+                  <input
+                    value={server.primaryDomain || ""}
+                    onChange={(event) =>
+                      onPatchServer(server.alias, { primaryDomain: event.target.value })
+                    }
+                    onBlur={() => emitCredentialBlur(server, "primaryDomain")}
+                    placeholder="example.org"
+                    className={styles.fieldInput}
+                  />
                 </div>
               </div>
 

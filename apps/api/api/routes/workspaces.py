@@ -3,41 +3,48 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
+from api.auth import (
+    ensure_workspace_access,
+    ensure_workspace_list_allowed,
+    resolve_auth_context,
+)
 from api.schemas.workspace import (
+    WorkspaceConnectionTestIn,
+    WorkspaceConnectionTestOut,
     WorkspaceCreateOut,
     WorkspaceCredentialsIn,
     WorkspaceCredentialsOut,
-    WorkspaceVaultEntryIn,
-    WorkspaceVaultEntryOut,
-    WorkspaceVaultChangeIn,
-    WorkspaceMasterPasswordIn,
-    WorkspaceVaultPasswordResetIn,
-    WorkspaceVaultPasswordResetOut,
-    WorkspaceVaultDecryptIn,
-    WorkspaceVaultDecryptOut,
-    WorkspaceVaultEncryptIn,
-    WorkspaceVaultEncryptOut,
-    WorkspaceSshKeygenIn,
-    WorkspaceSshKeygenOut,
-    WorkspaceKeyPassphraseIn,
-    WorkspaceConnectionTestIn,
-    WorkspaceConnectionTestOut,
+    WorkspaceDeleteOut,
+    WorkspaceDirCreateOut,
     WorkspaceFileDeleteOut,
     WorkspaceFileListOut,
     WorkspaceFileOut,
     WorkspaceFileRenameIn,
     WorkspaceFileRenameOut,
-    WorkspaceDirCreateOut,
     WorkspaceFileWriteIn,
-    WorkspaceRoleAppConfigIn,
-    WorkspaceRoleAppConfigOut,
-    WorkspaceRoleAppConfigImportOut,
     WorkspaceGenerateIn,
     WorkspaceGenerateOut,
+    WorkspaceKeyPassphraseIn,
+    WorkspaceListOut,
+    WorkspaceMasterPasswordIn,
+    WorkspaceRoleAppConfigImportOut,
+    WorkspaceRoleAppConfigIn,
+    WorkspaceRoleAppConfigOut,
+    WorkspaceSshKeygenIn,
+    WorkspaceSshKeygenOut,
     WorkspaceUploadOut,
+    WorkspaceVaultChangeIn,
+    WorkspaceVaultDecryptIn,
+    WorkspaceVaultDecryptOut,
+    WorkspaceVaultEncryptIn,
+    WorkspaceVaultEncryptOut,
+    WorkspaceVaultEntryIn,
+    WorkspaceVaultEntryOut,
+    WorkspaceVaultPasswordResetIn,
+    WorkspaceVaultPasswordResetOut,
 )
 from services.workspaces import WorkspaceService
 
@@ -49,19 +56,44 @@ def _svc() -> WorkspaceService:
     return WorkspaceService()
 
 
+def _require_workspace(request: Request, workspace_id: str) -> None:
+    ensure_workspace_access(request, workspace_id, _svc())
+
+
+@router.get("", response_model=WorkspaceListOut)
+def list_workspaces(request: Request) -> WorkspaceListOut:
+    ctx = ensure_workspace_list_allowed(request)
+    if not ctx.user_id:
+        return WorkspaceListOut(authenticated=False, user_id=None, workspaces=[])
+    return WorkspaceListOut(
+        authenticated=True,
+        user_id=ctx.user_id,
+        workspaces=_svc().list_for_user(ctx.user_id),
+    )
+
+
 @router.post("", response_model=WorkspaceCreateOut)
-def create_workspace() -> WorkspaceCreateOut:
-    meta = _svc().create()
+def create_workspace(request: Request) -> WorkspaceCreateOut:
+    ctx = resolve_auth_context(request)
+    meta = _svc().create(owner_id=ctx.user_id, owner_email=ctx.email)
     return WorkspaceCreateOut(
         workspace_id=meta.get("workspace_id"),
         created_at=meta.get("created_at"),
     )
 
 
+@router.delete("/{workspace_id}", response_model=WorkspaceDeleteOut)
+def delete_workspace(workspace_id: str, request: Request) -> WorkspaceDeleteOut:
+    _require_workspace(request, workspace_id)
+    _svc().delete(workspace_id)
+    return WorkspaceDeleteOut(ok=True)
+
+
 @router.post("/{workspace_id}/generate-inventory", response_model=WorkspaceGenerateOut)
 def generate_inventory(
-    workspace_id: str, req: WorkspaceGenerateIn
+    workspace_id: str, req: WorkspaceGenerateIn, request: Request
 ) -> WorkspaceGenerateOut:
+    _require_workspace(request, workspace_id)
     _svc().generate_inventory(workspace_id, req.model_dump())
     files = _svc().list_files(workspace_id)
     return WorkspaceGenerateOut(
@@ -73,12 +105,14 @@ def generate_inventory(
 
 
 @router.get("/{workspace_id}/files", response_model=WorkspaceFileListOut)
-def list_files(workspace_id: str) -> WorkspaceFileListOut:
+def list_files(workspace_id: str, request: Request) -> WorkspaceFileListOut:
+    _require_workspace(request, workspace_id)
     return WorkspaceFileListOut(files=_svc().list_files(workspace_id))
 
 
 @router.get("/{workspace_id}/download/{path:path}")
-def download_file(workspace_id: str, path: str) -> StreamingResponse:
+def download_file(workspace_id: str, path: str, request: Request) -> StreamingResponse:
+    _require_workspace(request, workspace_id)
     data = _svc().read_file_bytes(workspace_id, path)
     filename = Path(path).name or "file"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
@@ -90,15 +124,17 @@ def download_file(workspace_id: str, path: str) -> StreamingResponse:
 
 
 @router.get("/{workspace_id}/files/{path:path}", response_model=WorkspaceFileOut)
-def read_file(workspace_id: str, path: str) -> WorkspaceFileOut:
+def read_file(workspace_id: str, path: str, request: Request) -> WorkspaceFileOut:
+    _require_workspace(request, workspace_id)
     content = _svc().read_file(workspace_id, path)
     return WorkspaceFileOut(path=path, content=content)
 
 
 @router.put("/{workspace_id}/files/{path:path}", response_model=WorkspaceFileOut)
 def write_file(
-    workspace_id: str, path: str, payload: WorkspaceFileWriteIn
+    workspace_id: str, path: str, payload: WorkspaceFileWriteIn, request: Request
 ) -> WorkspaceFileOut:
+    _require_workspace(request, workspace_id)
     _svc().write_file(workspace_id, path, payload.content)
     return WorkspaceFileOut(path=path, content=payload.content)
 
@@ -108,8 +144,9 @@ def write_file(
     response_model=WorkspaceRoleAppConfigOut,
 )
 def read_role_app_config(
-    workspace_id: str, role_id: str, alias: str | None = None
+    workspace_id: str, role_id: str, request: Request, alias: str | None = None
 ) -> WorkspaceRoleAppConfigOut:
+    _require_workspace(request, workspace_id)
     data = _svc().read_role_app_config(
         workspace_id=workspace_id,
         role_id=role_id,
@@ -126,8 +163,10 @@ def write_role_app_config(
     workspace_id: str,
     role_id: str,
     payload: WorkspaceRoleAppConfigIn,
+    request: Request,
     alias: str | None = None,
 ) -> WorkspaceRoleAppConfigOut:
+    _require_workspace(request, workspace_id)
     data = _svc().write_role_app_config(
         workspace_id=workspace_id,
         role_id=role_id,
@@ -142,8 +181,9 @@ def write_role_app_config(
     response_model=WorkspaceRoleAppConfigImportOut,
 )
 def import_role_app_defaults(
-    workspace_id: str, role_id: str, alias: str | None = None
+    workspace_id: str, role_id: str, request: Request, alias: str | None = None
 ) -> WorkspaceRoleAppConfigImportOut:
+    _require_workspace(request, workspace_id)
     data = _svc().import_role_app_defaults(
         workspace_id=workspace_id,
         role_id=role_id,
@@ -157,8 +197,9 @@ def import_role_app_defaults(
     response_model=WorkspaceFileRenameOut,
 )
 def rename_file(
-    workspace_id: str, path: str, payload: WorkspaceFileRenameIn
+    workspace_id: str, path: str, payload: WorkspaceFileRenameIn, request: Request
 ) -> WorkspaceFileRenameOut:
+    _require_workspace(request, workspace_id)
     new_path = _svc().rename_file(workspace_id, path, payload.new_path)
     return WorkspaceFileRenameOut(path=new_path)
 
@@ -167,7 +208,8 @@ def rename_file(
     "/{workspace_id}/files/{path:path}/mkdir",
     response_model=WorkspaceDirCreateOut,
 )
-def create_dir(workspace_id: str, path: str) -> WorkspaceDirCreateOut:
+def create_dir(workspace_id: str, path: str, request: Request) -> WorkspaceDirCreateOut:
+    _require_workspace(request, workspace_id)
     new_path = _svc().create_dir(workspace_id, path)
     return WorkspaceDirCreateOut(path=new_path)
 
@@ -175,15 +217,17 @@ def create_dir(workspace_id: str, path: str) -> WorkspaceDirCreateOut:
 @router.delete(
     "/{workspace_id}/files/{path:path}", response_model=WorkspaceFileDeleteOut
 )
-def delete_file(workspace_id: str, path: str) -> WorkspaceFileDeleteOut:
+def delete_file(workspace_id: str, path: str, request: Request) -> WorkspaceFileDeleteOut:
+    _require_workspace(request, workspace_id)
     _svc().delete_file(workspace_id, path)
     return WorkspaceFileDeleteOut(ok=True)
 
 
 @router.post("/{workspace_id}/credentials", response_model=WorkspaceCredentialsOut)
 def generate_credentials(
-    workspace_id: str, payload: WorkspaceCredentialsIn
+    workspace_id: str, payload: WorkspaceCredentialsIn, request: Request
 ) -> WorkspaceCredentialsOut:
+    _require_workspace(request, workspace_id)
     _svc().generate_credentials(
         workspace_id=workspace_id,
         master_password=payload.master_password,
@@ -198,8 +242,9 @@ def generate_credentials(
 
 @router.post("/{workspace_id}/vault/entries", response_model=WorkspaceVaultEntryOut)
 def set_vault_entries(
-    workspace_id: str, payload: WorkspaceVaultEntryIn
+    workspace_id: str, payload: WorkspaceVaultEntryIn, request: Request
 ) -> WorkspaceVaultEntryOut:
+    _require_workspace(request, workspace_id)
     _svc().set_vault_entries(
         workspace_id=workspace_id,
         master_password=payload.master_password,
@@ -217,8 +262,9 @@ def set_vault_entries(
     "/{workspace_id}/vault/change-master", response_model=WorkspaceVaultEntryOut
 )
 def change_vault_master(
-    workspace_id: str, payload: WorkspaceVaultChangeIn
+    workspace_id: str, payload: WorkspaceVaultChangeIn, request: Request
 ) -> WorkspaceVaultEntryOut:
+    _require_workspace(request, workspace_id)
     _svc().set_or_reset_vault_master_password(
         workspace_id=workspace_id,
         current_master_password=payload.master_password,
@@ -232,8 +278,9 @@ def change_vault_master(
     "/{workspace_id}/vault/master-password", response_model=WorkspaceVaultEntryOut
 )
 def set_or_reset_vault_master(
-    workspace_id: str, payload: WorkspaceMasterPasswordIn
+    workspace_id: str, payload: WorkspaceMasterPasswordIn, request: Request
 ) -> WorkspaceVaultEntryOut:
+    _require_workspace(request, workspace_id)
     _svc().set_or_reset_vault_master_password(
         workspace_id=workspace_id,
         current_master_password=payload.current_master_password,
@@ -248,8 +295,9 @@ def set_or_reset_vault_master(
     response_model=WorkspaceVaultPasswordResetOut,
 )
 def reset_vault_password(
-    workspace_id: str, payload: WorkspaceVaultPasswordResetIn
+    workspace_id: str, payload: WorkspaceVaultPasswordResetIn, request: Request
 ) -> WorkspaceVaultPasswordResetOut:
+    _require_workspace(request, workspace_id)
     result = _svc().reset_vault_password(
         workspace_id=workspace_id,
         master_password=payload.master_password,
@@ -260,8 +308,9 @@ def reset_vault_password(
 
 @router.post("/{workspace_id}/vault/decrypt", response_model=WorkspaceVaultDecryptOut)
 def decrypt_vault(
-    workspace_id: str, payload: WorkspaceVaultDecryptIn
+    workspace_id: str, payload: WorkspaceVaultDecryptIn, request: Request
 ) -> WorkspaceVaultDecryptOut:
+    _require_workspace(request, workspace_id)
     plaintext = _svc().vault_decrypt(
         workspace_id=workspace_id,
         master_password=payload.master_password,
@@ -272,8 +321,9 @@ def decrypt_vault(
 
 @router.post("/{workspace_id}/vault/encrypt", response_model=WorkspaceVaultEncryptOut)
 def encrypt_vault(
-    workspace_id: str, payload: WorkspaceVaultEncryptIn
+    workspace_id: str, payload: WorkspaceVaultEncryptIn, request: Request
 ) -> WorkspaceVaultEncryptOut:
+    _require_workspace(request, workspace_id)
     vault_text = _svc().vault_encrypt(
         workspace_id=workspace_id,
         master_password=payload.master_password,
@@ -284,8 +334,9 @@ def encrypt_vault(
 
 @router.post("/{workspace_id}/ssh-keys", response_model=WorkspaceSshKeygenOut)
 def generate_ssh_keys(
-    workspace_id: str, payload: WorkspaceSshKeygenIn
+    workspace_id: str, payload: WorkspaceSshKeygenIn, request: Request
 ) -> WorkspaceSshKeygenOut:
+    _require_workspace(request, workspace_id)
     data = _svc().generate_ssh_keypair(
         workspace_id=workspace_id,
         alias=payload.alias,
@@ -303,8 +354,9 @@ def generate_ssh_keys(
     response_model=WorkspaceVaultEntryOut,
 )
 def change_key_passphrase(
-    workspace_id: str, payload: WorkspaceKeyPassphraseIn
+    workspace_id: str, payload: WorkspaceKeyPassphraseIn, request: Request
 ) -> WorkspaceVaultEntryOut:
+    _require_workspace(request, workspace_id)
     _svc().change_key_passphrase(
         workspace_id=workspace_id,
         alias=payload.alias,
@@ -319,9 +371,9 @@ def change_key_passphrase(
     "/{workspace_id}/test-connection", response_model=WorkspaceConnectionTestOut
 )
 def test_connection(
-    workspace_id: str, payload: WorkspaceConnectionTestIn
+    workspace_id: str, payload: WorkspaceConnectionTestIn, request: Request
 ) -> WorkspaceConnectionTestOut:
-    _svc().ensure(workspace_id)
+    _require_workspace(request, workspace_id)
     data = _svc().test_connection(
         host=payload.host,
         port=payload.port,
@@ -335,7 +387,8 @@ def test_connection(
 
 
 @router.get("/{workspace_id}/download.zip")
-def download_zip(workspace_id: str) -> StreamingResponse:
+def download_zip(workspace_id: str, request: Request) -> StreamingResponse:
+    _require_workspace(request, workspace_id)
     data = _svc().build_zip(workspace_id)
     headers = {
         "Content-Disposition": f'attachment; filename="workspace-{workspace_id}.zip"'
@@ -349,8 +402,9 @@ def download_zip(workspace_id: str) -> StreamingResponse:
 
 @router.post("/{workspace_id}/upload.zip", response_model=WorkspaceUploadOut)
 async def upload_zip(
-    workspace_id: str, file: UploadFile = File(...)
+    workspace_id: str, request: Request, file: UploadFile = File(...)
 ) -> WorkspaceUploadOut:
+    _require_workspace(request, workspace_id)
     filename = (file.filename or "").lower()
     if not filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="zip file required")

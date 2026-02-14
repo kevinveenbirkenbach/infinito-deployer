@@ -12,6 +12,24 @@ class WorkspaceCreateOut(BaseModel):
     created_at: Optional[str] = None
 
 
+class WorkspaceListEntryOut(BaseModel):
+    workspace_id: str
+    name: str
+    created_at: Optional[str] = None
+    last_modified_at: Optional[str] = None
+    state: str = "draft"
+
+
+class WorkspaceListOut(BaseModel):
+    authenticated: bool = False
+    user_id: Optional[str] = None
+    workspaces: List[WorkspaceListEntryOut] = Field(default_factory=list)
+
+
+class WorkspaceDeleteOut(BaseModel):
+    ok: bool
+
+
 class WorkspaceGenerateIn(BaseModel):
     deploy_target: DeployTarget
     alias: Optional[str] = Field(

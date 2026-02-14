@@ -10,6 +10,7 @@ from fastapi import HTTPException
 
 from api.schemas.role import RoleLogoOut, RoleOut
 from roles.role_metadata_extractor import extract_role_metadata
+from services.pricing_engine import load_role_pricing_metadata
 from services.role_catalog import RoleCatalogError, RoleCatalogService
 
 from .categories import load_categories
@@ -113,8 +114,13 @@ class RoleIndexService:
             )
             license_url = _normalize_url(md.license_url, md.id, "license_url")
             forum = _normalize_url(md.forum, md.id, "forum") if md.forum else None
+            pricing, pricing_summary, pricing_warnings = load_role_pricing_metadata(
+                role_dir, role_id=md.id
+            )
+            for warning in pricing_warnings:
+                LOGGER.warning("role %s: %s", md.id, warning)
 
-            ro = RoleOut(
+            ro_list = RoleOut(
                 id=md.id,
                 display_name=md.display_name,
                 status=md.status,
@@ -139,10 +145,15 @@ class RoleIndexService:
                 logo=logo,
                 deployment_targets=md.deployment_targets,
                 categories=categories.get(md.id, []),
+                pricing_summary=pricing_summary,
             )
 
-            out.append(ro)
-            by_id[ro.id] = ro
+            ro_detail_payload = ro_list.model_dump()
+            ro_detail_payload["pricing"] = pricing
+            ro_detail = RoleOut(**ro_detail_payload)
+
+            out.append(ro_detail)
+            by_id[ro_detail.id] = ro_detail
 
         out.sort(key=lambda r: (safe_lower(r.display_name), safe_lower(r.id)))
 

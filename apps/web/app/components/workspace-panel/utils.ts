@@ -92,7 +92,10 @@ export function loadWorkspaceList(userId: string): WorkspaceListEntry[] {
     return parsed
       .map((entry) => ({
         id: String(entry?.id || "").trim(),
+        name: entry?.name ? String(entry.name) : undefined,
+        state: entry?.state ? String(entry.state) : undefined,
         created_at: entry?.created_at ?? null,
+        last_modified_at: entry?.last_modified_at ?? null,
         last_used: entry?.last_used ?? null,
       }))
       .filter((entry) => entry.id);
