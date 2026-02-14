@@ -1,10 +1,12 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import styles from "./styles.module.css";
 
 type PlanOption = { id: string; label: string };
 type PricingModel = "app" | "bundle";
+type EnableDropdownVariant = "default" | "tile";
 
 type RoleStateAction = "enable" | "enabled" | "disable";
 
@@ -18,6 +20,8 @@ type EnableDropdownProps = {
   enabled: boolean;
   disabled?: boolean;
   compact?: boolean;
+  variant?: EnableDropdownVariant;
+  tileMeta?: ReactNode;
   pricingModel?: PricingModel;
   contextLabel?: string;
   plans?: PlanOption[];
@@ -29,6 +33,7 @@ type EnableDropdownProps = {
   pricing?: Record<string, unknown> | null;
   pricingSummary?: Record<string, unknown> | null;
   baseUrl?: string;
+  onOpenDetails?: () => void;
   onSelectPlan?: (planId: string | null) => void;
   onEnable: () => void;
   onDisable: () => void;
@@ -99,16 +104,12 @@ function readPricingUsers(): PricingUser[] {
   }
 }
 
-function persistPricingUsers(nextUsers: PricingUser[]) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(PRICING_USERS_STORAGE_KEY, JSON.stringify(nextUsers));
-  window.dispatchEvent(new Event(PRICING_USERS_UPDATED_EVENT));
-}
-
 export default function EnableDropdown({
   enabled,
   disabled = false,
   compact = false,
+  variant = "default",
+  tileMeta,
   pricingModel = "app",
   contextLabel,
   plans,
@@ -120,6 +121,7 @@ export default function EnableDropdown({
   pricing,
   pricingSummary,
   baseUrl,
+  onOpenDetails,
   onSelectPlan,
   onEnable,
   onDisable,
@@ -127,10 +129,7 @@ export default function EnableDropdown({
   const [inactiveState, setInactiveState] = useState<"enable" | "disable">("enable");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [stateMenuOpen, setStateMenuOpen] = useState(false);
-  const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [pricingUsers, setPricingUsers] = useState<PricingUser[]>([]);
-  const [calcError, setCalcError] = useState<string | null>(null);
-  const [quote, setQuote] = useState<PricingQuote | null>(null);
   const stateButtonRef = useRef<HTMLButtonElement | null>(null);
   const stateMenuRef = useRef<HTMLDivElement | null>(null);
   const prevEnabledRef = useRef<boolean>(enabled);
@@ -209,52 +208,22 @@ export default function EnableDropdown({
   }, [stateMenuOpen]);
 
   const normalizedServerCount = Math.max(0, Math.floor(Number(serverCount) || 0));
-  const normalizedBundleRoleCount = Math.max(0, Math.floor(Number(appCount) || 0));
+  const normalizedBundleRoleCount = Math.max(1, Math.floor(Number(appCount) || 0));
   const usersCount = pricingUsers.length;
-  const calculatedServers = pricingModel === "app" ? normalizedServerCount : 1;
+  const effectiveUsersCount = Math.max(1, usersCount);
+  const calculatedServers = pricingModel === "app" ? Math.max(1, normalizedServerCount) : 1;
   const calculatedApps = pricingModel === "app" ? 1 : normalizedBundleRoleCount;
 
-  const calculatorModelLabel =
-    pricingModel === "bundle" ? "users × roles" : "users × servers × app";
-
-  const canCalculate =
-    usersCount > 0 &&
-    (pricingModel === "bundle" ? calculatedApps > 0 : calculatedServers > 0);
-
-  useEffect(() => {
-    setQuote(null);
-  }, [pricingModel, usersCount, calculatedServers, calculatedApps]);
-
-  const openCalculator = () => {
-    setCalcError(null);
-    setCalculatorOpen(true);
-  };
-
-  const applyCalculation = () => {
-    if (!canCalculate) {
-      if (usersCount <= 0) {
-        setCalcError("Add at least one user.");
-        return;
-      }
-      if (pricingModel === "bundle") {
-        setCalcError("Bundle has no roles to calculate.");
-      } else {
-        setCalcError("No enabled servers for this app.");
-      }
-      return;
-    }
-    const users = normalizePositiveInt(usersCount, 1);
+  const quote = useMemo<PricingQuote>(() => {
+    const users = normalizePositiveInt(effectiveUsersCount, 1);
     const servers = normalizePositiveInt(calculatedServers, 1);
     const apps = normalizePositiveInt(calculatedApps, 1);
     const total = pricingModel === "bundle" ? users * apps : users * servers * apps;
-    setQuote({ model: pricingModel, users, servers, apps, total });
-    setCalcError(null);
-    setCalculatorOpen(false);
-  };
+    return { model: pricingModel, users, servers, apps, total };
+  }, [effectiveUsersCount, calculatedServers, calculatedApps, pricingModel]);
 
   const quoteLabel = useMemo(() => {
-    if (!quote) return "Not calculated";
-    if (quote.total <= 0) return "Free";
+    if (quote.total <= 0) return formatAmount(0, "EUR");
     return formatAmount(quote.total, "EUR");
   }, [quote]);
 
@@ -313,149 +282,116 @@ export default function EnableDropdown({
     [activeState]
   );
 
-  const calculateButtonLabel = quote ? "Recalculate" : "Calculate";
+  const stateIconClass = useMemo(() => {
+    if (activeState === "enabled") return "fa-solid fa-toggle-on";
+    if (activeState === "disable") return "fa-solid fa-toggle-off";
+    return "fa-solid fa-power-off";
+  }, [activeState]);
+
+  const tilePriceLabel = quoteLabel;
+
+  const renderStateControl = (openUpward = false, withLeadingIcon = false) => (
+    <div
+      className={`${styles.enableStateControl} ${openUpward ? styles.enableStateControlUp : ""}`}
+    >
+      <button
+        ref={stateButtonRef}
+        type="button"
+        disabled={disabled}
+        onClick={() => setStateMenuOpen((prev) => !prev)}
+        className={`${styles.enableStateDropdownButton} ${stateButtonClass} ${
+          disabled ? styles.enableSwitchButtonLocked : ""
+        }`}
+      >
+        <span className={styles.enableStateDropdownButtonLabel}>
+          {withLeadingIcon ? (
+            <i className={stateIconClass} aria-hidden="true" />
+          ) : null}
+          <span>{activeStateLabel}</span>
+        </span>
+        <i className="fa-solid fa-chevron-down" aria-hidden="true" />
+      </button>
+      {stateMenuOpen ? (
+        <div ref={stateMenuRef} className={styles.enableStateMenu} role="menu">
+          {stateMenuOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => applyStateAction(option.id)}
+              className={`${styles.enableStateMenuItem} ${
+                option.id === "enable"
+                  ? styles.enableStateMenuItemEnable
+                  : option.id === "enabled"
+                    ? styles.enableStateMenuItemEnabled
+                    : styles.enableStateMenuItemDisable
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 
   return (
     <>
-      <div className={`${styles.enableControl} ${compact ? styles.enableControlCompact : ""}`}>
-        <div className={styles.enableField}>
-          {hasPlanOptions && planOptions.length > 1 ? (
-            <select
-              value={selectedPlanValue || ""}
-              disabled={disabled}
-              onChange={(event) => onSelectPlan?.(asTrimmedString(event.target.value) || null)}
-              className={styles.enablePlanSelect}
-            >
-              {planOptions.map((plan) => (
-                <option key={plan.id} value={plan.id}>
-                  {plan.label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <span className={styles.enablePlanStatic}>{selectedPlanLabel}</span>
-          )}
-        </div>
-
-        {!compact ? (
-          <div className={styles.enableField}>
-            <div className={styles.enablePriceRow}>
-              <span className={styles.enablePriceValue}>{quoteLabel}</span>
+      {variant === "tile" ? (
+        <div className={styles.enableTileRoot}>
+          <div className={styles.enableTilePriceBlock}>
+            <span className={styles.enableTilePriceValue}>{tilePriceLabel}</span>
+            <span className={styles.enableTilePriceCaption}>per month</span>
+          </div>
+          <div className={styles.enableTileActionColumn}>
+            {renderStateControl(true, true)}
+            {onOpenDetails ? (
               <button
                 type="button"
-                onClick={openCalculator}
+                onClick={onOpenDetails}
                 disabled={disabled}
-                className={styles.enableCalculateButton}
+                className={`${styles.enableTileActionButton} ${styles.enableTileActionButtonDetails}`}
               >
-                {calculateButtonLabel}
+                <i className="fa-solid fa-circle-info" aria-hidden="true" />
+                <span>Details</span>
               </button>
-            </div>
+            ) : null}
           </div>
-        ) : null}
-
-        <div className={`${styles.enableField} ${styles.enableFieldState}`}>
-          <div className={styles.enableStateControl}>
-            <button
-              ref={stateButtonRef}
-              type="button"
-              disabled={disabled}
-              onClick={() => setStateMenuOpen((prev) => !prev)}
-              className={`${styles.enableStateDropdownButton} ${stateButtonClass} ${
-                disabled ? styles.enableSwitchButtonLocked : ""
-              }`}
-            >
-              <span>{activeStateLabel}</span>
-              <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-            </button>
-            {stateMenuOpen ? (
-              <div ref={stateMenuRef} className={styles.enableStateMenu} role="menu">
-                {stateMenuOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => applyStateAction(option.id)}
-                    className={`${styles.enableStateMenuItem} ${
-                      option.id === "enable"
-                        ? styles.enableStateMenuItemEnable
-                        : option.id === "enabled"
-                          ? styles.enableStateMenuItemEnabled
-                          : styles.enableStateMenuItemDisable
-                    }`}
-                  >
-                    {option.label}
-                  </button>
+          <div className={styles.enableTileMetaRow}>{tileMeta || null}</div>
+        </div>
+      ) : (
+        <div className={`${styles.enableControl} ${compact ? styles.enableControlCompact : ""}`}>
+          <div className={styles.enableField}>
+            {hasPlanOptions && planOptions.length > 1 ? (
+              <select
+                value={selectedPlanValue || ""}
+                disabled={disabled}
+                onChange={(event) => onSelectPlan?.(asTrimmedString(event.target.value) || null)}
+                className={styles.enablePlanSelect}
+              >
+                {planOptions.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.label}
+                  </option>
                 ))}
-              </div>
-            ) : null}
+              </select>
+            ) : (
+              <span className={styles.enablePlanStatic}>{selectedPlanLabel}</span>
+            )}
           </div>
-        </div>
-      </div>
 
-      {calculatorOpen ? (
-        <div className={styles.enableConfirmOverlay} onClick={() => setCalculatorOpen(false)}>
-          <div
-            className={styles.enableConfirmCard}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h4 className={styles.enableConfirmTitle}>Calculate estimate</h4>
-            <p className={styles.enableConfirmText}>
-              Model: {calculatorModelLabel}
-            </p>
-            <div className={styles.enableCalcReadonlyGrid}>
-              <label className={styles.enableCalcReadonlyField}>
-                <span>Users</span>
-                <input
-                  type="number"
-                  value={String(usersCount)}
-                  className={styles.enableCalcInput}
-                  readOnly
-                />
-              </label>
-              <label className={styles.enableCalcReadonlyField}>
-                <span>{pricingModel === "bundle" ? "Roles" : "Servers"}</span>
-                <input
-                  type="number"
-                  value={String(pricingModel === "bundle" ? calculatedApps : calculatedServers)}
-                  className={styles.enableCalcInput}
-                  readOnly
-                />
-              </label>
-              <label className={styles.enableCalcReadonlyField}>
-                <span>Apps</span>
-                <input
-                  type="number"
-                  value={String(calculatedApps)}
-                  className={styles.enableCalcInput}
-                  readOnly
-                />
-              </label>
+          {!compact ? (
+            <div className={styles.enableField}>
+              <div className={styles.enablePriceRow}>
+                <span className={styles.enablePriceValue}>{quoteLabel}</span>
+              </div>
             </div>
-            <p className={styles.enableCalcHint}>
-              Manage users in Inventory via the new Users button.
-            </p>
-            {calcError ? (
-              <p className={styles.enableCalcError}>{calcError}</p>
-            ) : null}
-            <div className={styles.enableConfirmActions}>
-              <button
-                type="button"
-                onClick={() => setCalculatorOpen(false)}
-                className={styles.enableCancelButton}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={applyCalculation}
-                disabled={!canCalculate}
-                className={styles.enableDisableButton}
-              >
-                Calculate
-              </button>
-            </div>
+          ) : null}
+
+          <div className={`${styles.enableField} ${styles.enableFieldState}`}>
+            {renderStateControl()}
           </div>
         </div>
-      ) : null}
+      )}
 
       {confirmOpen ? (
         <div

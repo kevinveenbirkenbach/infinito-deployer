@@ -25,6 +25,7 @@ type RoleGridViewProps = {
   computedColumns: number;
   gridGap: number;
   onOpenVideo: (url: string, title: string) => void;
+  onOpenDetails?: (role: Role) => void;
 };
 
 export default function RoleGridView({
@@ -43,6 +44,7 @@ export default function RoleGridView({
   computedColumns,
   gridGap,
   onOpenVideo,
+  onOpenDetails,
 }: RoleGridViewProps) {
   const [hoveredRoleId, setHoveredRoleId] = useState<string | null>(null);
 
@@ -56,6 +58,12 @@ export default function RoleGridView({
     <div className={styles.gridRoot} style={gridStyle}>
       {roles.map((role) => {
         const selectedState = selected.has(role.id);
+        const plans = rolePlans?.[role.id] || [{ id: "community", label: "Community" }];
+        const fallbackPlanId =
+          plans.find((plan) => plan.id === "community")?.id || plans[0]?.id || "community";
+        const selectedPlanId = selectedPlanByRole?.[role.id] ?? fallbackPlanId;
+        const selectedPlanLabel =
+          plans.find((plan) => plan.id === selectedPlanId)?.label || "Community";
         const roleServerCount = Math.max(
           0,
           Math.floor(Number(roleServerCountByRole?.[role.id] || 0))
@@ -119,8 +127,8 @@ export default function RoleGridView({
                   <EnableDropdown
                     enabled={selectedState}
                     pricingModel="app"
-                    plans={rolePlans?.[role.id]}
-                    selectedPlanId={selectedPlanByRole?.[role.id] ?? null}
+                    plans={plans}
+                    selectedPlanId={selectedPlanId}
                     onSelectPlan={(planId) => onSelectRolePlan?.(role.id, planId)}
                     roleId={role.id}
                     pricing={role.pricing || null}
@@ -226,42 +234,30 @@ export default function RoleGridView({
             }`}
             style={cardHeightStyle}
           >
-            <div className={styles.detailTitleRow}>
-              <div className={styles.detailRoleMeta}>
-                {logo}
+            <div className={styles.detailHeader}>
+              {logo}
+              <div className={styles.detailHeaderMeta}>
                 <h3 className={styles.roleTitle} title={role.display_name}>
                   {role.display_name}
                 </h3>
-                <span className={styles.statusBadge} style={statusStyle}>
-                  {role.status}
-                </span>
+                <div className={styles.detailBadgeRow}>
+                  <span className={styles.detailPlanBadge} title={selectedPlanLabel}>
+                    {selectedPlanLabel}
+                  </span>
+                  <span className={styles.statusBadge} style={statusStyle}>
+                    {role.status}
+                  </span>
+                </div>
               </div>
             </div>
 
             {viewConfig.showDescription ? (
-              <p className={`text-body-secondary ${styles.roleDescriptionLong}`}>
+              <p className={styles.roleDescriptionOneLine}>
                 {role.description || "No description provided."}
               </p>
             ) : null}
 
-            {viewConfig.showTargets ? (
-              <div className={styles.targetList}>
-                {displayTargets(role.deployment_targets ?? []).map((target) => (
-                  <span key={`${role.id}-${target}`} className={styles.targetBadge}>
-                    {target}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-
             <div className={styles.detailFooterRow}>
-              {viewConfig.showLinks ? (
-                <div className={styles.detailLinks}>
-                  <RoleQuickLinks role={role} onOpenVideo={onOpenVideo} maxVisible={3} />
-                </div>
-              ) : (
-                <div />
-              )}
               <div className={styles.detailControlRow}>
                 {developerMode && onEditRoleConfig ? (
                   <button
@@ -274,9 +270,14 @@ export default function RoleGridView({
                 ) : null}
                 <EnableDropdown
                   enabled={selectedState}
+                  variant="tile"
+                  tileMeta={
+                    <RoleQuickLinks role={role} onOpenVideo={onOpenVideo} adaptiveOverflow />
+                  }
+                  onOpenDetails={onOpenDetails ? () => onOpenDetails(role) : undefined}
                   pricingModel="app"
-                  plans={rolePlans?.[role.id]}
-                  selectedPlanId={selectedPlanByRole?.[role.id] ?? null}
+                  plans={plans}
+                  selectedPlanId={selectedPlanId}
                   onSelectPlan={(planId) => onSelectRolePlan?.(role.id, planId)}
                   roleId={role.id}
                   pricing={role.pricing || null}

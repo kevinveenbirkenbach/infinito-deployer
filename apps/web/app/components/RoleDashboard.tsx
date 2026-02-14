@@ -11,6 +11,7 @@ import { sortStatuses } from "./role-dashboard/helpers";
 import { hexToRgba } from "./deployment-credentials/device-visuals";
 import BundleGridView from "./role-dashboard/BundleGridView";
 import EnableDropdown from "./role-dashboard/EnableDropdown";
+import RoleDetailsModal from "./role-dashboard/RoleDetailsModal";
 import RoleGridView from "./role-dashboard/RoleGridView";
 import RoleListView from "./role-dashboard/RoleListView";
 import RoleLogoView from "./role-dashboard/RoleLogoView";
@@ -161,6 +162,10 @@ export default function RoleDashboard({
     url: string;
     title: string;
   } | null>(null);
+  const [activeDetails, setActiveDetails] = useState<{
+    role: Role;
+    alias: string;
+  } | null>(null);
   const [bundles, setBundles] = useState<Bundle[]>([]);
   const [bundlesLoading, setBundlesLoading] = useState(false);
   const [bundlesError, setBundlesError] = useState<string | null>(null);
@@ -179,6 +184,17 @@ export default function RoleDashboard({
     window.addEventListener("keydown", handle);
     return () => window.removeEventListener("keydown", handle);
   }, [activeVideo]);
+
+  useEffect(() => {
+    if (!activeDetails) return;
+    const handle = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setActiveDetails(null);
+      }
+    };
+    window.addEventListener("keydown", handle);
+    return () => window.removeEventListener("keydown", handle);
+  }, [activeDetails]);
 
   useEffect(() => {
     const apiBase = String(baseUrl || "").trim();
@@ -736,6 +752,30 @@ export default function RoleDashboard({
     });
     return stateMap;
   }, [activeAlias, matrixAliases, selectedLookup, bundles, knownRoleIds]);
+
+  const detailAliases = useMemo(() => {
+    const fallback = String(activeAlias || "").trim();
+    const aliases = matrixAliases.map((alias) => String(alias || "").trim()).filter(Boolean);
+    if (aliases.length > 0) return aliases;
+    return fallback ? [fallback] : ["server"];
+  }, [matrixAliases, activeAlias]);
+
+  const activeDetailsAlias = useMemo(() => {
+    if (!activeDetails) return detailAliases[0] || "server";
+    if (detailAliases.includes(activeDetails.alias)) return activeDetails.alias;
+    return detailAliases[0] || "server";
+  }, [activeDetails, detailAliases]);
+
+  const activeDetailsRoleId = String(activeDetails?.role?.id || "").trim();
+  const activeDetailsSelected = Boolean(
+    activeDetailsRoleId && selectedLookup[activeDetailsAlias]?.has(activeDetailsRoleId)
+  );
+  const activeDetailsPlans = activeDetailsRoleId
+    ? rolePlanOptions[activeDetailsRoleId] || [{ id: "community", label: "Community" }]
+    : [{ id: "community", label: "Community" }];
+  const activeDetailsPlanId = activeDetailsRoleId
+    ? selectedPlanLookup[activeDetailsAlias]?.[activeDetailsRoleId] ?? null
+    : null;
 
   useEffect(() => {
     setPage(1);
@@ -1547,6 +1587,12 @@ export default function RoleDashboard({
                 computedColumns={computedColumns}
                 gridGap={gridGap}
                 onOpenVideo={(url, title) => setActiveVideo({ url, title })}
+                onOpenDetails={(role) =>
+                  setActiveDetails({
+                    role,
+                    alias: String(activeAlias || "").trim() || matrixAliases[0] || "server",
+                  })
+                }
               />
             )}
           </div>
@@ -1578,6 +1624,34 @@ export default function RoleDashboard({
       </div>
 
       <RoleVideoModal activeVideo={activeVideo} onClose={() => setActiveVideo(null)} />
+      {activeDetails ? (
+        <RoleDetailsModal
+          role={activeDetails.role}
+          aliases={detailAliases}
+          selectedAlias={activeDetailsAlias}
+          selected={activeDetailsSelected}
+          plans={activeDetailsPlans}
+          selectedPlanId={activeDetailsPlanId}
+          serverCount={activeDetailsSelected ? 1 : 0}
+          onAliasChange={(alias) =>
+            setActiveDetails((prev) => (prev ? { ...prev, alias } : prev))
+          }
+          onSelectPlan={(planId) => {
+            if (!activeDetailsRoleId) return;
+            selectPlanByAlias(activeDetailsAlias, activeDetailsRoleId, planId);
+          }}
+          onEnable={() => {
+            if (!activeDetailsRoleId || activeDetailsSelected) return;
+            toggleSelectedByAlias(activeDetailsAlias, activeDetailsRoleId);
+          }}
+          onDisable={() => {
+            if (!activeDetailsRoleId || !activeDetailsSelected) return;
+            toggleSelectedByAlias(activeDetailsAlias, activeDetailsRoleId);
+          }}
+          onOpenVideo={(url, title) => setActiveVideo({ url, title })}
+          onClose={() => setActiveDetails(null)}
+        />
+      ) : null}
       {bundleMergePrompt ? (
         <div
           onClick={() => setBundleMergePrompt(null)}

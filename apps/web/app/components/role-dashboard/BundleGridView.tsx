@@ -81,7 +81,7 @@ export default function BundleGridView({
               {bundle.description || "No description provided."}
             </p>
 
-            <div className={styles.detailFooterRow}>
+            <div className={styles.bundleFooterRow}>
               <div className={styles.detailLinks}>
                 <span className={styles.bundleRoleCount}>
                   {state.selectedCount}/{state.totalCount} apps
@@ -95,7 +95,7 @@ export default function BundleGridView({
                   <span className={styles.quickLinkOverflow}>...</span>
                 ) : null}
               </div>
-              <div className={styles.detailControlRow}>
+              <div className={styles.bundleControlRow}>
                 <EnableDropdown
                   enabled={state.enabled}
                   pricingModel="bundle"
