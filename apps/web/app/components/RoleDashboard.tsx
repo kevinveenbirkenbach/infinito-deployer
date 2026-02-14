@@ -41,8 +41,34 @@ const SOFTWARE_SCOPE_OPTIONS: { id: SoftwareScope; label: string }[] = [
   { id: "apps", label: "Apps" },
 ];
 
+const SW_QUERY_KEYS = {
+  scope: "sw_scope",
+  search: "sw_search",
+  target: "sw_target",
+  status: "sw_status",
+  categories: "sw_categories",
+  tags: "sw_tags",
+  selected: "sw_selected",
+  view: "sw_view",
+  rows: "sw_rows",
+} as const;
+
 function normalizeFacet(value: string): string {
   return String(value || "").trim().toLowerCase();
+}
+
+function parseCsvParam(value: string | null): string[] {
+  return String(value || "")
+    .split(",")
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean);
+}
+
+function parseFacetCsvParam(value: string | null): string[] {
+  return String(value || "")
+    .split(",")
+    .map((entry) => normalizeFacet(entry))
+    .filter(Boolean);
 }
 
 function collectFacetValues<T>(
@@ -175,6 +201,77 @@ export default function RoleDashboard({
     bundle: Bundle;
     alias: string;
   } | null>(null);
+  const querySyncReadyRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+
+    const scopeParam = String(params.get(SW_QUERY_KEYS.scope) || "")
+      .trim()
+      .toLowerCase();
+    if (scopeParam === "apps" || scopeParam === "bundles") {
+      setSoftwareScope(scopeParam);
+    }
+
+    const searchParam = params.get(SW_QUERY_KEYS.search);
+    if (searchParam !== null) {
+      setQuery(searchParam);
+      setQueryDraft(searchParam);
+    }
+
+    const targetParam = String(params.get(SW_QUERY_KEYS.target) || "")
+      .trim()
+      .toLowerCase();
+    if (targetParam === "all" || targetParam === "server" || targetParam === "workstation") {
+      setTargetFilter(targetParam);
+    }
+
+    const statusParam = params.get(SW_QUERY_KEYS.status);
+    if (statusParam !== null) {
+      setStatusFilter(new Set(parseCsvParam(statusParam)));
+    }
+
+    const categoriesParam = params.get(SW_QUERY_KEYS.categories);
+    if (categoriesParam !== null) {
+      setCategoryFilter(new Set(parseFacetCsvParam(categoriesParam)));
+    }
+
+    const tagsParam = params.get(SW_QUERY_KEYS.tags);
+    if (tagsParam !== null) {
+      setTagFilter(new Set(parseFacetCsvParam(tagsParam)));
+    }
+
+    const selectedParam = String(params.get(SW_QUERY_KEYS.selected) || "")
+      .trim()
+      .toLowerCase();
+    if (selectedParam) {
+      setShowSelectedOnly(selectedParam === "1" || selectedParam === "true");
+    }
+
+    const viewParam = String(params.get(SW_QUERY_KEYS.view) || "")
+      .trim()
+      .toLowerCase();
+    if ((VIEW_MODES as readonly string[]).includes(viewParam)) {
+      setViewMode(viewParam as ViewMode);
+    }
+
+    const rowsParam = String(params.get(SW_QUERY_KEYS.rows) || "")
+      .trim()
+      .toLowerCase();
+    if (rowsParam) {
+      if (rowsParam === "auto") {
+        setRowsOverride(null);
+      } else {
+        const parsed = Number(rowsParam);
+        setRowsOverride(
+          Number.isInteger(parsed) && parsed > 0 ? parsed : null
+        );
+      }
+    }
+
+    querySyncReadyRef.current = true;
+  }, []);
 
   useEffect(() => {
     if (!activeVideo) return;
@@ -886,15 +983,52 @@ export default function RoleDashboard({
   useEffect(() => {
     if (softwareScope !== "bundles") return;
     setViewMenuOpen(false);
-    setShowSelectedOnly(false);
-    setStatusFilter(new Set());
-    setTargetFilter("all");
-    setCategoryFilter(new Set());
-    setTagFilter(new Set());
     if (viewMode === "matrix") {
       setViewMode("detail");
     }
   }, [softwareScope, viewMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!querySyncReadyRef.current) return;
+    const url = new URL(window.location.href);
+    const params = url.searchParams;
+    params.set(SW_QUERY_KEYS.scope, softwareScope);
+    params.set(SW_QUERY_KEYS.search, query);
+    params.set(SW_QUERY_KEYS.target, targetFilter);
+    params.set(
+      SW_QUERY_KEYS.status,
+      Array.from(statusFilter)
+        .sort((a, b) => a.localeCompare(b))
+        .join(",")
+    );
+    params.set(
+      SW_QUERY_KEYS.categories,
+      Array.from(categoryFilter)
+        .sort((a, b) => a.localeCompare(b))
+        .join(",")
+    );
+    params.set(
+      SW_QUERY_KEYS.tags,
+      Array.from(tagFilter)
+        .sort((a, b) => a.localeCompare(b))
+        .join(",")
+    );
+    params.set(SW_QUERY_KEYS.selected, showSelectedOnly ? "1" : "0");
+    params.set(SW_QUERY_KEYS.view, viewMode);
+    params.set(SW_QUERY_KEYS.rows, rowsOverride ? String(rowsOverride) : "auto");
+    window.history.replaceState({}, "", url.toString());
+  }, [
+    softwareScope,
+    query,
+    targetFilter,
+    statusFilter,
+    categoryFilter,
+    tagFilter,
+    showSelectedOnly,
+    viewMode,
+    rowsOverride,
+  ]);
 
   useEffect(() => {
     const onEscape = (event: KeyboardEvent) => {
@@ -1470,21 +1604,6 @@ export default function RoleDashboard({
                                       }
                                     }}
                                   />
-                                  {activeMode === "expert" && onLoadRoleAppConfig ? (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        void startEditRoleConfig(role, alias)
-                                      }
-                                      className={styles.matrixEditButton}
-                                    >
-                                      <i
-                                        className="fa-solid fa-pen-to-square"
-                                        aria-hidden="true"
-                                      />
-                                      <span>Edit</span>
-                                    </button>
-                                  ) : null}
                                 </div>
                               </td>
                             );
@@ -1508,10 +1627,6 @@ export default function RoleDashboard({
                 }
                 roleServerCountByRole={roleServerCountByRole}
                 baseUrl={baseUrl}
-                developerMode={activeMode === "expert"}
-                onEditRoleConfig={
-                  onLoadRoleAppConfig ? (role) => void startEditRoleConfig(role) : undefined
-                }
                 onOpenVideo={(url, title) => setActiveVideo({ url, title })}
               />
             ) : (
@@ -1526,10 +1641,6 @@ export default function RoleDashboard({
                 }
                 roleServerCountByRole={roleServerCountByRole}
                 baseUrl={baseUrl}
-                developerMode={activeMode === "expert"}
-                onEditRoleConfig={
-                  onLoadRoleAppConfig ? (role) => void startEditRoleConfig(role) : undefined
-                }
                 viewMode={viewMode}
                 viewConfig={viewConfig}
                 computedColumns={computedColumns}
@@ -1596,6 +1707,15 @@ export default function RoleDashboard({
             if (!activeDetailsRoleId || !activeDetailsSelected) return;
             toggleSelectedByAlias(activeDetailsAlias, activeDetailsRoleId);
           }}
+          expertMode={activeMode === "expert"}
+          onEditRoleConfig={
+            onLoadRoleAppConfig
+              ? () => {
+                  setActiveDetails(null);
+                  void startEditRoleConfig(activeDetails.role, activeDetailsAlias);
+                }
+              : undefined
+          }
           onOpenVideo={(url, title) => setActiveVideo({ url, title })}
           onClose={() => setActiveDetails(null)}
         />

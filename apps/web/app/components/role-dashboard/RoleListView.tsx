@@ -19,8 +19,6 @@ type RoleListViewProps = {
   rolePlans?: Record<string, { id: string; label: string }[]>;
   selectedPlanByRole?: Record<string, string | null>;
   onSelectRolePlan?: (roleId: string, planId: string | null) => void;
-  developerMode?: boolean;
-  onEditRoleConfig?: (role: Role) => void;
   onOpenVideo: (url: string, title: string) => void;
 };
 
@@ -46,8 +44,6 @@ export default function RoleListView({
   rolePlans,
   selectedPlanByRole,
   onSelectRolePlan,
-  developerMode = false,
-  onEditRoleConfig,
   onOpenVideo,
 }: RoleListViewProps) {
   const [expandedTitleIds, setExpandedTitleIds] = useState<Set<string>>(new Set());
@@ -148,15 +144,6 @@ export default function RoleListView({
               <RoleQuickLinks role={role} onOpenVideo={onOpenVideo} />
             </div>
             <div className={styles.listPickActions}>
-              {developerMode && onEditRoleConfig ? (
-                <button
-                  onClick={() => onEditRoleConfig(role)}
-                  className={`${styles.selectButton} ${styles.selectButtonDefault}`}
-                >
-                  <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
-                  <span>Edit</span>
-                </button>
-              ) : null}
               <EnableDropdown
                 enabled={selectedState}
                 compact

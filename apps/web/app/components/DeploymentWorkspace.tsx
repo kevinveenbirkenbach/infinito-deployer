@@ -121,6 +121,26 @@ function createDeviceStyle(
   } as CSSProperties;
 }
 
+const PANEL_QUERY_TO_KEY: Record<
+  string,
+  "store" | "server" | "inventory" | "deploy"
+> = {
+  software: "store",
+  device: "server",
+  inventory: "inventory",
+  setup: "deploy",
+};
+
+const PANEL_KEY_TO_QUERY: Record<
+  "store" | "server" | "inventory" | "deploy",
+  "software" | "device" | "inventory" | "setup"
+> = {
+  store: "software",
+  server: "device",
+  inventory: "inventory",
+  deploy: "setup",
+};
+
 export default function DeploymentWorkspace({
   baseUrl,
   onJobCreated,
@@ -178,6 +198,8 @@ export default function DeploymentWorkspace({
     "live-log"
   );
   const lastDeploymentSelectionRef = useRef<string[] | null>(null);
+  const uiQueryReadyRef = useRef(false);
+  const pendingAliasFromQueryRef = useRef("");
 
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [inventoryReady, setInventoryReady] = useState(false);
@@ -218,6 +240,24 @@ export default function DeploymentWorkspace({
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const panelParam = String(params.get("ui_panel") || "").trim().toLowerCase();
+    const modeParam = String(params.get("ui_mode") || "").trim().toLowerCase();
+    const aliasParam = String(params.get("ui_device") || "").trim();
+    if (panelParam && PANEL_QUERY_TO_KEY[panelParam]) {
+      setActivePanel(PANEL_QUERY_TO_KEY[panelParam]);
+    }
+    if (modeParam === "customer" || modeParam === "expert") {
+      setDeviceMode(modeParam);
+    }
+    if (aliasParam) {
+      pendingAliasFromQueryRef.current = aliasParam;
+    }
+    uiQueryReadyRef.current = true;
+  }, []);
+
+  useEffect(() => {
     let alive = true;
 
     const load = async () => {
@@ -255,9 +295,22 @@ export default function DeploymentWorkspace({
       return;
     }
     if (activeAlias && !servers.some((server) => server.alias === activeAlias)) {
+      if (pendingAliasFromQueryRef.current) {
+        return;
+      }
       setActiveAlias(servers[0]?.alias ?? "");
     }
   }, [activeAlias, servers]);
+
+  useEffect(() => {
+    const wantedAlias = pendingAliasFromQueryRef.current.trim();
+    if (!wantedAlias) return;
+    if (!servers.some((server) => server.alias === wantedAlias)) return;
+    pendingAliasFromQueryRef.current = "";
+    if (activeAlias !== wantedAlias) {
+      setActiveAlias(wantedAlias);
+    }
+  }, [servers, activeAlias]);
 
   useEffect(() => {
     if (!activeAlias) return;
@@ -487,8 +540,11 @@ export default function DeploymentWorkspace({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!workspaceId) {
-      setDeviceMode("customer");
+    if (!workspaceId) return;
+    const params = new URLSearchParams(window.location.search);
+    const modeFromQuery = String(params.get("ui_mode") || "").trim().toLowerCase();
+    if (modeFromQuery === "customer" || modeFromQuery === "expert") {
+      setDeviceMode(modeFromQuery);
       return;
     }
     const stored = window.localStorage.getItem(`infinito.devices.mode.${workspaceId}`);
@@ -504,6 +560,20 @@ export default function DeploymentWorkspace({
     if (!workspaceId) return;
     window.localStorage.setItem(`infinito.devices.mode.${workspaceId}`, deviceMode);
   }, [workspaceId, deviceMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!uiQueryReadyRef.current) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("ui_panel", PANEL_KEY_TO_QUERY[activePanel]);
+    url.searchParams.set("ui_mode", deviceMode);
+    if (activeAlias) {
+      url.searchParams.set("ui_device", activeAlias);
+    } else {
+      url.searchParams.delete("ui_device");
+    }
+    window.history.replaceState({}, "", url.toString());
+  }, [activePanel, deviceMode, activeAlias]);
 
   useEffect(() => {
     if (!deployRolePickerOpen) return;

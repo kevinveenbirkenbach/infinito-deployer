@@ -19,6 +19,8 @@ type RoleDetailsModalProps = {
   onSelectPlan: (planId: string | null) => void;
   onEnable: () => void;
   onDisable: () => void;
+  expertMode?: boolean;
+  onEditRoleConfig?: () => void;
   onOpenVideo: (url: string, title: string) => void;
   onClose: () => void;
 };
@@ -35,6 +37,8 @@ export default function RoleDetailsModal({
   onSelectPlan,
   onEnable,
   onDisable,
+  expertMode = false,
+  onEditRoleConfig,
   onOpenVideo,
   onClose,
 }: RoleDetailsModalProps) {
@@ -130,6 +134,18 @@ export default function RoleDetailsModal({
           </div>
 
           <div className={styles.roleDetailsControlWrap}>
+            {expertMode && onEditRoleConfig ? (
+              <div className={styles.roleDetailsActions}>
+                <button
+                  type="button"
+                  onClick={onEditRoleConfig}
+                  className={`${styles.selectButton} ${styles.selectButtonDefault}`}
+                >
+                  <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
+                  <span>Edit</span>
+                </button>
+              </div>
+            ) : null}
             <EnableDropdown
               enabled={selected}
               pricingModel="app"

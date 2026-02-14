@@ -1353,6 +1353,13 @@
 }
 
 .roleDetailsControlWrap {
+  display: grid;
+  gap: 8px;
   border-top: 1px solid var(--bs-border-color-translucent);
   padding-top: 12px;
+}
+
+.roleDetailsActions {
+  display: flex;
+  justify-content: flex-end;
 }

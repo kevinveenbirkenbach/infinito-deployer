@@ -18,8 +18,6 @@ type RoleGridViewProps = {
   rolePlans?: Record<string, { id: string; label: string }[]>;
   selectedPlanByRole?: Record<string, string | null>;
   onSelectRolePlan?: (roleId: string, planId: string | null) => void;
-  developerMode?: boolean;
-  onEditRoleConfig?: (role: Role) => void;
   viewMode: ViewMode;
   viewConfig: ViewConfig;
   computedColumns: number;
@@ -37,8 +35,6 @@ export default function RoleGridView({
   rolePlans,
   selectedPlanByRole,
   onSelectRolePlan,
-  developerMode = false,
-  onEditRoleConfig,
   viewMode,
   viewConfig,
   computedColumns,
@@ -115,15 +111,6 @@ export default function RoleGridView({
                   ) : null}
                 </div>
                 <div className={styles.roleActionButtons}>
-                  {developerMode && onEditRoleConfig ? (
-                    <button
-                      onClick={() => onEditRoleConfig(role)}
-                      className={`${styles.selectButton} ${styles.selectButtonDefault}`}
-                    >
-                      <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
-                      <span>Edit</span>
-                    </button>
-                  ) : null}
                   <EnableDropdown
                     enabled={selectedState}
                     pricingModel="app"
@@ -190,18 +177,6 @@ export default function RoleGridView({
                   <i className="fa-solid fa-check" aria-hidden="true" />
                 </span>
               ) : null}
-              {developerMode && onEditRoleConfig ? (
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onEditRoleConfig(role);
-                  }}
-                  className={styles.miniEditButton}
-                >
-                  <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
-                </button>
-              ) : null}
               {showTooltip ? (
                 <div className={styles.miniTooltip}>
                   <div className={styles.tooltipTitle}>{role.display_name}</div>
@@ -259,15 +234,6 @@ export default function RoleGridView({
 
             <div className={styles.detailFooterRow}>
               <div className={styles.detailControlRow}>
-                {developerMode && onEditRoleConfig ? (
-                  <button
-                    onClick={() => onEditRoleConfig(role)}
-                    className={`${styles.selectButton} ${styles.selectButtonDefault}`}
-                  >
-                    <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
-                    <span>Edit</span>
-                  </button>
-                ) : null}
                 <EnableDropdown
                   enabled={selectedState}
                   variant="tile"
