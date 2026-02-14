@@ -4,6 +4,18 @@ export type RoleLogo = {
   url?: string | null;
 };
 
+export type Bundle = {
+  id: string;
+  slug: string;
+  deploy_target: string;
+  title: string;
+  description: string;
+  logo_class?: string | null;
+  tags?: string[] | null;
+  categories?: string[] | null;
+  role_ids?: string[] | null;
+};
+
 export type Role = {
   id: string;
   display_name: string;
@@ -18,6 +30,9 @@ export type Role = {
   repository?: string | null;
   issue_tracker_url?: string | null;
   license_url?: string | null;
+  categories?: string[] | null;
+  galaxy_tags?: string[] | null;
+  bundle_member?: boolean | null;
   pricing_summary?: {
     default_offering_id?: string | null;
     default_plan_id?: string | null;

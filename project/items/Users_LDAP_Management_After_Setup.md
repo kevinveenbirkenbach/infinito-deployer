@@ -261,4 +261,4 @@ All endpoints:
 
 # Status
 
-🟨 Planned
+🟩 Done

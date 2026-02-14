@@ -408,6 +408,4 @@ Tests run headless, no real provider credentials.
 
 # Status
 
-🟨 Planned
-
-<< END >>
+🟩 Done

@@ -13,12 +13,12 @@ The system must be **data-driven, deterministic, secure**, and **not execute arb
 
 ### 1.1 Pricing Metadata File
 
-* [ ] Roles MAY provide pricing metadata via a dedicated file:
+* [x] Roles MAY provide pricing metadata via a dedicated file:
 
   * `roles/*/meta/pricing.yml` (preferred)
   * or `pricing.json`
 
-* [ ] `meta/main.yml` MAY reference pricing explicitly:
+* [x] `meta/main.yml` MAY reference pricing explicitly:
 
   ```yaml
   galaxy_info:
@@ -27,7 +27,7 @@ The system must be **data-driven, deterministic, secure**, and **not execute arb
       file: meta/pricing.yml
 ````
 
-* [ ] Roles without pricing metadata default to:
+* [x] Roles without pricing metadata default to:
 
   * Single implicit variant: `community`
   * Price: `0`
@@ -35,8 +35,8 @@ The system must be **data-driven, deterministic, secure**, and **not execute arb
 
 **Acceptance Criteria**
 
-* [ ] Roles without pricing metadata continue to work unchanged
-* [ ] Pricing metadata is optional and non-breaking
+* [x] Roles without pricing metadata continue to work unchanged
+* [x] Pricing metadata is optional and non-breaking
 
 ---
 
@@ -44,37 +44,37 @@ The system must be **data-driven, deterministic, secure**, and **not execute arb
 
 The pricing schema MUST support at least:
 
-* [ ] `fixed` (free or flat price)
-* [ ] `per_unit` (e.g. per user)
-* [ ] `tiered_per_unit`
-* [ ] `bundle` (base fee + usage)
-* [ ] `addon`
-* [ ] `factor` (support level multipliers)
-* [ ] `custom` (contact sales / external pricing)
+* [x] `fixed` (free or flat price)
+* [x] `per_unit` (e.g. per user)
+* [x] `tiered_per_unit`
+* [x] `bundle` (base fee + usage)
+* [x] `addon`
+* [x] `factor` (support level multipliers)
+* [x] `custom` (contact sales / external pricing)
 
 **Acceptance Criteria**
 
-* [ ] All primitives are declarative (no executable code)
-* [ ] All primitives are versioned under a schema (`schema: v1`)
+* [x] All primitives are declarative (no executable code)
+* [x] All primitives are versioned under a schema (`schema: v1`)
 
 ---
 
 ### 1.3 Inputs & Applicability
 
-* [ ] Pricing metadata MAY define user inputs:
+* [x] Pricing metadata MAY define user inputs:
 
   * number
   * enum
   * boolean
 
-* [ ] Inputs can be scoped via `applies_to` to specific variants
+* [x] Inputs can be scoped via `applies_to` to specific variants
 
-* [ ] Defaults are mandatory for all inputs
+* [x] Defaults are mandatory for all inputs
 
 **Acceptance Criteria**
 
-* [ ] UI never renders an input without a default
-* [ ] Inputs are only shown when relevant to the selected variant
+* [x] UI never renders an input without a default
+* [x] Inputs are only shown when relevant to the selected variant
 
 ---
 
@@ -82,9 +82,9 @@ The pricing schema MUST support at least:
 
 ### 2.1 Pricing Metadata Indexing
 
-* [ ] Extend role indexing to detect and parse pricing metadata
-* [ ] Validate pricing files against a strict schema
-* [ ] Invalid pricing metadata:
+* [x] Extend role indexing to detect and parse pricing metadata
+* [x] Validate pricing files against a strict schema
+* [x] Invalid pricing metadata:
 
   * is ignored
   * emits a warning
@@ -92,22 +92,22 @@ The pricing schema MUST support at least:
 
 **Acceptance Criteria**
 
-* [ ] `/api/roles` includes `pricing_summary` when available
-* [ ] `/api/roles/{id}` includes full `pricing` block when present
+* [x] `/api/roles` includes `pricing_summary` when available
+* [x] `/api/roles/{id}` includes full `pricing` block when present
 
 ---
 
 ### 2.2 Pricing Calculation Engine
 
-* [ ] Implement a deterministic **PricingEngine** (backend-side)
+* [x] Implement a deterministic **PricingEngine** (backend-side)
 
-* [ ] Engine accepts:
+* [x] Engine accepts:
 
   * role_id
   * selected variant
   * input values
 
-* [ ] Engine returns:
+* [x] Engine returns:
 
   * total price
   * breakdown (base, addons, factors)
@@ -116,9 +116,9 @@ The pricing schema MUST support at least:
 
 **Acceptance Criteria**
 
-* [ ] Same input always produces same output
-* [ ] No pricing logic exists in the frontend
-* [ ] Engine is fully unit-tested
+* [x] Same input always produces same output
+* [x] No pricing logic exists in the frontend
+* [x] Engine is fully unit-tested
 
 ---
 
@@ -126,60 +126,60 @@ The pricing schema MUST support at least:
 
 ### 3.1 Variant Selection
 
-* [ ] Replace simple “Select” button with:
+* [x] Replace simple “Select” button with:
 
   * Variant selector (radio / dropdown)
   * Default: `community`
 
-* [ ] Variant label + description are shown inline
+* [x] Variant label + description are shown inline
 
 **Acceptance Criteria**
 
-* [ ] Roles with one variant behave exactly like today
-* [ ] Variant switching does not reset unrelated UI state
+* [x] Roles with one variant behave exactly like today
+* [x] Variant switching does not reset unrelated UI state
 
 ---
 
 ### 3.2 Dynamic Inputs
 
-* [ ] Render pricing inputs dynamically based on metadata
-* [ ] Inputs update pricing preview live
-* [ ] Inputs are validated client-side (type, min/max)
+* [x] Render pricing inputs dynamically based on metadata
+* [x] Inputs update pricing preview live
+* [x] Inputs are validated client-side (type, min/max)
 
 **Acceptance Criteria**
 
-* [ ] Invalid input never reaches the backend
-* [ ] UI always reflects the currently selected variant
+* [x] Invalid input never reaches the backend
+* [x] UI always reflects the currently selected variant
 
 ---
 
 ### 3.3 Pricing Preview
 
-* [ ] Show pricing preview panel:
+* [x] Show pricing preview panel:
 
   * Total price
   * Interval (monthly/yearly/once)
   * Optional breakdown (toggleable)
 
-* [ ] Support “Contact sales” state for custom pricing
+* [x] Support “Contact sales” state for custom pricing
 
 **Acceptance Criteria**
 
-* [ ] Pricing preview is clearly marked as *estimate*
-* [ ] Zero-price variants explicitly show “Free”
+* [x] Pricing preview is clearly marked as *estimate*
+* [x] Zero-price variants explicitly show “Free”
 
 ---
 
 ## 4. Security & Trust Model
 
-* [ ] No arbitrary JavaScript is executed from roles
-* [ ] Pricing metadata is treated as untrusted input
-* [ ] Strict schema validation is mandatory
+* [x] No arbitrary JavaScript is executed from roles
+* [x] Pricing metadata is treated as untrusted input
+* [x] Strict schema validation is mandatory
 
 **Acceptance Criteria**
 
-* [ ] Pricing metadata cannot inject scripts or HTML
-* [ ] CSP does not require relaxation for pricing features
+* [x] Pricing metadata cannot inject scripts or HTML
+* [x] CSP does not require relaxation for pricing features
 
 ---
 
@@ -187,7 +187,7 @@ The pricing schema MUST support at least:
 
 ### Backend
 
-* [ ] Unit tests for PricingEngine:
+* [x] Unit tests for PricingEngine:
 
   * fixed
   * per_unit
@@ -198,32 +198,31 @@ The pricing schema MUST support at least:
 
 ### Frontend (Playwright)
 
-* [ ] Variant selector renders correctly
-* [ ] Inputs appear/disappear on variant change
-* [ ] Pricing preview updates on input change
-* [ ] “Contact sales” variant disables calculation
+* [x] Variant selector renders correctly
+* [x] Inputs appear/disappear on variant change
+* [x] Pricing preview updates on input change
+* [x] “Contact sales” variant disables calculation
 
 **Acceptance Criteria**
 
-* [ ] All pricing logic is covered by automated tests
-* [ ] Tests pass headless in CI
+* [x] All pricing logic is covered by automated tests
+* [x] Tests pass headless in CI
 
 ---
 
 ## 6. UX Principles
 
-* [ ] Community / Free is always the least prominent upsell
-* [ ] Enterprise pricing never blocks deployment
-* [ ] Pricing UI never forces a purchase flow
+* [x] Community / Free is always the least prominent upsell
+* [x] Enterprise pricing never blocks deployment
+* [x] Pricing UI never forces a purchase flow
 
 **Acceptance Criteria**
 
-* [ ] Users can deploy Community without friction
-* [ ] Pricing is informative, not coercive
+* [x] Users can deploy Community without friction
+* [x] Pricing is informative, not coercive
 
 ---
 
 ## Status
 
-* 🟨 Planned
-  << END >>
+* 🟩 Done

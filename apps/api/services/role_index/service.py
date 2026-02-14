@@ -13,6 +13,7 @@ from roles.role_metadata_extractor import extract_role_metadata
 from services.pricing_engine import load_role_pricing_metadata
 from services.role_catalog import RoleCatalogError, RoleCatalogService
 
+from .bundles import bundles_mtime, load_bundle_role_ids
 from .categories import load_categories
 from .models import RoleQuery, safe_lower, statuses_valid, targets_valid
 from .paths import (
@@ -61,13 +62,17 @@ class RoleIndexService:
 
         self._cache_ttl_seconds = int(os.getenv("ROLE_INDEX_TTL_SECONDS", "30") or "30")
         self._cached_at: float = 0.0
-        self._cached_key: Tuple[int, int] = (0, 0)
+        self._cached_key: Tuple[int, int, int] = (0, 0, 0)
 
         self._roles: List[RoleOut] = []
         self._by_id: Dict[str, RoleOut] = {}
 
-    def _cache_key(self) -> Tuple[int, int]:
-        return (file_mtime(list_json_path()), file_mtime(categories_path()))
+    def _cache_key(self) -> Tuple[int, int, int]:
+        return (
+            file_mtime(list_json_path()),
+            file_mtime(categories_path()),
+            bundles_mtime(),
+        )
 
     def _is_cache_valid(self) -> bool:
         if not self._roles:
@@ -84,7 +89,8 @@ class RoleIndexService:
             raise HTTPException(status_code=500, detail=str(exc))
 
         roles_root = repo_roles_root()
-        categories = load_categories()
+        categories = load_categories([entry.id for entry in entries])
+        bundle_role_ids = load_bundle_role_ids()
         out: List[RoleOut] = []
         by_id: Dict[str, RoleOut] = {}
 
@@ -145,6 +151,7 @@ class RoleIndexService:
                 logo=logo,
                 deployment_targets=md.deployment_targets,
                 categories=categories.get(md.id, []),
+                bundle_member=md.id in bundle_role_ids,
                 pricing_summary=pricing_summary,
             )
 

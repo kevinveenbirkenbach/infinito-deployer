@@ -38,7 +38,7 @@ export default function RoleListView({
   return (
     <div className={styles.listRoot}>
       <div className={`${styles.listGrid} ${styles.listHeader}`}>
-        <span>App</span>
+        <span>Software</span>
         <span>Status</span>
         <span>Targets</span>
         <span>Description</span>

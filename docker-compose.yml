@@ -32,13 +32,26 @@ services:
           mkdir -p "$${repo_dst}"
           cp -a "$${repo_src}/." "$${repo_dst}/"
         fi
+        if ! python3 -c "import yaml" >/dev/null 2>&1; then
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y --no-install-recommends python3-yaml >/dev/null
+        fi
         cd "$${repo_dst}"
         echo "→ Generating invokable roles list into ${CATALOG_DIR}/roles/list.json"
-        infinito meta applications invokable \
-          | python -c 'import sys, json; data=[l.strip() for l in sys.stdin if l.strip()]; print(json.dumps(data))' \
+        PYTHONPATH="$${repo_dst}" python3 -m cli.meta.applications.invokable --format json \
           > "${CATALOG_DIR}/roles/list.json"
         echo "✔ Catalog generated."
         tail -f /dev/null
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -s "${CATALOG_DIR}/roles/list.json"
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
     restart: ${RESTART_POLICY}
 

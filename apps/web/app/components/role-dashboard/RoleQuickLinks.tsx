@@ -7,18 +7,24 @@ import type { Role } from "./types";
 type RoleQuickLinksProps = {
   role: Role;
   onOpenVideo: (url: string, title: string) => void;
+  maxVisible?: number;
 };
 
 export default function RoleQuickLinks({
   role,
   onOpenVideo,
+  maxVisible,
 }: RoleQuickLinksProps) {
   const quickLinks = quickLinksForRole(role);
   if (quickLinks.length === 0) return null;
+  const visible = Number.isFinite(maxVisible)
+    ? quickLinks.slice(0, Math.max(0, Number(maxVisible)))
+    : quickLinks;
+  const hiddenCount = Math.max(0, quickLinks.length - visible.length);
 
   return (
     <>
-      {quickLinks.map((link) =>
+      {visible.map((link) =>
         link.type === "video" ? (
           <button
             key={link.key}
@@ -45,6 +51,15 @@ export default function RoleQuickLinks({
           </a>
         )
       )}
+      {hiddenCount > 0 ? (
+        <span
+          className={styles.quickLinkOverflow}
+          title={`+${hiddenCount} more`}
+          aria-label={`${hiddenCount} more links`}
+        >
+          ...
+        </span>
+      ) : null}
     </>
   );
 }

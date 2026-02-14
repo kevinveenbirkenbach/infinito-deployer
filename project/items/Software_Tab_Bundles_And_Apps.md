@@ -20,11 +20,11 @@ The system MUST be:
 
 ### 1.1 Pricing Metadata File
 
-* [ ] Roles MAY provide pricing metadata via:
+* [x] Roles MAY provide pricing metadata via:
 
   * `roles/*/meta/pricing.yml` (preferred)
 
-* [ ] `meta/main.yml` MAY reference pricing explicitly:
+* [x] `meta/main.yml` MAY reference pricing explicitly:
 
   ```yaml
   galaxy_info:
@@ -33,7 +33,7 @@ The system MUST be:
       file: meta/pricing.yml
   ```
 
-* [ ] Roles without pricing metadata default to:
+* [x] Roles without pricing metadata default to:
 
   * one implicit offering
   * one implicit plan: `community`
@@ -42,8 +42,8 @@ The system MUST be:
 
 **Acceptance Criteria**
 
-* [ ] Roles without pricing metadata behave exactly like today.
-* [ ] Pricing metadata is optional and non-breaking.
+* [x] Roles without pricing metadata behave exactly like today.
+* [x] Pricing metadata is optional and non-breaking.
 
 ---
 
@@ -55,9 +55,9 @@ The system MUST be:
 
 **Acceptance Criteria**
 
-* [ ] A provider can define multiple offerings per role.
-* [ ] Each offering can define multiple plans/tiers.
-* [ ] A single version line can have multiple tiers.
+* [x] A provider can define multiple offerings per role.
+* [x] Each offering can define multiple plans/tiers.
+* [x] A single version line can have multiple tiers.
 
 ---
 
@@ -73,14 +73,14 @@ prices:
 
 Rules:
 
-* [ ] At least one currency required per price point.
-* [ ] Currency keys MUST be ISO 4217.
-* [ ] Backend never auto-converts currencies.
+* [x] At least one currency required per price point.
+* [x] Currency keys MUST be ISO 4217.
+* [x] Backend never auto-converts currencies.
 
 **Acceptance Criteria**
 
-* [ ] Quote API can compute totals for any supported currency.
-* [ ] Unsupported currency yields a clear validation error.
+* [x] Quote API can compute totals for any supported currency.
+* [x] Unsupported currency yields a clear validation error.
 
 ---
 
@@ -114,14 +114,14 @@ regional_prices:
 
 Rules:
 
-* [ ] If `regional_prices` is present, quote requests MUST include `region`.
-* [ ] If `regional_prices` missing, region defaults to `global`.
-* [ ] No region fallback across markets unless explicitly defined (deterministic).
+* [x] If `regional_prices` is present, quote requests MUST include `region`.
+* [x] If `regional_prices` missing, region defaults to `global`.
+* [x] No region fallback across markets unless explicitly defined (deterministic).
 
 **Acceptance Criteria**
 
-* [ ] Same offering/plan can return different totals for different regions.
-* [ ] UI can select region and currency independently.
+* [x] Same offering/plan can return different totals for different regions.
+* [x] UI can select region and currency independently.
 
 ---
 
@@ -129,14 +129,14 @@ Rules:
 
 The schema MUST support at least:
 
-* [ ] `fixed`
-* [ ] `per_unit`
-* [ ] `tiered_per_unit` (progressive tiers)
-* [ ] `volume_per_unit` (**NEW**: single-rate bands applied to ALL units)
-* [ ] `bundle` (base + included units + overage)
-* [ ] `addon`
-* [ ] `factor`
-* [ ] `custom`
+* [x] `fixed`
+* [x] `per_unit`
+* [x] `tiered_per_unit` (progressive tiers)
+* [x] `volume_per_unit` (**NEW**: single-rate bands applied to ALL units)
+* [x] `bundle` (base + included units + overage)
+* [x] `addon`
+* [x] `factor`
+* [x] `custom`
 
 ---
 
@@ -154,13 +154,13 @@ setup_fee:
 
 Rules:
 
-* [ ] Setup fee is added to the quote only when `include_setup_fee=true` or when the UI indicates “first purchase”.
-* [ ] Setup fee never repeats on renewals.
+* [x] Setup fee is added to the quote only when `include_setup_fee=true` or when the UI indicates “first purchase”.
+* [x] Setup fee never repeats on renewals.
 
 **Acceptance Criteria**
 
-* [ ] Quote response includes setup_fee separately in breakdown.
-* [ ] UI shows setup fee clearly as “one-time”.
+* [x] Quote response includes setup_fee separately in breakdown.
+* [x] UI shows setup fee clearly as “one-time”.
 
 ---
 
@@ -178,15 +178,15 @@ minimum_commit:
 
 Rules:
 
-* [ ] After calculating total usage/base/addons/factors, enforce:
+* [x] After calculating total usage/base/addons/factors, enforce:
 
   * `total = max(total, minimum_commit)`
-* [ ] Minimum commit applies per interval and currency/region exactly.
+* [x] Minimum commit applies per interval and currency/region exactly.
 
 **Acceptance Criteria**
 
-* [ ] Quote output indicates when a minimum commit was applied.
-* [ ] Deterministic: same input always triggers same floor.
+* [x] Quote output indicates when a minimum commit was applied.
+* [x] Deterministic: same input always triggers same floor.
 
 ---
 
@@ -223,8 +223,8 @@ pricing:
 
 **Acceptance Criteria**
 
-* [ ] Volume pricing is distinct from tiered/progressive pricing.
-* [ ] Engine applies band price to all units deterministically.
+* [x] Volume pricing is distinct from tiered/progressive pricing.
+* [x] Engine applies band price to all units deterministically.
 
 ---
 
@@ -262,12 +262,12 @@ pricing:
 
 Tier semantics:
 
-* [ ] Overage tiers apply to **overage units only**.
+* [x] Overage tiers apply to **overage units only**.
 
 **Acceptance Criteria**
 
-* [ ] Business plan can use tiered or volume overage.
-* [ ] Same inputs always produce same totals.
+* [x] Business plan can use tiered or volume overage.
+* [x] Same inputs always produce same totals.
 
 ---
 
@@ -275,14 +275,14 @@ Tier semantics:
 
 ### 2.1 Indexing
 
-* [ ] Validate `schema: v2`.
-* [ ] Normalize pricing blocks (including region + currency structures).
-* [ ] Invalid pricing metadata is ignored with warnings.
+* [x] Validate `schema: v2`.
+* [x] Normalize pricing blocks (including region + currency structures).
+* [x] Invalid pricing metadata is ignored with warnings.
 
 **Acceptance Criteria**
 
-* [ ] `/api/roles` includes `pricing_summary` including region/currency availability.
-* [ ] `/api/roles/{id}` includes full pricing metadata.
+* [x] `/api/roles` includes `pricing_summary` including region/currency availability.
+* [x] `/api/roles/{id}` includes full pricing metadata.
 
 ---
 
@@ -318,9 +318,9 @@ Response includes:
 
 **Acceptance Criteria**
 
-* [ ] Unsupported currency/region yields validation error.
-* [ ] Minimum commit enforcement is indicated in output.
-* [ ] Setup fee is included only when requested/applicable.
+* [x] Unsupported currency/region yields validation error.
+* [x] Minimum commit enforcement is indicated in output.
+* [x] Setup fee is included only when requested/applicable.
 
 ---
 
@@ -328,20 +328,20 @@ Response includes:
 
 UI controls:
 
-* [ ] Offering selector
-* [ ] Plan selector
-* [ ] Inputs
-* [ ] Region selector (only if offering/plan supports regional pricing)
-* [ ] Currency selector
-* [ ] “Include setup fee” toggle (optional; shown only if setup_fee exists)
-* [ ] Pricing preview panel (quote API)
+* [x] Offering selector
+* [x] Plan selector
+* [x] Inputs
+* [x] Region selector (only if offering/plan supports regional pricing)
+* [x] Currency selector
+* [x] “Include setup fee” toggle (optional; shown only if setup_fee exists)
+* [x] Pricing preview panel (quote API)
 
 **Acceptance Criteria**
 
-* [ ] UI never calculates pricing client-side.
-* [ ] Region/currency switching triggers new quote.
-* [ ] Setup fee is visually labeled as one-time.
-* [ ] Minimum commit is shown as “minimum spend applied”.
+* [x] UI never calculates pricing client-side.
+* [x] Region/currency switching triggers new quote.
+* [x] Setup fee is visually labeled as one-time.
+* [x] Minimum commit is shown as “minimum spend applied”.
 
 ---
 
@@ -349,7 +349,7 @@ UI controls:
 
 ### Backend
 
-* [ ] Unit tests:
+* [x] Unit tests:
 
   * fixed, per_unit
   * tiered_per_unit (progressive)
@@ -363,22 +363,22 @@ UI controls:
 
 ### Frontend (Playwright)
 
-* [ ] Region selector appears only when required
-* [ ] Currency selector changes totals
-* [ ] Setup fee toggle changes quote + breakdown
-* [ ] Minimum commit scenario displays applied floor
-* [ ] Volume pricing threshold changes total correctly
+* [x] Region selector appears only when required
+* [x] Currency selector changes totals
+* [x] Setup fee toggle changes quote + breakdown
+* [x] Minimum commit scenario displays applied floor
+* [x] Volume pricing threshold changes total correctly
 
 **Acceptance Criteria**
 
-* [ ] Tests pass headless in CI.
-* [ ] No real secrets used.
+* [x] Tests pass headless in CI.
+* [x] No real secrets used.
 
 ---
 
 ## Status
 
-* 🟨 Planned
+* 🟩 Done
 
 
 # 7. Inventory Integration – Plan Selection Persistence
@@ -543,12 +543,12 @@ This design ensures:
 
 ## 7.7 Acceptance Criteria
 
-* [ ] `plan_id` is stored per role under `applications.<role_id>`
-* [ ] UI dropdown reflects inventory state
-* [ ] Changing dropdown updates `host_vars/<host>.yml`
-* [ ] Removing a role removes its plan entry
-* [ ] Community default applies automatically if undefined
-* [ ] Pricing engine reads only from inventory + metadata
+* [x] `plan_id` is stored per role under `applications.<role_id>`
+* [x] UI dropdown reflects inventory state
+* [x] Changing dropdown updates `host_vars/<host>.yml`
+* [x] Removing a role removes its plan entry
+* [x] Community default applies automatically if undefined
+* [x] Pricing engine reads only from inventory + metadata
 
 ## UI Integration – Single Dropdown (Inventory-backed Plan Selection)
 
@@ -607,7 +607,7 @@ The tile button label MUST always reflect the current state:
 
 ### Acceptance Criteria
 
-* [ ] Dropdown is the only control for enable/disable and plan selection.
-* [ ] Selecting any entry updates `host_vars/<host>.yml` deterministically.
-* [ ] Reloading the UI restores dropdown state from inventory.
-* [ ] If `plan_id` missing, UI shows **Enabled – Community** by default.
+* [x] Dropdown is the only control for enable/disable and plan selection.
+* [x] Selecting any entry updates `host_vars/<host>.yml` deterministically.
+* [x] Reloading the UI restores dropdown state from inventory.
+* [x] If `plan_id` missing, UI shows **Enabled – Community** by default.

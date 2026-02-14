@@ -217,17 +217,51 @@ export default function RoleGridView({
             }`}
             style={cardHeightStyle}
           >
-            <div className={styles.detailHeader}>
-              {logo}
-              <div className={styles.roleActionButtons}>
+            <div className={styles.detailTitleRow}>
+              <div className={styles.detailRoleMeta}>
+                {logo}
+                <h3 className={styles.roleTitle} title={role.display_name}>
+                  {role.display_name}
+                </h3>
+                <span className={styles.statusBadge} style={statusStyle}>
+                  {role.status}
+                </span>
+              </div>
+            </div>
+
+            {viewConfig.showDescription ? (
+              <p className={`text-body-secondary ${styles.roleDescriptionLong}`}>
+                {role.description || "No description provided."}
+              </p>
+            ) : null}
+
+            {viewConfig.showTargets ? (
+              <div className={styles.targetList}>
+                {displayTargets(role.deployment_targets ?? []).map((target) => (
+                  <span key={`${role.id}-${target}`} className={styles.targetBadge}>
+                    {target}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            <div className={styles.detailFooterRow}>
+              {viewConfig.showLinks ? (
+                <div className={styles.detailLinks}>
+                  <RoleQuickLinks role={role} onOpenVideo={onOpenVideo} maxVisible={3} />
+                </div>
+              ) : (
+                <div />
+              )}
+              <div className={styles.detailControlRow}>
                 {developerMode && onEditRoleConfig ? (
                   <button
                     onClick={() => onEditRoleConfig(role)}
                     className={`${styles.selectButton} ${styles.selectButtonDefault}`}
                   >
                     <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
-                      <span>Edit</span>
-                    </button>
+                    <span>Edit</span>
+                  </button>
                 ) : null}
                 <EnableDropdown
                   enabled={selectedState}
@@ -248,38 +282,6 @@ export default function RoleGridView({
                 />
               </div>
             </div>
-
-            <div>
-              <div className={styles.detailRoleMeta}>
-                <h3 className={styles.roleTitle} title={role.display_name}>
-                  {role.display_name}
-                </h3>
-                <span className={styles.statusBadge} style={statusStyle}>
-                  {role.status}
-                </span>
-              </div>
-              {viewConfig.showDescription ? (
-                <p className={`text-body-secondary ${styles.roleDescriptionLong}`}>
-                  {role.description || "No description provided."}
-                </p>
-              ) : null}
-            </div>
-
-            {viewConfig.showTargets ? (
-              <div className={styles.targetList}>
-                {displayTargets(role.deployment_targets ?? []).map((target) => (
-                  <span key={`${role.id}-${target}`} className={styles.targetBadge}>
-                    {target}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-
-            {viewConfig.showLinks ? (
-              <div className={styles.detailLinks}>
-                <RoleQuickLinks role={role} onOpenVideo={onOpenVideo} />
-              </div>
-            ) : null}
           </article>
         );
       })}

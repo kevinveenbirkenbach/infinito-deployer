@@ -9,6 +9,7 @@ import { filterRoles } from "../lib/role_filter";
 import { VIEW_CONFIG, VIEW_MODE_ICONS } from "./role-dashboard/constants";
 import { sortStatuses } from "./role-dashboard/helpers";
 import { hexToRgba } from "./deployment-credentials/device-visuals";
+import BundleGridView from "./role-dashboard/BundleGridView";
 import EnableDropdown from "./role-dashboard/EnableDropdown";
 import RoleGridView from "./role-dashboard/RoleGridView";
 import RoleListView from "./role-dashboard/RoleListView";
@@ -16,7 +17,7 @@ import RoleLogoView from "./role-dashboard/RoleLogoView";
 import RoleVideoModal from "./role-dashboard/RoleVideoModal";
 import { VIEW_MODES } from "./role-dashboard/types";
 import styles from "./RoleDashboard.module.css";
-import type { Role, ViewMode } from "./role-dashboard/types";
+import type { Bundle, Role, ViewMode } from "./role-dashboard/types";
 
 type RoleAppConfigPayload = {
   role_id: string;
@@ -30,6 +31,32 @@ const ROW_FILTER_OPTIONS: number[] = [1, 2, 3, 5, 10, 20, 100, 500, 1000];
 
 function formatViewLabel(mode: ViewMode): string {
   return mode.charAt(0).toUpperCase() + mode.slice(1);
+}
+
+type SoftwareScope = "apps" | "bundles";
+const SOFTWARE_SCOPE_OPTIONS: { id: SoftwareScope; label: string }[] = [
+  { id: "bundles", label: "Bundles" },
+  { id: "apps", label: "Apps" },
+];
+
+function normalizeFacet(value: string): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function collectFacetValues<T>(
+  entries: T[],
+  getter: (entry: T) => string[] | null | undefined
+): string[] {
+  const seen = new Map<string, string>();
+  entries.forEach((item) => {
+    (getter(item) || []).forEach((entry) => {
+      const label = String(entry || "").trim();
+      const key = normalizeFacet(label);
+      if (!label || !key || seen.has(key)) return;
+      seen.set(key, label);
+    });
+  });
+  return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
 }
 
 type RoleDashboardProps = {
@@ -94,6 +121,11 @@ export default function RoleDashboard({
   const [queryDraft, setQueryDraft] = useState("");
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [targetFilter, setTargetFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState<Set<string>>(new Set());
+  const [tagFilter, setTagFilter] = useState<Set<string>>(new Set());
+  const [categoryDraft, setCategoryDraft] = useState("");
+  const [tagDraft, setTagDraft] = useState("");
+  const [softwareScope, setSoftwareScope] = useState<SoftwareScope>("bundles");
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useState<ViewMode>("detail");
@@ -102,6 +134,8 @@ export default function RoleDashboard({
   const controlsRef = useRef<HTMLDivElement | null>(null);
   const filtersButtonRef = useRef<HTMLButtonElement | null>(null);
   const filtersPopoverRef = useRef<HTMLDivElement | null>(null);
+  const scopeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const scopePopoverRef = useRef<HTMLDivElement | null>(null);
   const viewButtonRef = useRef<HTMLButtonElement | null>(null);
   const viewPopoverRef = useRef<HTMLDivElement | null>(null);
   const modeRootRef = useRef<HTMLDivElement | null>(null);
@@ -110,6 +144,7 @@ export default function RoleDashboard({
   const [filtersPos, setFiltersPos] = useState({ top: 0, left: 0 });
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
   const [accessMode, setAccessMode] = useState<"customer" | "developer">("customer");
   const [developerConfirmOpen, setDeveloperConfirmOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
@@ -124,6 +159,9 @@ export default function RoleDashboard({
     url: string;
     title: string;
   } | null>(null);
+  const [bundles, setBundles] = useState<Bundle[]>([]);
+  const [bundlesLoading, setBundlesLoading] = useState(false);
+  const [bundlesError, setBundlesError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!activeVideo) return;
@@ -135,6 +173,33 @@ export default function RoleDashboard({
     window.addEventListener("keydown", handle);
     return () => window.removeEventListener("keydown", handle);
   }, [activeVideo]);
+
+  useEffect(() => {
+    const apiBase = String(baseUrl || "").trim();
+    const endpoint = `${apiBase}/api/bundles`;
+    let alive = true;
+    const loadBundles = async () => {
+      setBundlesLoading(true);
+      setBundlesError(null);
+      try {
+        const res = await fetch(endpoint, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!alive) return;
+        setBundles(Array.isArray(data) ? data : []);
+      } catch (err: any) {
+        if (!alive) return;
+        setBundles([]);
+        setBundlesError(err?.message ?? "failed to load bundles");
+      } finally {
+        if (alive) setBundlesLoading(false);
+      }
+    };
+    void loadBundles();
+    return () => {
+      alive = false;
+    };
+  }, [baseUrl]);
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -164,6 +229,69 @@ export default function RoleDashboard({
     });
     return sortStatuses(Array.from(set));
   }, [roles]);
+
+  const appCategoryOptions = useMemo(
+    () => collectFacetValues(roles, (role) => role.categories),
+    [roles]
+  );
+
+  const appTagOptions = useMemo(
+    () => collectFacetValues(roles, (role) => role.galaxy_tags),
+    [roles]
+  );
+
+  const bundleCategoryOptions = useMemo(
+    () => collectFacetValues(bundles, (bundle) => bundle.categories),
+    [bundles]
+  );
+
+  const bundleTagOptions = useMemo(
+    () => collectFacetValues(bundles, (bundle) => bundle.tags),
+    [bundles]
+  );
+
+  const appCategoryLabelByToken = useMemo(() => {
+    const map = new Map<string, string>();
+    appCategoryOptions.forEach((entry) => {
+      map.set(normalizeFacet(entry), entry);
+    });
+    return map;
+  }, [appCategoryOptions]);
+
+  const appTagLabelByToken = useMemo(() => {
+    const map = new Map<string, string>();
+    appTagOptions.forEach((entry) => {
+      map.set(normalizeFacet(entry), entry);
+    });
+    return map;
+  }, [appTagOptions]);
+
+  const bundleCategoryLabelByToken = useMemo(() => {
+    const map = new Map<string, string>();
+    bundleCategoryOptions.forEach((entry) => {
+      map.set(normalizeFacet(entry), entry);
+    });
+    return map;
+  }, [bundleCategoryOptions]);
+
+  const bundleTagLabelByToken = useMemo(() => {
+    const map = new Map<string, string>();
+    bundleTagOptions.forEach((entry) => {
+      map.set(normalizeFacet(entry), entry);
+    });
+    return map;
+  }, [bundleTagOptions]);
+
+  const activeCategoryOptions =
+    softwareScope === "bundles" ? bundleCategoryOptions : appCategoryOptions;
+  const activeTagOptions =
+    softwareScope === "bundles" ? bundleTagOptions : appTagOptions;
+  const activeCategoryLabelByToken =
+    softwareScope === "bundles"
+      ? bundleCategoryLabelByToken
+      : appCategoryLabelByToken;
+  const activeTagLabelByToken =
+    softwareScope === "bundles" ? bundleTagLabelByToken : appTagLabelByToken;
 
   const matrixAliases = useMemo(() => {
     const raw = Array.isArray(serverAliases) ? serverAliases : [];
@@ -290,25 +418,58 @@ export default function RoleDashboard({
     return selectedPlanLookup[alias] || {};
   }, [activeAlias, selectedPlanLookup]);
 
-  const baseFilteredRoles = useMemo(
+  const appFilteredRoles = useMemo(
     () =>
       filterRoles(roles, {
         statuses: statusFilter,
         target: targetFilter,
         query,
+        categories: categoryFilter,
+        tags: tagFilter,
       }),
-    [roles, statusFilter, targetFilter, query]
+    [roles, statusFilter, targetFilter, query, categoryFilter, tagFilter]
   );
 
+  const filteredBundles = useMemo(() => {
+    const queryToken = normalizeFacet(query);
+    const categoryTokens = new Set(Array.from(categoryFilter));
+    const tagTokens = new Set(Array.from(tagFilter));
+    return bundles.filter((bundle) => {
+      if (targetFilter !== "all") {
+        const target = normalizeFacet(bundle.deploy_target);
+        if (target !== targetFilter) return false;
+      }
+
+      if (categoryTokens.size > 0) {
+        const categories = (bundle.categories || []).map(normalizeFacet);
+        if (!categories.some((entry) => categoryTokens.has(entry))) return false;
+      }
+
+      if (tagTokens.size > 0) {
+        const tags = (bundle.tags || []).map(normalizeFacet);
+        if (!tags.some((entry) => tagTokens.has(entry))) return false;
+      }
+
+      if (queryToken) {
+        const haystack = [bundle.id, bundle.title, bundle.description]
+          .map(normalizeFacet)
+          .join(" ");
+        if (!haystack.includes(queryToken)) return false;
+      }
+
+      return true;
+    });
+  }, [bundles, targetFilter, categoryFilter, tagFilter, query]);
+
   const filteredRoles = useMemo(() => {
-    if (!showSelectedOnly) return baseFilteredRoles;
+    if (!showSelectedOnly) return appFilteredRoles;
     if (viewMode === "matrix") {
-      return baseFilteredRoles.filter((role) =>
+      return appFilteredRoles.filter((role) =>
         matrixAliases.some((alias) => selectedLookup[alias]?.has(role.id))
       );
     }
-    return baseFilteredRoles.filter((role) => selected.has(role.id));
-  }, [baseFilteredRoles, selected, showSelectedOnly, viewMode, matrixAliases, selectedLookup]);
+    return appFilteredRoles.filter((role) => selected.has(role.id));
+  }, [appFilteredRoles, selected, showSelectedOnly, viewMode, matrixAliases, selectedLookup]);
 
   const viewConfig = VIEW_CONFIG[viewMode];
   const gridGap = 16;
@@ -332,24 +493,30 @@ export default function RoleDashboard({
   );
   const rows = Math.max(1, rowsOverride ?? computedRows);
   const pageSize = Math.max(1, rows * computedColumns);
+  const activeItemCount =
+    softwareScope === "bundles" ? filteredBundles.length : filteredRoles.length;
   const rowOptions = useMemo(() => {
     const maxRows = Math.max(
       1,
-      Math.ceil(filteredRoles.length / Math.max(1, computedColumns))
+      Math.ceil(activeItemCount / Math.max(1, computedColumns))
     );
     const next = ROW_FILTER_OPTIONS.filter((value) => value <= maxRows);
     if (rowsOverride && !next.includes(rowsOverride)) {
       next.push(rowsOverride);
     }
     return next.sort((a, b) => a - b);
-  }, [filteredRoles.length, computedColumns, rowsOverride]);
+  }, [activeItemCount, computedColumns, rowsOverride]);
 
-  const pageCount = Math.max(1, Math.ceil(filteredRoles.length / pageSize));
+  const pageCount = Math.max(1, Math.ceil(activeItemCount / pageSize));
   const currentPage = Math.min(page, pageCount);
   const paginatedRoles = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredRoles.slice(start, start + pageSize);
   }, [filteredRoles, currentPage, pageSize]);
+  const paginatedBundles = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredBundles.slice(start, start + pageSize);
+  }, [filteredBundles, currentPage, pageSize]);
 
   const selectedCount = useMemo(() => {
     if (viewMode !== "matrix") return selected.size;
@@ -374,6 +541,11 @@ export default function RoleDashboard({
   }, [viewMode, filteredRoles, selected, matrixAliases, selectedLookup]);
 
   const hiddenSelected = Math.max(0, selectedCount - filteredSelectedCount);
+  const isBundleScope = softwareScope === "bundles";
+  const headerLoading = isBundleScope ? bundlesLoading : loading;
+  const headerError = isBundleScope ? bundlesError : error;
+  const headerFilteredCount = isBundleScope ? filteredBundles.length : filteredRoles.length;
+  const headerTotalCount = isBundleScope ? bundles.length : roles.length;
 
   const toggleStatus = (status: string) => {
     setStatusFilter((prev) => {
@@ -385,6 +557,28 @@ export default function RoleDashboard({
       }
       return next;
     });
+  };
+
+  const addCategoryFilter = () => {
+    const token = normalizeFacet(categoryDraft);
+    if (!token) return;
+    setCategoryFilter((prev) => {
+      const next = new Set(prev);
+      next.add(token);
+      return next;
+    });
+    setCategoryDraft("");
+  };
+
+  const addTagFilter = () => {
+    const token = normalizeFacet(tagDraft);
+    if (!token) return;
+    setTagFilter((prev) => {
+      const next = new Set(prev);
+      next.add(token);
+      return next;
+    });
+    setTagDraft("");
   };
 
   const canToggleAliasRole = (alias: string) =>
@@ -418,7 +612,17 @@ export default function RoleDashboard({
 
   useEffect(() => {
     setPage(1);
-  }, [query, statusFilter, targetFilter, showSelectedOnly, viewMode, rowsOverride]);
+  }, [
+    query,
+    statusFilter,
+    targetFilter,
+    categoryFilter,
+    tagFilter,
+    softwareScope,
+    showSelectedOnly,
+    viewMode,
+    rowsOverride,
+  ]);
 
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
@@ -432,7 +636,7 @@ export default function RoleDashboard({
     const button = filtersButtonRef.current;
     if (!button) return;
     const rect = button.getBoundingClientRect();
-    const width = 280;
+    const width = 360;
     setFiltersPos({
       top: rect.bottom + 8,
       left: Math.max(12, rect.right - width),
@@ -487,6 +691,40 @@ export default function RoleDashboard({
       document.removeEventListener("keydown", handleEscape);
     };
   }, [viewMenuOpen]);
+
+  useEffect(() => {
+    if (!scopeMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (scopePopoverRef.current?.contains(target)) return;
+      if (scopeButtonRef.current?.contains(target)) return;
+      setScopeMenuOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setScopeMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [scopeMenuOpen]);
+
+  useEffect(() => {
+    if (softwareScope !== "bundles") return;
+    setViewMenuOpen(false);
+    setShowSelectedOnly(false);
+    setStatusFilter(new Set());
+    setCategoryFilter(new Set());
+    setTagFilter(new Set());
+    if (viewMode === "matrix") {
+      setViewMode("detail");
+    }
+  }, [softwareScope, viewMode]);
 
   useEffect(() => {
     if (!modeMenuOpen) return;
@@ -660,46 +898,158 @@ export default function RoleDashboard({
               </div>
             </div>
 
-            <div className={styles.group}>
-              <span className={`text-body-tertiary ${styles.groupTitle}`}>Status</span>
-              <div className={styles.groupButtons}>
-                {statusOptions.map((status) => {
-                  const active = statusFilter.has(status);
-                  return (
+            {softwareScope === "apps" ? (
+              <div className={styles.group}>
+                <span className={`text-body-tertiary ${styles.groupTitle}`}>Status</span>
+                <div className={styles.groupButtons}>
+                  {statusOptions.map((status) => {
+                    const active = statusFilter.has(status);
+                    return (
+                      <button
+                        key={status}
+                        onClick={() => toggleStatus(status)}
+                        className={`${styles.pillButton} ${
+                          active ? styles.pillButtonActive : ""
+                        }`}
+                      >
+                        {status}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {softwareScope === "apps" ? (
+              <div className={styles.group}>
+                <span className={`text-body-tertiary ${styles.groupTitle}`}>
+                  Selection
+                </span>
+                <div className={styles.groupButtons}>
+                  {[
+                    { key: "all", label: "all", active: !showSelectedOnly },
+                    { key: "selected", label: "enabled", active: showSelectedOnly },
+                  ].map((item) => (
                     <button
-                      key={status}
-                      onClick={() => toggleStatus(status)}
+                      key={item.key}
+                      onClick={() => setShowSelectedOnly(item.key === "selected")}
                       className={`${styles.pillButton} ${
-                        active ? styles.pillButtonActive : ""
+                        item.active ? styles.pillButtonActive : ""
                       }`}
                     >
-                      {status}
+                      {item.label}
                     </button>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
+            ) : null}
+
+            <div className={styles.group}>
+              <span className={`text-body-tertiary ${styles.groupTitle}`}>Categories</span>
+              <div className={styles.filterInputRow}>
+                <input
+                  value={categoryDraft}
+                  onChange={(event) => setCategoryDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addCategoryFilter();
+                    }
+                  }}
+                  list="role-category-options"
+                  placeholder="Search/add category"
+                  className={`form-control ${styles.filterInput}`}
+                />
+                <button
+                  type="button"
+                  onClick={addCategoryFilter}
+                  className={styles.filterAddButton}
+                >
+                  Add
+                </button>
+              </div>
+              <datalist id="role-category-options">
+                {activeCategoryOptions.map((entry) => (
+                  <option key={entry} value={entry} />
+                ))}
+              </datalist>
+              {categoryFilter.size > 0 ? (
+                <div className={styles.selectedTokenList}>
+                  {Array.from(categoryFilter).map((token) => (
+                    <button
+                      key={token}
+                      type="button"
+                      onClick={() =>
+                        setCategoryFilter((prev) => {
+                          const next = new Set(prev);
+                          next.delete(token);
+                          return next;
+                        })
+                      }
+                      className={styles.selectedToken}
+                    >
+                      <span>{activeCategoryLabelByToken.get(token) || token}</span>
+                      <i className="fa-solid fa-xmark" aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span className={styles.groupHint}>No category filter</span>
+              )}
             </div>
 
             <div className={styles.group}>
-              <span className={`text-body-tertiary ${styles.groupTitle}`}>
-                Selection
-              </span>
-              <div className={styles.groupButtons}>
-                {[
-                  { key: "all", label: "all", active: !showSelectedOnly },
-                  { key: "selected", label: "enabled", active: showSelectedOnly },
-                ].map((item) => (
-                  <button
-                    key={item.key}
-                    onClick={() => setShowSelectedOnly(item.key === "selected")}
-                    className={`${styles.pillButton} ${
-                      item.active ? styles.pillButtonActive : ""
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+              <span className={`text-body-tertiary ${styles.groupTitle}`}>Tags</span>
+              <div className={styles.filterInputRow}>
+                <input
+                  value={tagDraft}
+                  onChange={(event) => setTagDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addTagFilter();
+                    }
+                  }}
+                  list="role-tag-options"
+                  placeholder="Search/add tag"
+                  className={`form-control ${styles.filterInput}`}
+                />
+                <button
+                  type="button"
+                  onClick={addTagFilter}
+                  className={styles.filterAddButton}
+                >
+                  Add
+                </button>
               </div>
+              <datalist id="role-tag-options">
+                {activeTagOptions.map((entry) => (
+                  <option key={entry} value={entry} />
+                ))}
+              </datalist>
+              {tagFilter.size > 0 ? (
+                <div className={styles.selectedTokenList}>
+                  {Array.from(tagFilter).map((token) => (
+                    <button
+                      key={token}
+                      type="button"
+                      onClick={() =>
+                        setTagFilter((prev) => {
+                          const next = new Set(prev);
+                          next.delete(token);
+                          return next;
+                        })
+                      }
+                      className={styles.selectedToken}
+                    >
+                      <span>{activeTagLabelByToken.get(token) || token}</span>
+                      <i className="fa-solid fa-xmark" aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span className={styles.groupHint}>No tag filter</span>
+              )}
             </div>
           </div>,
           document.body
@@ -718,21 +1068,22 @@ export default function RoleDashboard({
             </p>
           </div>
           <div className={`text-body-secondary ${styles.headerRight}`}>
-            {loading ? (
-              <span>Loading roles…</span>
+            {headerLoading ? (
+              <span>{isBundleScope ? "Loading bundles…" : "Loading roles…"}</span>
             ) : (
               <span>
-                {filteredRoles.length} / {roles.length} roles
-                {selectedCount > 0 ? (
+                {headerFilteredCount} / {headerTotalCount}{" "}
+                {isBundleScope ? "bundles" : "roles"}
+                {!isBundleScope && selectedCount > 0 ? (
                   <span>
                     {" "}
                     · Enabled {selectedCount}
                     {hiddenSelected > 0 ? ` (${hiddenSelected} hidden)` : ""}
                   </span>
                 ) : null}
-                {viewMode === "matrix"
+                {!isBundleScope && viewMode === "matrix"
                   ? ` · Matrix: ${matrixAliases.length} devices`
-                  : activeAlias
+                  : !isBundleScope && activeAlias
                     ? ` · Active: ${activeAlias}`
                     : ""}
               </span>
@@ -741,7 +1092,7 @@ export default function RoleDashboard({
         </div>
       ) : null}
 
-      {error ? <div className={`text-danger ${styles.error}`}>{error}</div> : null}
+      {headerError ? <div className={`text-danger ${styles.error}`}>{headerError}</div> : null}
 
       <div className={styles.layout}>
         <div ref={scrollRef} className={styles.scrollArea}>
@@ -760,8 +1111,8 @@ export default function RoleDashboard({
                     applySearch();
                   }
                 }}
-                placeholder="Search roles"
-                aria-label="Search roles"
+                placeholder={softwareScope === "bundles" ? "Search bundles" : "Search roles"}
+                aria-label={softwareScope === "bundles" ? "Search bundles" : "Search roles"}
                 className={`form-control ${styles.search}`}
               />
               <button
@@ -780,48 +1131,90 @@ export default function RoleDashboard({
                 <span>Filters</span>
                 <i className="fa-solid fa-chevron-down" aria-hidden="true" />
               </button>
-              {serverSwitcher && viewMode !== "matrix" ? (
-                <div className={styles.serverSwitcherSlot}>{serverSwitcher}</div>
-              ) : null}
-              <div className={styles.viewModeControl}>
+              <div className={styles.scopeControl}>
                 <button
-                  ref={viewButtonRef}
-                  onClick={() => setViewMenuOpen((prev) => !prev)}
-                  className={`${styles.viewModeButton} ${styles.viewModeButtonActive}`}
+                  ref={scopeButtonRef}
+                  type="button"
+                  onClick={() => setScopeMenuOpen((prev) => !prev)}
+                  className={`${styles.toolbarButton} ${styles.scopeButton}`}
                   aria-haspopup="menu"
-                  aria-expanded={viewMenuOpen}
+                  aria-expanded={scopeMenuOpen}
                 >
-                  <i className={VIEW_MODE_ICONS[viewMode]} aria-hidden="true" />
-                  <span>{formatViewLabel(viewMode)}</span>
+                  <i className="fa-solid fa-layer-group" aria-hidden="true" />
+                  <span>
+                    {SOFTWARE_SCOPE_OPTIONS.find((option) => option.id === softwareScope)?.label ||
+                      "Bundles"}
+                  </span>
                   <i className="fa-solid fa-chevron-down" aria-hidden="true" />
                 </button>
-                {viewMenuOpen ? (
+                {scopeMenuOpen ? (
                   <div
-                    ref={viewPopoverRef}
-                    className={styles.viewModeMenu}
+                    ref={scopePopoverRef}
+                    className={styles.scopeMenu}
                     role="menu"
                   >
-                    {VIEW_MODES.map((mode) => {
-                      const active = viewMode === mode;
-                      return (
-                        <button
-                          key={mode}
-                          onClick={() => {
-                            setViewMode(mode);
-                            setViewMenuOpen(false);
-                          }}
-                          className={`${styles.viewModeMenuItem} ${
-                            active ? styles.viewModeMenuItemActive : ""
-                          }`}
-                        >
-                          <i className={VIEW_MODE_ICONS[mode]} aria-hidden="true" />
-                          <span>{formatViewLabel(mode)}</span>
-                        </button>
-                      );
-                    })}
+                    {SOFTWARE_SCOPE_OPTIONS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => {
+                          setSoftwareScope(option.id);
+                          setScopeMenuOpen(false);
+                        }}
+                        className={`${styles.scopeMenuItem} ${
+                          softwareScope === option.id ? styles.scopeMenuItemActive : ""
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
                   </div>
                 ) : null}
               </div>
+              {serverSwitcher && viewMode !== "matrix" ? (
+                <div className={styles.serverSwitcherSlot}>{serverSwitcher}</div>
+              ) : null}
+              {softwareScope === "apps" ? (
+                <div className={styles.viewModeControl}>
+                  <button
+                    ref={viewButtonRef}
+                    onClick={() => setViewMenuOpen((prev) => !prev)}
+                    className={`${styles.viewModeButton} ${styles.viewModeButtonActive}`}
+                    aria-haspopup="menu"
+                    aria-expanded={viewMenuOpen}
+                  >
+                    <i className={VIEW_MODE_ICONS[viewMode]} aria-hidden="true" />
+                    <span>{formatViewLabel(viewMode)}</span>
+                    <i className="fa-solid fa-chevron-down" aria-hidden="true" />
+                  </button>
+                  {viewMenuOpen ? (
+                    <div
+                      ref={viewPopoverRef}
+                      className={styles.viewModeMenu}
+                      role="menu"
+                    >
+                      {VIEW_MODES.map((mode) => {
+                        const active = viewMode === mode;
+                        return (
+                          <button
+                            key={mode}
+                            onClick={() => {
+                              setViewMode(mode);
+                              setViewMenuOpen(false);
+                            }}
+                            className={`${styles.viewModeMenuItem} ${
+                              active ? styles.viewModeMenuItemActive : ""
+                            }`}
+                          >
+                            <i className={VIEW_MODE_ICONS[mode]} aria-hidden="true" />
+                            <span>{formatViewLabel(mode)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div ref={modeRootRef} className={styles.modeControl}>
                 <button
                   onClick={() => setModeMenuOpen((prev) => !prev)}
@@ -860,10 +1253,17 @@ export default function RoleDashboard({
 
           <div
             className={`${styles.content} ${
-              viewMode === "matrix" ? styles.contentMatrix : ""
+              softwareScope === "apps" && viewMode === "matrix" ? styles.contentMatrix : ""
             }`}
           >
-            {viewMode === "matrix" ? (
+            {softwareScope === "bundles" ? (
+              <BundleGridView
+                bundles={paginatedBundles}
+                computedColumns={computedColumns}
+                gridGap={gridGap}
+                minHeight={viewConfig.minHeight}
+              />
+            ) : viewMode === "matrix" ? (
               matrixAliases.length === 0 ? (
                 <div className={`text-body-secondary ${styles.matrixEmpty}`}>
                   Add at least one device to use matrix selection.

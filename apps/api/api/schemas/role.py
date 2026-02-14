@@ -45,6 +45,7 @@ class RoleOut(BaseModel):
 
     # Optional categories from roles/categories.yml (if available)
     categories: List[str] = []
+    bundle_member: bool = False
 
     # Optional pricing metadata (schema-driven)
     pricing_summary: Optional[Dict[str, Any]] = None

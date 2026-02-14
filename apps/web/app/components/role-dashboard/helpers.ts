@@ -67,6 +67,16 @@ export function displayTargets(targets: string[]) {
   return Array.from(out);
 }
 
+export function displayCategories(categories: string[] | null | undefined) {
+  const out = new Set<string>();
+  (categories || []).forEach((category) => {
+    const trimmed = String(category || "").trim();
+    if (!trimmed) return;
+    out.add(trimmed);
+  });
+  return Array.from(out);
+}
+
 export function toEmbedUrl(url: string) {
   try {
     const parsed = new URL(url);

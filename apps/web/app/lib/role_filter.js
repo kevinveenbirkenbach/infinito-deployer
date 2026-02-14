@@ -51,6 +51,9 @@
  * @property {string | null | undefined} [repository]
  * @property {string | null | undefined} [issue_tracker_url]
  * @property {string | null | undefined} [license_url]
+ * @property {string[] | null | undefined} [categories]
+ * @property {string[] | null | undefined} [galaxy_tags]
+ * @property {boolean | null | undefined} [bundle_member]
  * @property {RolePricingSummary | null | undefined} [pricing_summary]
  * @property {RolePricing | null | undefined} [pricing]
  */
@@ -64,10 +67,20 @@ export function normalizeText(value) {
 
 /**
  * @param {Role[]} roles
- * @param {{ statuses?: Iterable<string>; target?: string; query?: string }} filters
+ * @param {{ statuses?: Iterable<string>; target?: string; query?: string; categories?: Iterable<string>; tags?: Iterable<string> }} filters
  */
 export function filterRoles(roles, filters) {
   const statusSet = new Set(filters?.statuses ?? []);
+  const categorySet = new Set(
+    Array.from(filters?.categories ?? [])
+      .map(normalizeText)
+      .filter(Boolean)
+  );
+  const tagSet = new Set(
+    Array.from(filters?.tags ?? [])
+      .map(normalizeText)
+      .filter(Boolean)
+  );
   const target = filters?.target ?? "all";
   const query = normalizeText(filters?.query);
 
@@ -83,6 +96,20 @@ export function filterRoles(roles, filters) {
           return false;
         }
       } else if (!targets.includes(target)) {
+        return false;
+      }
+    }
+
+    if (categorySet.size > 0) {
+      const categories = (role.categories ?? []).map(normalizeText);
+      if (!categories.some((category) => categorySet.has(category))) {
+        return false;
+      }
+    }
+
+    if (tagSet.size > 0) {
+      const tags = (role.galaxy_tags ?? []).map(normalizeText);
+      if (!tags.some((tag) => tagSet.has(tag))) {
         return false;
       }
     }

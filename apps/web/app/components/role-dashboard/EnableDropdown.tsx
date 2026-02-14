@@ -9,7 +9,6 @@ type PricingInputSpec = {
   id: string;
   type: "number" | "enum" | "boolean";
   label?: string;
-  description?: string;
   default?: unknown;
   min?: number;
   max?: number;
@@ -19,8 +18,6 @@ type PricingInputSpec = {
 
 type PricingPlan = {
   id: string;
-  pricing?: Record<string, unknown> | null;
-  setup_fee?: Record<string, unknown> | null;
   inputs?: PricingInputSpec[];
 };
 
@@ -37,12 +34,15 @@ type PricingQuote = {
   region: string;
   interval: string;
   contact_sales: boolean;
-  breakdown?: {
-    setup_fee?: number;
-    minimum_commit_applied?: { applied?: boolean; delta?: number };
-  };
-  notes?: string[];
 };
+
+type RoleStateAction = "enable" | "enabled" | "disable";
+
+const ROLE_STATE_OPTIONS: { id: RoleStateAction; label: string }[] = [
+  { id: "enable", label: "Enable" },
+  { id: "enabled", label: "Enabled" },
+  { id: "disable", label: "Disable" },
+];
 
 type EnableDropdownProps = {
   enabled: boolean;
@@ -108,18 +108,19 @@ export default function EnableDropdown({
   onEnable,
   onDisable,
 }: EnableDropdownProps) {
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-
+  const [stateMenuOpen, setStateMenuOpen] = useState(false);
   const [selectedOfferingId, setSelectedOfferingId] = useState<string>("");
   const [selectedCurrency, setSelectedCurrency] = useState<string>("");
   const [selectedRegion, setSelectedRegion] = useState<string>("global");
-  const [includeSetupFee, setIncludeSetupFee] = useState(false);
   const [inputValues, setInputValues] = useState<Record<string, unknown>>({});
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [quote, setQuote] = useState<PricingQuote | null>(null);
+  const stateButtonRef = useRef<HTMLButtonElement | null>(null);
+  const stateMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const apiBaseUrl = typeof baseUrl === "string" ? baseUrl : "";
 
   const planOptions = Array.isArray(plans)
     ? plans
@@ -129,19 +130,17 @@ export default function EnableDropdown({
         }))
         .filter((plan) => plan.id && plan.label)
     : [];
-
   const hasPlanOptions = planOptions.length > 0 && typeof onSelectPlan === "function";
-
-  const activePlanId = hasPlanOptions
-    ? planOptions.some((plan) => plan.id === selectedPlanId)
+  const fallbackPlanId = planOptions.find((plan) => plan.id === "community")?.id || planOptions[0]?.id || null;
+  const selectedPlanValue =
+    hasPlanOptions && planOptions.some((plan) => plan.id === selectedPlanId)
       ? String(selectedPlanId)
-      : null
+      : fallbackPlanId;
+  const selectedPlanLabel = hasPlanOptions
+    ? planOptions.find((plan) => plan.id === selectedPlanValue)?.label || "Community"
     : enabled
-      ? "enabled"
-      : null;
-  const activePlanLabel = hasPlanOptions
-    ? planOptions.find((plan) => plan.id === activePlanId)?.label || null
-    : null;
+      ? "Enabled"
+      : "Disabled";
 
   const pricingDoc =
     pricing && typeof pricing === "object" && !Array.isArray(pricing)
@@ -154,12 +153,12 @@ export default function EnableDropdown({
   );
 
   const offeringsForPlan = useMemo(() => {
-    if (!activePlanId) return offerings;
+    if (!selectedPlanValue) return offerings;
     const filtered = offerings.filter((offering) =>
-      asPlanList(offering?.plans).some((plan) => asTrimmedString(plan?.id) === activePlanId)
+      asPlanList(offering?.plans).some((plan) => asTrimmedString(plan?.id) === selectedPlanValue)
     );
     return filtered.length > 0 ? filtered : offerings;
-  }, [offerings, activePlanId]);
+  }, [offerings, selectedPlanValue]);
 
   const selectedOffering = useMemo(() => {
     const current = offeringsForPlan.find(
@@ -175,16 +174,14 @@ export default function EnableDropdown({
   }, [offeringsForPlan, pricingDoc, selectedOfferingId]);
 
   const selectedPricingPlan = useMemo(() => {
-    if (!selectedOffering) return null;
+    if (!selectedOffering || !selectedPlanValue) return null;
     const plansForOffering = asPlanList(selectedOffering.plans);
-    if (activePlanId) {
-      const found = plansForOffering.find(
-        (plan) => asTrimmedString(plan?.id) === activePlanId
-      );
-      if (found) return found;
-    }
-    return plansForOffering[0] || null;
-  }, [selectedOffering, activePlanId]);
+    return (
+      plansForOffering.find((plan) => asTrimmedString(plan?.id) === selectedPlanValue) ||
+      plansForOffering[0] ||
+      null
+    );
+  }, [selectedOffering, selectedPlanValue]);
 
   const summaryCurrencies = useMemo(() => {
     const raw = Array.isArray(pricingSummary?.currencies)
@@ -208,7 +205,7 @@ export default function EnableDropdown({
 
   const pricingInputSpecs = useMemo(() => {
     const specsById = new Map<string, PricingInputSpec>();
-    const activePlan = asTrimmedString(selectedPricingPlan?.id || activePlanId || "");
+    const activePlan = asTrimmedString(selectedPricingPlan?.id || selectedPlanValue || "");
     const appendSpecs = (items: unknown) => {
       asSpecList(items).forEach((entry) => {
         const key = asTrimmedString(entry?.id);
@@ -226,40 +223,36 @@ export default function EnableDropdown({
     appendSpecs(selectedOffering?.inputs);
     appendSpecs(selectedPricingPlan?.inputs);
     return Array.from(specsById.values());
-  }, [pricingDoc, selectedOffering, selectedPricingPlan, activePlanId]);
+  }, [pricingDoc, selectedOffering, selectedPricingPlan, selectedPlanValue]);
 
   useEffect(() => {
-    if (!menuOpen) return;
     const preferred = asTrimmedString(pricingDoc?.default_offering_id);
     const nextOffering =
       offeringsForPlan.find((offering) => asTrimmedString(offering?.id) === preferred)?.id ||
       offeringsForPlan[0]?.id ||
       "";
     setSelectedOfferingId((prev) => (prev ? prev : asTrimmedString(nextOffering)));
-  }, [menuOpen, pricingDoc, offeringsForPlan]);
+  }, [pricingDoc, offeringsForPlan]);
 
   useEffect(() => {
-    if (!menuOpen) return;
     const defaultCurrency = summaryCurrencies.includes("EUR")
       ? "EUR"
       : summaryCurrencies[0] || "EUR";
     if (!selectedCurrency || !summaryCurrencies.includes(selectedCurrency)) {
       setSelectedCurrency(defaultCurrency);
     }
-  }, [menuOpen, selectedCurrency, summaryCurrencies]);
+  }, [selectedCurrency, summaryCurrencies]);
 
   useEffect(() => {
-    if (!menuOpen) return;
     const defaultRegion = summaryRegions.includes("global")
       ? "global"
       : summaryRegions[0] || "global";
     if (!selectedRegion || !summaryRegions.includes(selectedRegion)) {
       setSelectedRegion(defaultRegion);
     }
-  }, [menuOpen, selectedRegion, summaryRegions]);
+  }, [selectedRegion, summaryRegions]);
 
   useEffect(() => {
-    if (!menuOpen) return;
     setInputValues((prev) => {
       const next: Record<string, unknown> = {};
       pricingInputSpecs.forEach((spec) => {
@@ -273,48 +266,7 @@ export default function EnableDropdown({
       });
       return next;
     });
-  }, [menuOpen, pricingInputSpecs]);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (rootRef.current?.contains(target)) return;
-      setMenuOpen(false);
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [menuOpen]);
-
-  const requestDisable = () => {
-    if (disabled) return;
-    if (hasPlanOptions) {
-      if (!activePlanId) return;
-    } else if (!enabled) {
-      return;
-    }
-    setMenuOpen(false);
-    setConfirmOpen(true);
-  };
-
-  const hasPricingQuoteSupport =
-    Boolean(baseUrl) &&
-    Boolean(roleId) &&
-    Boolean(pricingDoc) &&
-    Boolean(activePlanId) &&
-    Boolean(selectedOffering) &&
-    hasPlanOptions &&
-    enabled;
+  }, [pricingInputSpecs]);
 
   const normalizedInputs = useMemo(() => {
     const resolved: Record<string, unknown> = {};
@@ -362,350 +314,220 @@ export default function EnableDropdown({
   const quoteKey = useMemo(
     () =>
       JSON.stringify({
+        plan: selectedPlanValue || "",
         offering: selectedOffering?.id || "",
-        plan: activePlanId || "",
         currency: selectedCurrency || "",
         region: selectedRegion || "global",
-        setup: includeSetupFee,
         inputs: normalizedInputs.values,
       }),
-    [
-      selectedOffering,
-      activePlanId,
-      selectedCurrency,
-      selectedRegion,
-      includeSetupFee,
-      normalizedInputs.values,
-    ]
+    [selectedPlanValue, selectedOffering, selectedCurrency, selectedRegion, normalizedInputs.values]
   );
 
   useEffect(() => {
-    if (!menuOpen) return;
-    if (!hasPricingQuoteSupport) return;
-    if (!selectedCurrency) return;
-    if (normalizedInputs.error) {
-      setQuote(null);
-      setQuoteError(normalizedInputs.error);
-      setQuoteBusy(false);
-      return;
-    }
-    let alive = true;
-    const controller = new AbortController();
-    const run = async () => {
-      setQuoteBusy(true);
-      setQuoteError(null);
-      try {
-        const res = await fetch(`${baseUrl}/api/pricing/quote`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: controller.signal,
-          body: JSON.stringify({
-            role_id: roleId,
-            offering_id: asTrimmedString(selectedOffering?.id),
-            plan_id: activePlanId,
-            inputs: normalizedInputs.values,
-            currency: selectedCurrency,
-            region: selectedRegion || "global",
-            include_setup_fee: includeSetupFee,
-          }),
-        });
-        if (!res.ok) {
-          let message = `HTTP ${res.status}`;
-          try {
-            const data = await res.json();
-            if (data?.detail) {
-              message = String(data.detail);
-            }
-          } catch {
-            // ignore parse errors
-          }
-          throw new Error(message);
-        }
-        const data = (await res.json()) as PricingQuote;
-        if (!alive) return;
-        setQuote(data);
-        setQuoteError(null);
-      } catch (err: any) {
-        if (!alive || controller.signal.aborted) return;
-        setQuote(null);
-        setQuoteError(err?.message ?? "failed to calculate quote");
-      } finally {
-        if (alive) setQuoteBusy(false);
+    setQuote(null);
+    setQuoteError(null);
+  }, [quoteKey]);
+
+  useEffect(() => {
+    if (!stateMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (stateMenuRef.current?.contains(target)) return;
+      if (stateButtonRef.current?.contains(target)) return;
+      setStateMenuOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setStateMenuOpen(false);
       }
     };
-    void run();
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
     return () => {
-      alive = false;
-      controller.abort();
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
     };
-  }, [
-    menuOpen,
-    hasPricingQuoteSupport,
-    baseUrl,
-    roleId,
-    selectedOffering,
-    activePlanId,
-    selectedCurrency,
-    selectedRegion,
-    includeSetupFee,
-    normalizedInputs,
-    quoteKey,
-  ]);
+  }, [stateMenuOpen]);
 
-  const label = hasPlanOptions
-    ? activePlanId && activePlanLabel
-      ? `${activePlanLabel} · Enabled`
-      : "Disabled"
-    : enabled
-      ? "Enabled"
-      : "Enable";
+  const canCalculate =
+    Boolean(roleId) &&
+    Boolean(pricingDoc) &&
+    Boolean(selectedPlanValue) &&
+    Boolean(selectedOffering) &&
+    !quoteBusy &&
+    !normalizedInputs.error;
+
+  const calculateQuote = async () => {
+    if (!canCalculate) {
+      if (normalizedInputs.error) {
+        setQuoteError(normalizedInputs.error);
+      }
+      return;
+    }
+    const payload = {
+      role_id: roleId,
+      offering_id: asTrimmedString(selectedOffering?.id),
+      plan_id: selectedPlanValue,
+      inputs: normalizedInputs.values,
+      currency: selectedCurrency,
+      region: selectedRegion || "global",
+      include_setup_fee: false,
+    };
+    setQuoteBusy(true);
+    setQuoteError(null);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/pricing/quote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        let message = `HTTP ${res.status}`;
+        try {
+          const data = await res.json();
+          if (data?.detail) {
+            message = String(data.detail);
+          }
+        } catch {
+          // ignore parse errors
+        }
+        throw new Error(message);
+      }
+      const data = (await res.json()) as PricingQuote;
+      setQuote(data);
+    } catch (err: any) {
+      setQuote(null);
+      setQuoteError(err?.message ?? "failed to calculate quote");
+    } finally {
+      setQuoteBusy(false);
+    }
+  };
+
+  const quoteLabel = useMemo(() => {
+    if (quoteBusy) return "Calculating...";
+    if (quoteError) return quoteError;
+    if (!quote) return "Not calculated";
+    if (quote.contact_sales) return "Contact sales";
+    if (quote.total === null || quote.total === undefined) return "No estimate";
+    if (quote.total <= 0) return "Free";
+    const amount = formatAmount(quote.total, quote.currency || selectedCurrency || "EUR");
+    return quote.interval ? `${amount}/${quote.interval}` : amount;
+  }, [quoteBusy, quoteError, quote, selectedCurrency]);
+
+  const requestDisable = () => {
+    if (disabled || !enabled) return;
+    setConfirmOpen(true);
+  };
+
+  const triggerEnable = () => {
+    if (disabled) return;
+    if (hasPlanOptions) {
+      onSelectPlan?.(selectedPlanValue || fallbackPlanId || "community");
+      return;
+    }
+    if (enabled) return;
+    onEnable();
+  };
+
+  const applyStateAction = (action: RoleStateAction) => {
+    setStateMenuOpen(false);
+    if (disabled) return;
+    if (action === "disable") {
+      requestDisable();
+      return;
+    }
+    triggerEnable();
+  };
+
+  const activeStateLabel = enabled ? "Enabled" : "Disable";
 
   return (
     <>
-      <div ref={rootRef} className={styles.enableControl}>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => {
-            if (disabled) return;
-            setMenuOpen((prev) => !prev);
-          }}
-          className={`${styles.enableTrigger} ${
-            enabled ? styles.enableTriggerEnabled : styles.enableTriggerIdle
-          } ${compact ? styles.enableTriggerCompact : ""} ${
-            disabled ? styles.enableTriggerDisabled : ""
-          }`}
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-        >
-          <span>{label}</span>
-          <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-        </button>
-        {menuOpen ? (
-          <div className={styles.enableMenu} role="menu">
-            {hasPlanOptions ? (
-              <>
-                <button
-                  type="button"
-                  onClick={requestDisable}
-                  className={`${styles.enableMenuItem} ${
-                    !activePlanId ? styles.enableMenuItemActive : ""
-                  } ${styles.enableMenuItemDanger}`}
-                >
-                  Disabled
-                </button>
-                {planOptions.map((plan) => (
-                  <button
-                    key={plan.id}
-                    type="button"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      if (!enabled) onEnable();
-                      onSelectPlan?.(plan.id);
-                    }}
-                    className={`${styles.enableMenuItem} ${
-                      activePlanId === plan.id ? styles.enableMenuItemActive : ""
-                    }`}
-                  >
-                    Enabled - {plan.label}
-                  </button>
-                ))}
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    if (!enabled) onEnable();
-                  }}
-                  className={`${styles.enableMenuItem} ${
-                    enabled ? styles.enableMenuItemActive : ""
-                  }`}
-                >
-                  Enable
-                </button>
-                <button
-                  type="button"
-                  disabled={!enabled}
-                  onClick={requestDisable}
-                  className={`${styles.enableMenuItem} ${styles.enableMenuItemDanger}`}
-                >
-                  Disable
-                </button>
-              </>
-            )}
+      <div className={`${styles.enableControl} ${compact ? styles.enableControlCompact : ""}`}>
+        <div className={styles.enableField}>
+          {hasPlanOptions && planOptions.length > 1 ? (
+            <select
+              value={selectedPlanValue || ""}
+              disabled={disabled}
+              onChange={(event) => onSelectPlan?.(asTrimmedString(event.target.value) || null)}
+              className={styles.enablePlanSelect}
+            >
+              {planOptions.map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className={styles.enablePlanStatic}>{selectedPlanLabel}</span>
+          )}
+        </div>
 
-            {hasPricingQuoteSupport ? (
-              <div className={styles.pricingPanel}>
-                <div className={styles.pricingPanelTitle}>Estimate</div>
-                <div className={styles.pricingControlsGrid}>
-                  {offeringsForPlan.length > 1 ? (
-                    <label className={styles.pricingControlField}>
-                      <span>Offering</span>
-                      <select
-                        value={asTrimmedString(selectedOffering?.id)}
-                        onChange={(event) => setSelectedOfferingId(event.target.value)}
-                      >
-                        {offeringsForPlan.map((offering) => {
-                          const oid = asTrimmedString(offering.id);
-                          return (
-                            <option key={oid} value={oid}>
-                              {asTrimmedString(offering.label) || oid}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </label>
-                  ) : null}
-                  <label className={styles.pricingControlField}>
-                    <span>Currency</span>
-                    <select
-                      value={selectedCurrency}
-                      onChange={(event) => setSelectedCurrency(event.target.value)}
+        {!compact ? (
+          <div className={styles.enableField}>
+            <div className={styles.enablePriceRow}>
+              <span className={quoteError ? styles.pricingError : styles.enablePriceValue}>
+                {quoteLabel}
+              </span>
+              <button
+                type="button"
+                onClick={() => void calculateQuote()}
+                disabled={!canCalculate}
+                className={styles.enableCalculateButton}
+              >
+                Calculate
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className={`${styles.enableField} ${styles.enableFieldState}`}>
+          <div className={styles.enableStateControl}>
+            <button
+              ref={stateButtonRef}
+              type="button"
+              disabled={disabled}
+              onClick={() => setStateMenuOpen((prev) => !prev)}
+              className={`${styles.enableStateDropdownButton} ${
+                enabled ? styles.enableStateDropdownButtonEnabled : styles.enableStateDropdownButtonDisabled
+              } ${disabled ? styles.enableSwitchButtonLocked : ""}`}
+            >
+              <span>{activeStateLabel}</span>
+              <i className="fa-solid fa-chevron-down" aria-hidden="true" />
+            </button>
+            {stateMenuOpen ? (
+              <div ref={stateMenuRef} className={styles.enableStateMenu} role="menu">
+                {ROLE_STATE_OPTIONS.map((option) => {
+                  const active =
+                    (enabled && option.id === "enabled") ||
+                    (!enabled && option.id === "disable");
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => applyStateAction(option.id)}
+                      className={`${styles.enableStateMenuItem} ${
+                        option.id === "enable"
+                          ? styles.enableStateMenuItemEnable
+                          : option.id === "enabled"
+                            ? styles.enableStateMenuItemEnabled
+                            : styles.enableStateMenuItemDisable
+                      } ${active ? styles.enableStateMenuItemActive : ""}`}
                     >
-                      {summaryCurrencies.map((currency) => (
-                        <option key={currency} value={currency}>
-                          {currency}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {summaryRegions.length > 1 ? (
-                    <label className={styles.pricingControlField}>
-                      <span>Region</span>
-                      <select
-                        value={selectedRegion}
-                        onChange={(event) => setSelectedRegion(event.target.value)}
-                      >
-                        {summaryRegions.map((region) => (
-                          <option key={region} value={region}>
-                            {region.toUpperCase()}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                </div>
-
-                {pricingInputSpecs.length > 0 ? (
-                  <div className={styles.pricingInputs}>
-                    {pricingInputSpecs.map((spec) => {
-                      const key = asTrimmedString(spec.id);
-                      if (!key) return null;
-                      if (spec.type === "boolean") {
-                        return (
-                          <label key={key} className={styles.pricingCheckboxField}>
-                            <input
-                              type="checkbox"
-                              checked={Boolean(inputValues[key])}
-                              onChange={(event) =>
-                                setInputValues((prev) => ({
-                                  ...prev,
-                                  [key]: event.target.checked,
-                                }))
-                              }
-                            />
-                            <span>{spec.label || key}</span>
-                          </label>
-                        );
-                      }
-                      if (spec.type === "enum") {
-                        const options = Array.isArray(spec.options)
-                          ? spec.options.map((item) => asTrimmedString(item)).filter(Boolean)
-                          : [];
-                        return (
-                          <label key={key} className={styles.pricingControlField}>
-                            <span>{spec.label || key}</span>
-                            <select
-                              value={asTrimmedString(inputValues[key] ?? spec.default)}
-                              onChange={(event) =>
-                                setInputValues((prev) => ({
-                                  ...prev,
-                                  [key]: event.target.value,
-                                }))
-                              }
-                            >
-                              {options.map((option) => (
-                                <option key={option} value={option}>
-                                  {option}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        );
-                      }
-                      const min = normalizeNumber(spec.min);
-                      const max = normalizeNumber(spec.max);
-                      return (
-                        <label key={key} className={styles.pricingControlField}>
-                          <span>{spec.label || key}</span>
-                          <input
-                            type="number"
-                            value={String(inputValues[key] ?? spec.default ?? "")}
-                            min={min !== null ? min : undefined}
-                            max={max !== null ? max : undefined}
-                            step="1"
-                            onChange={(event) =>
-                              setInputValues((prev) => ({
-                                ...prev,
-                                [key]: event.target.value,
-                              }))
-                            }
-                          />
-                        </label>
-                      );
-                    })}
-                  </div>
-                ) : null}
-
-                {Boolean(pricingSummary?.has_setup_fee) ? (
-                  <label className={styles.pricingCheckboxField}>
-                    <input
-                      type="checkbox"
-                      checked={includeSetupFee}
-                      onChange={(event) => setIncludeSetupFee(event.target.checked)}
-                    />
-                    <span>Include one-time setup fee</span>
-                  </label>
-                ) : null}
-
-                <div className={styles.pricingResult}>
-                  {quoteBusy ? (
-                    <span className={styles.pricingMuted}>Calculating estimate...</span>
-                  ) : quoteError ? (
-                    <span className={styles.pricingError}>{quoteError}</span>
-                  ) : quote?.contact_sales ? (
-                    <span className={styles.pricingMuted}>Contact sales for pricing.</span>
-                  ) : quote?.total !== null && quote?.total !== undefined ? (
-                    <>
-                      <strong>
-                        {quote.total <= 0
-                          ? "Free"
-                          : formatAmount(quote.total, quote.currency || selectedCurrency)}
-                      </strong>
-                      <span className={styles.pricingMuted}>
-                        {quote.interval ? ` / ${quote.interval}` : ""}
-                      </span>
-                      {Boolean(quote.breakdown?.setup_fee) ? (
-                        <span className={styles.pricingMuted}>
-                          includes one-time setup fee
-                        </span>
-                      ) : null}
-                      {quote.breakdown?.minimum_commit_applied?.applied ? (
-                        <span className={styles.pricingMuted}>
-                          minimum spend applied
-                        </span>
-                      ) : null}
-                    </>
-                  ) : (
-                    <span className={styles.pricingMuted}>No estimate available.</span>
-                  )}
-                </div>
+                      {option.label}
+                    </button>
+                  );
+                })}
               </div>
             ) : null}
           </div>
-        ) : null}
+          {!enabled ? (
+            <span className={styles.enableWarningText}>
+              Disabled: role will not be deployed.
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {confirmOpen ? (
@@ -740,11 +562,10 @@ export default function EnableDropdown({
                 onClick={() => {
                   setConfirmOpen(false);
                   if (hasPlanOptions) {
-                    onDisable();
                     onSelectPlan?.(null);
-                  } else {
-                    onDisable();
+                    return;
                   }
+                  onDisable();
                 }}
                 className={styles.enableDisableButton}
               >

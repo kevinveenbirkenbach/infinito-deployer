@@ -38,6 +38,9 @@ type Role = {
   homepage?: string | null;
   issue_tracker_url?: string | null;
   license_url?: string | null;
+  categories?: string[] | null;
+  galaxy_tags?: string[] | null;
+  bundle_member?: boolean | null;
   pricing_summary?: {
     default_offering_id?: string;
     default_plan_id?: string;

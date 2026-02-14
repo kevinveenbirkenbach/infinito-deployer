@@ -11,7 +11,7 @@
   border-radius: 18px;
   box-shadow: var(--deployer-shadow);
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .cardDefault {
@@ -114,6 +114,31 @@
   border: 1px solid var(--bs-border-color);
 }
 
+.bundleList {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.bundleBadge {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bs-info-bg-subtle) 75%, transparent);
+  color: var(--bs-info-text-emphasis);
+  border: 1px solid var(--bs-info-border-subtle);
+}
+
+.bundleBadgeTiny {
+  font-size: 10px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bs-info-bg-subtle) 75%, transparent);
+  color: var(--bs-info-text-emphasis);
+  border: 1px solid var(--bs-info-border-subtle);
+}
+
 .selectButton {
   display: inline-flex;
   align-items: center;
@@ -126,166 +151,183 @@
 }
 
 .roleActionButtons {
-  display: inline-flex;
-  align-items: center;
+  display: grid;
+  justify-items: end;
   gap: 6px;
 }
 
 .enableControl {
-  position: relative;
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
 }
 
-.enableTrigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 90px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  font-size: 12px;
+.enableControlCompact {
+  grid-template-columns: minmax(96px, 1fr) minmax(120px, auto);
+  width: 100%;
+}
+
+.enableField {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.enableFieldState {
+  grid-column: auto;
+}
+
+.enableFieldLabel {
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--deployer-muted-ink);
+}
+
+.enablePlanSelect {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 10px;
   border: 1px solid var(--bs-border-color);
   background: var(--bs-body-bg);
-  color: var(--deployer-muted-ink);
-  cursor: pointer;
+  color: var(--bs-body-color);
+  font-size: 12px;
 }
 
-.enableTriggerCompact {
-  min-width: 84px;
-  height: 30px;
+.enablePlanStatic {
+  min-height: 30px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-tertiary-bg);
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.enablePriceRow {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.enablePriceValue {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.enableCalculateButton {
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-info-border-subtle);
+  background: var(--bs-info-bg-subtle);
+  color: var(--bs-info-text-emphasis);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.enableCalculateButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.enableSwitchButtonLocked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.enableStateControl {
+  position: relative;
+}
+
+.enableStateDropdownButton {
+  width: 100%;
+  min-height: 30px;
   padding: 0 10px;
-  font-size: 11px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  white-space: nowrap;
 }
 
-.enableTriggerIdle {
-  border-color: var(--bs-border-color);
-  background: var(--bs-body-bg);
-  color: var(--deployer-muted-ink);
-}
-
-.enableTriggerEnabled {
+.enableStateDropdownButtonEnabled {
   border-color: var(--bs-success-border-subtle);
   background: var(--bs-success-bg-subtle);
   color: var(--bs-success-text-emphasis);
 }
 
-.enableTriggerDisabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.enableMenu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 40;
-  min-width: 140px;
-  padding: 6px;
-  border-radius: 12px;
-  border: 1px solid var(--bs-border-color-translucent);
-  background: var(--bs-body-bg);
-  box-shadow: var(--deployer-shadow);
-  display: grid;
-  gap: 4px;
-}
-
-.enableMenuItem {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--bs-body-color);
-  padding: 7px 10px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.enableMenuItem:hover:not(:disabled) {
-  background: var(--bs-tertiary-bg);
-}
-
-.enableMenuItem:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.enableMenuItemActive {
-  background: var(--bs-success-bg-subtle);
-  color: var(--bs-success-text-emphasis);
-}
-
-.enableMenuItemDanger {
+.enableStateDropdownButtonDisabled {
+  border-color: var(--bs-danger-border-subtle);
+  background: var(--bs-danger-bg-subtle);
   color: var(--bs-danger-text-emphasis);
 }
 
-.pricingPanel {
-  margin-top: 6px;
-  border-top: 1px solid var(--bs-border-color-translucent);
-  padding-top: 8px;
-  display: grid;
-  gap: 8px;
-  min-width: 280px;
-}
-
-.pricingPanelTitle {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--deployer-muted-ink);
-}
-
-.pricingControlsGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 6px;
-}
-
-.pricingControlField {
+.enableStateMenu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 128px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  box-shadow: var(--deployer-shadow);
+  padding: 4px;
   display: grid;
   gap: 4px;
-  font-size: 11px;
-  color: var(--deployer-muted-ink);
+  z-index: 60;
 }
 
-.pricingControlField select,
-.pricingControlField input {
-  border: 1px solid var(--bs-border-color);
+.enableStateMenuItem {
   border-radius: 8px;
-  padding: 5px 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
   font-size: 12px;
-  background: var(--bs-body-bg);
-  color: var(--bs-body-color);
+  padding: 6px 8px;
 }
 
-.pricingInputs {
-  display: grid;
-  gap: 6px;
+.enableStateMenuItemEnable {
+  color: var(--bs-info-text-emphasis);
 }
 
-.pricingCheckboxField {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--deployer-muted-ink);
+.enableStateMenuItemEnabled {
+  color: var(--bs-success-text-emphasis);
 }
 
-.pricingResult {
-  border: 1px solid var(--bs-border-color-translucent);
-  border-radius: 10px;
+.enableStateMenuItemDisable {
+  color: var(--bs-danger-text-emphasis);
+}
+
+.enableStateMenuItem:hover,
+.enableStateMenuItemActive {
   background: var(--bs-tertiary-bg);
-  padding: 8px 10px;
-  display: grid;
-  gap: 2px;
-  font-size: 12px;
 }
 
-.pricingMuted {
-  color: var(--deployer-muted-ink);
+.enableWarningText {
+  font-size: 10px;
+  color: var(--bs-warning-text-emphasis);
+  line-height: 1.2;
 }
 
 .pricingError {
@@ -467,10 +509,47 @@
   padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
-.detailHeader {
+.bundleCard {
+  min-height: var(--role-card-min-height, 240px);
+  height: 100%;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bundleHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bundleHeaderText {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.bundleFooterMeta {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+}
+
+.bundleRoleCount {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-tertiary-bg);
+  color: var(--deployer-muted-ink);
+}
+
+.detailTitleRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -483,14 +562,34 @@
   gap: 8px;
   min-width: 0;
   flex-wrap: nowrap;
+  flex: 1;
+}
+
+.detailControlRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .detailLinks {
-  margin-top: auto;
   display: flex;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.detailFooterRow {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
 }
 
 .listRoot {
@@ -644,6 +743,19 @@
 
 .quickLinkIcon {
   font-size: 12px;
+}
+
+.quickLinkOverflow {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color);
+  display: grid;
+  place-items: center;
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  line-height: 1;
 }
 
 .videoModalOverlay {

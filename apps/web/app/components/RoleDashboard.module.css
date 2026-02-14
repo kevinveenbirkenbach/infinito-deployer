@@ -262,6 +262,56 @@
   color: var(--deployer-muted-ink);
 }
 
+.scopeControl {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.scopeButton {
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+}
+
+.scopeMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 126px;
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  box-shadow: var(--deployer-shadow-strong);
+  z-index: 1200;
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+}
+
+.scopeMenuItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--bs-body-color);
+  padding: 7px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.scopeMenuItem:hover {
+  background: var(--bs-tertiary-bg);
+}
+
+.scopeMenuItemActive {
+  border-color: var(--bs-border-color);
+  background: var(--bs-tertiary-bg);
+}
+
 .dropdownCardOverlay {
   position: fixed;
   padding: 12px;
@@ -272,7 +322,8 @@
   z-index: 200;
   display: grid;
   gap: 12px;
-  min-width: 280px;
+  min-width: 360px;
+  max-width: min(92vw, 420px);
 }
 
 .group {
@@ -288,6 +339,60 @@
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.groupHint {
+  font-size: 11px;
+  color: var(--deployer-muted-ink);
+}
+
+.filterInputRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.filterInput {
+  min-width: 0;
+  border-radius: 10px;
+  height: 32px;
+  font-size: 12px;
+}
+
+.filterAddButton {
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.selectedTokenList {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.selectedToken {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.selectedToken span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pillButton {

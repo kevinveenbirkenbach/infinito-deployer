@@ -298,4 +298,4 @@ Fields:
 
 # Status
 
-🟨 Planned
+🟩 Done
