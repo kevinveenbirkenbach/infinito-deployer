@@ -17,7 +17,6 @@ type BundleGridViewProps = {
   gridGap: number;
   minHeight: number;
   activeAlias: string;
-  serverCount: number;
   bundleStates: Record<string, BundleState>;
   onEnableBundle: (bundle: Bundle) => void;
   onDisableBundle: (bundle: Bundle) => void;
@@ -34,7 +33,6 @@ export default function BundleGridView({
   gridGap,
   minHeight,
   activeAlias,
-  serverCount,
   bundleStates,
   onEnableBundle,
   onDisableBundle,
@@ -100,9 +98,9 @@ export default function BundleGridView({
               <div className={styles.detailControlRow}>
                 <EnableDropdown
                   enabled={state.enabled}
+                  pricingModel="bundle"
                   plans={[{ id: "community", label: "Community" }]}
                   selectedPlanId="community"
-                  serverCount={serverCount}
                   appCount={Math.max(1, roleIds.length)}
                   contextLabel={`device "${activeAlias}" for bundle "${bundle.title}"`}
                   onEnable={() => onEnableBundle(bundle)}

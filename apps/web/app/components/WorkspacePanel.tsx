@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { json as jsonLang } from "@codemirror/lang-json";
 import { yaml as yamlLang } from "@codemirror/lang-yaml";
 import { python as pythonLang } from "@codemirror/lang-python";
 import { EditorView } from "@codemirror/view";
+import YAML from "yaml";
 import { marked } from "marked";
 import TurndownService from "turndown";
 import WorkspaceSwitcher from "./workspace-panel/WorkspaceSwitcher";
@@ -42,6 +44,405 @@ import type {
   WorkspaceListEntry,
   WorkspacePanelProps,
 } from "./workspace-panel/types";
+
+const USERS_GROUP_VARS_PATH = "group_vars/all.yml";
+const PRICING_USERS_STORAGE_KEY = "infinito.pricing.users.v1";
+const PRICING_USERS_UPDATED_EVENT = "infinito:pricing-users-updated";
+const USERNAME_PATTERN = /^[a-z0-9]+$/;
+
+type WorkspaceUser = {
+  username: string;
+  firstname: string;
+  lastname: string;
+  email?: string;
+  password?: string;
+  uid?: number;
+  gid?: number;
+  roles?: string[];
+  tokens?: Record<string, unknown>;
+  authorized_keys?: string[];
+  reserved?: boolean;
+  description?: string;
+};
+
+type WorkspaceUserForm = {
+  username: string;
+  firstname: string;
+  lastname: string;
+  email: string;
+  password: string;
+  uid: string;
+  gid: string;
+  roles: string;
+  tokens: string;
+  authorized_keys: string;
+  reserved: "" | "true" | "false";
+  description: string;
+};
+
+type UsersAction =
+  | "overview"
+  | "add"
+  | "import-csv"
+  | "import-yaml"
+  | "export-csv"
+  | "export-yaml";
+
+const USER_CSV_HEADERS = [
+  "username",
+  "firstname",
+  "lastname",
+  "email",
+  "password",
+  "uid",
+  "gid",
+  "roles",
+  "tokens",
+  "authorized_keys",
+  "reserved",
+  "description",
+];
+
+function emptyUserForm(): WorkspaceUserForm {
+  return {
+    username: "",
+    firstname: "",
+    lastname: "",
+    email: "",
+    password: "",
+    uid: "",
+    gid: "",
+    roles: "",
+    tokens: "",
+    authorized_keys: "",
+    reserved: "",
+    description: "",
+  };
+}
+
+function userToForm(user: WorkspaceUser): WorkspaceUserForm {
+  const reservedValue: "" | "true" | "false" =
+    typeof user.reserved === "boolean"
+      ? (String(user.reserved) as "true" | "false")
+      : "";
+  return {
+    username: user.username,
+    firstname: user.firstname,
+    lastname: user.lastname,
+    email: user.email ?? "",
+    password: user.password ?? "",
+    uid: user.uid !== undefined ? String(user.uid) : "",
+    gid: user.gid !== undefined ? String(user.gid) : "",
+    roles: user.roles ? user.roles.join(",") : "",
+    tokens: user.tokens ? YAML.stringify(user.tokens).trim() : "",
+    authorized_keys: user.authorized_keys ? user.authorized_keys.join("\n") : "",
+    reserved: reservedValue,
+    description: user.description ?? "",
+  };
+}
+
+function asTrimmed(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function parseOptionalInt(value: unknown): number | undefined {
+  const raw = asTrimmed(value);
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return undefined;
+  const normalized = Math.floor(parsed);
+  return normalized >= 0 ? normalized : undefined;
+}
+
+function parseStringList(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    const values = value.map((entry) => asTrimmed(entry)).filter(Boolean);
+    return values.length > 0 ? values : undefined;
+  }
+  const raw = asTrimmed(value);
+  if (!raw) return undefined;
+  try {
+    const parsed = YAML.parse(raw);
+    if (Array.isArray(parsed)) {
+      const values = parsed.map((entry) => asTrimmed(entry)).filter(Boolean);
+      return values.length > 0 ? values : undefined;
+    }
+  } catch {
+    // fall back to separator parsing
+  }
+  const values = raw
+    .split(/[\n,|]/g)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return values.length > 0 ? values : undefined;
+}
+
+function parseOptionalObject(value: unknown): Record<string, unknown> | undefined {
+  if (isRecord(value)) return { ...value };
+  const raw = asTrimmed(value);
+  if (!raw) return undefined;
+  try {
+    const parsed = YAML.parse(raw);
+    if (isRecord(parsed)) return parsed;
+  } catch {
+    // not a valid object
+  }
+  return undefined;
+}
+
+function normalizeWorkspaceUser(
+  value: unknown,
+  fallbackUsername?: string
+): WorkspaceUser | null {
+  if (!isRecord(value)) return null;
+
+  const username = asTrimmed(value.username ?? fallbackUsername).toLowerCase();
+  const firstname = asTrimmed(value.firstname);
+  const lastname = asTrimmed(value.lastname);
+  if (!USERNAME_PATTERN.test(username) || !firstname || !lastname) return null;
+
+  const user: WorkspaceUser = {
+    username,
+    firstname,
+    lastname,
+  };
+
+  const email = asTrimmed(value.email);
+  if (email) user.email = email;
+
+  const password = asTrimmed(value.password);
+  if (password) user.password = password;
+
+  const uid = parseOptionalInt(value.uid);
+  if (uid !== undefined) user.uid = uid;
+
+  const gid = parseOptionalInt(value.gid);
+  if (gid !== undefined) user.gid = gid;
+
+  const roles = parseStringList(value.roles);
+  if (roles?.length) user.roles = roles;
+
+  const tokens = parseOptionalObject(value.tokens);
+  if (tokens && Object.keys(tokens).length > 0) {
+    user.tokens = tokens;
+  }
+
+  const authorizedKeys = parseStringList(
+    value.authorized_keys ?? value.authorizedKeys
+  );
+  if (authorizedKeys?.length) user.authorized_keys = authorizedKeys;
+
+  if (typeof value.reserved === "boolean") {
+    user.reserved = value.reserved;
+  } else {
+    const reservedRaw = asTrimmed(value.reserved).toLowerCase();
+    if (reservedRaw === "true") user.reserved = true;
+    if (reservedRaw === "false") user.reserved = false;
+  }
+
+  const description = asTrimmed(value.description);
+  if (description) user.description = description;
+
+  return user;
+}
+
+function dedupeWorkspaceUsers(users: WorkspaceUser[]): WorkspaceUser[] {
+  const next = new Map<string, WorkspaceUser>();
+  users.forEach((user) => {
+    if (!user.username) return;
+    if (next.has(user.username)) {
+      next.delete(user.username);
+    }
+    next.set(user.username, user);
+  });
+  return Array.from(next.values());
+}
+
+function extractWorkspaceUsers(value: unknown): WorkspaceUser[] {
+  if (Array.isArray(value)) {
+    return dedupeWorkspaceUsers(
+      value
+        .map((entry) => normalizeWorkspaceUser(entry))
+        .filter((entry): entry is WorkspaceUser => Boolean(entry))
+    );
+  }
+
+  if (!isRecord(value)) return [];
+
+  if ("users" in value) {
+    return extractWorkspaceUsers(value.users);
+  }
+
+  if ("username" in value || "firstname" in value || "lastname" in value) {
+    const single = normalizeWorkspaceUser(value);
+    return single ? [single] : [];
+  }
+
+  const users: WorkspaceUser[] = [];
+  Object.entries(value).forEach(([username, entry]) => {
+    if (!isRecord(entry)) return;
+    const normalized = normalizeWorkspaceUser(
+      { ...entry, username: entry.username ?? username },
+      username
+    );
+    if (normalized) users.push(normalized);
+  });
+  return dedupeWorkspaceUsers(users);
+}
+
+function toYamlUserEntry(user: WorkspaceUser): Record<string, unknown> {
+  const entry: Record<string, unknown> = {
+    username: user.username,
+    firstname: user.firstname,
+    lastname: user.lastname,
+  };
+  if (user.email) entry.email = user.email;
+  if (user.password) entry.password = user.password;
+  if (user.uid !== undefined) entry.uid = user.uid;
+  if (user.gid !== undefined) entry.gid = user.gid;
+  if (user.roles && user.roles.length > 0) entry.roles = user.roles;
+  if (user.tokens && Object.keys(user.tokens).length > 0) entry.tokens = user.tokens;
+  if (user.authorized_keys && user.authorized_keys.length > 0) {
+    entry.authorized_keys = user.authorized_keys;
+  }
+  if (typeof user.reserved === "boolean") entry.reserved = user.reserved;
+  if (user.description) entry.description = user.description;
+  return entry;
+}
+
+function escapeCsvCell(value: unknown): string {
+  const text = String(value ?? "");
+  if (/[",\n]/.test(text)) {
+    return `"${text.replace(/"/g, "\"\"")}"`;
+  }
+  return text;
+}
+
+function parseCsvRows(content: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < content.length; i += 1) {
+    const char = content[i];
+    const next = content[i + 1];
+
+    if (char === "\"") {
+      if (inQuotes && next === "\"") {
+        cell += "\"";
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (!inQuotes && char === ",") {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+
+    if (!inQuotes && (char === "\n" || char === "\r")) {
+      if (char === "\r" && next === "\n") {
+        i += 1;
+      }
+      row.push(cell);
+      cell = "";
+      rows.push(row);
+      row = [];
+      continue;
+    }
+
+    cell += char;
+  }
+
+  row.push(cell);
+  rows.push(row);
+
+  return rows
+    .map((entries) => entries.map((entry) => entry.replace(/^\uFEFF/, "")))
+    .filter((entries) => entries.some((entry) => asTrimmed(entry).length > 0));
+}
+
+function parseUsersFromCsv(content: string): WorkspaceUser[] {
+  const rows = parseCsvRows(content);
+  if (rows.length === 0) return [];
+
+  const headers = rows[0].map((header) =>
+    asTrimmed(header)
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+  );
+
+  const users: WorkspaceUser[] = [];
+  rows.slice(1).forEach((cells) => {
+    const record: Record<string, unknown> = {};
+    headers.forEach((header, index) => {
+      if (!header) return;
+      record[header] = cells[index] ?? "";
+    });
+
+    const user = normalizeWorkspaceUser({
+      username: record.username ?? record.user ?? record.login,
+      firstname: record.firstname ?? record.first_name,
+      lastname: record.lastname ?? record.last_name,
+      email: record.email,
+      password: record.password,
+      uid: record.uid,
+      gid: record.gid,
+      roles: record.roles,
+      tokens: record.tokens,
+      authorized_keys:
+        record.authorized_keys ?? record.authorizedkeys ?? record.authorized_key,
+      reserved: record.reserved,
+      description: record.description,
+    });
+    if (user) users.push(user);
+  });
+
+  return dedupeWorkspaceUsers(users);
+}
+
+function usersToCsv(users: WorkspaceUser[]): string {
+  const lines: string[] = [USER_CSV_HEADERS.join(",")];
+  users.forEach((user) => {
+    const row = [
+      user.username,
+      user.firstname,
+      user.lastname,
+      user.email ?? "",
+      user.password ?? "",
+      user.uid ?? "",
+      user.gid ?? "",
+      user.roles ? JSON.stringify(user.roles) : "",
+      user.tokens ? JSON.stringify(user.tokens) : "",
+      user.authorized_keys ? JSON.stringify(user.authorized_keys) : "",
+      typeof user.reserved === "boolean" ? String(user.reserved) : "",
+      user.description ?? "",
+    ].map(escapeCsvCell);
+    lines.push(row.join(","));
+  });
+  return lines.join("\n");
+}
+
+function syncPricingUsersStorage(users: WorkspaceUser[]) {
+  if (typeof window === "undefined") return;
+  const payload = users.map((user) => ({
+    username: user.username,
+    firstname: user.firstname,
+    lastname: user.lastname,
+    ...(user.email ? { email: user.email } : {}),
+  }));
+  window.localStorage.setItem(PRICING_USERS_STORAGE_KEY, JSON.stringify(payload));
+  window.dispatchEvent(new Event(PRICING_USERS_UPDATED_EVENT));
+}
+
 export default function WorkspacePanel({
   baseUrl,
   selectedRolesByAlias,
@@ -227,6 +628,20 @@ export default function WorkspacePanel({
   >({});
   const [orphanCleanupError, setOrphanCleanupError] = useState<string | null>(null);
   const [orphanCleanupStatus, setOrphanCleanupStatus] = useState<string | null>(null);
+  const [usersOverviewOpen, setUsersOverviewOpen] = useState(false);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersSaving, setUsersSaving] = useState(false);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [usersStatus, setUsersStatus] = useState<string | null>(null);
+  const [usersDraft, setUsersDraft] = useState<WorkspaceUser[]>([]);
+  const [usersSelection, setUsersSelection] = useState<Record<string, boolean>>({});
+  const [usersDoc, setUsersDoc] = useState<Record<string, unknown>>({});
+  const [userForm, setUserForm] = useState<WorkspaceUserForm>(() => emptyUserForm());
+  const [usersEditorMode, setUsersEditorMode] = useState<"create" | "edit">("create");
+  const [editingUsername, setEditingUsername] = useState<string | null>(null);
+  const [userEntryModalOpen, setUserEntryModalOpen] = useState(false);
+  const usersImportInputRef = useRef<HTMLInputElement | null>(null);
+  const usersImportFormatRef = useRef<"csv" | "yaml" | null>(null);
 
   const activeAlias = (credentials.alias || "").trim();
 
@@ -1047,6 +1462,427 @@ export default function WorkspacePanel({
     }
   };
 
+  const readApiDetail = async (res: Response): Promise<string> => {
+    let message = `HTTP ${res.status}`;
+    try {
+      const data = await res.json();
+      if (data?.detail) message = String(data.detail);
+    } catch {
+      // ignore response parse errors
+    }
+    return message;
+  };
+
+  const readWorkspaceUsers = async (): Promise<{
+    doc: Record<string, unknown>;
+    users: WorkspaceUser[];
+  }> => {
+    if (!workspaceId) {
+      throw new Error("Workspace is not ready.");
+    }
+    const res = await fetch(
+      `${baseUrl}/api/workspaces/${workspaceId}/files/${encodePath(USERS_GROUP_VARS_PATH)}`,
+      { cache: "no-store" }
+    );
+    if (res.status === 404) {
+      return { doc: {}, users: [] };
+    }
+    if (!res.ok) {
+      throw new Error(await readApiDetail(res));
+    }
+    const data = await res.json();
+    const content = String(data?.content ?? "");
+    if (!content.trim()) {
+      return { doc: {}, users: [] };
+    }
+    let parsed: unknown = {};
+    try {
+      parsed = YAML.parse(content) ?? {};
+    } catch {
+      throw new Error("group_vars/all.yml is not valid YAML.");
+    }
+    const doc = isRecord(parsed) ? { ...parsed } : {};
+    return {
+      doc,
+      users: extractWorkspaceUsers(doc.users),
+    };
+  };
+
+  const openUsersEditor = async (action: UsersAction = "overview") => {
+    if (!workspaceId) return;
+    setUsersOverviewOpen(action !== "add");
+    setUsersLoading(true);
+    setUsersSaving(false);
+    setUsersError(null);
+    setUsersStatus(null);
+    setUsersEditorMode("create");
+    setEditingUsername(null);
+    setUserEntryModalOpen(false);
+    setUserForm(emptyUserForm());
+    try {
+      const { doc, users } = await readWorkspaceUsers();
+      setUsersDoc(doc);
+      setUsersDraft(users);
+      const nextSelection: Record<string, boolean> = {};
+      users.forEach((user) => {
+        nextSelection[user.username] = false;
+      });
+      setUsersSelection(nextSelection);
+      syncPricingUsersStorage(users);
+      if (action === "export-csv") {
+        exportUsersCsv(users);
+        setUsersStatus("Users exported as CSV.");
+      } else if (action === "export-yaml") {
+        exportUsersYaml(users);
+        setUsersStatus("Users exported as YML.");
+      } else if (action === "import-csv") {
+        triggerUsersImport("csv");
+      } else if (action === "import-yaml") {
+        triggerUsersImport("yaml");
+      } else if (action === "add") {
+        startCreateUserEditor();
+      }
+    } catch (err: any) {
+      setUsersDoc({});
+      setUsersDraft([]);
+      setUsersError(err?.message ?? "Failed to load users from group_vars/all.yml.");
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  const closeUsersEditor = () => {
+    if (usersSaving) return;
+    setUsersOverviewOpen(false);
+    setUsersLoading(false);
+    setUsersError(null);
+    setUsersStatus(null);
+    setUsersEditorMode("create");
+    setEditingUsername(null);
+    setUserEntryModalOpen(false);
+    setUserForm(emptyUserForm());
+    usersImportFormatRef.current = null;
+    if (usersImportInputRef.current) {
+      usersImportInputRef.current.value = "";
+    }
+  };
+
+  const startCreateUserEditor = () => {
+    setUsersEditorMode("create");
+    setEditingUsername(null);
+    setUserForm(emptyUserForm());
+    setUserEntryModalOpen(true);
+    setUsersError(null);
+    setUsersStatus("Create a new user.");
+  };
+
+  const startEditUserEditor = (username: string) => {
+    const target = usersDraft.find((entry) => entry.username === username);
+    if (!target) {
+      setUsersError(`User '${username}' not found.`);
+      return;
+    }
+    setUsersEditorMode("edit");
+    setEditingUsername(target.username);
+    setUserForm(userToForm(target));
+    setUserEntryModalOpen(true);
+    setUsersError(null);
+    setUsersStatus(`Editing user '${target.username}'.`);
+  };
+
+  const closeUserEntryModal = () => {
+    if (usersSaving) return;
+    setUserEntryModalOpen(false);
+  };
+
+  const applyUserEditor = () => {
+    const username = asTrimmed(userForm.username).toLowerCase();
+    const firstname = asTrimmed(userForm.firstname);
+    const lastname = asTrimmed(userForm.lastname);
+    if (!USERNAME_PATTERN.test(username)) {
+      setUsersError("Username must match a-z0-9.");
+      return;
+    }
+    if (!firstname || !lastname) {
+      setUsersError("Firstname and lastname are required.");
+      return;
+    }
+
+    const email = asTrimmed(userForm.email);
+    const password = asTrimmed(userForm.password);
+    const uid = parseOptionalInt(userForm.uid);
+    const gid = parseOptionalInt(userForm.gid);
+    const roles = parseStringList(userForm.roles);
+    const authorizedKeys = parseStringList(userForm.authorized_keys);
+    const tokens = parseOptionalObject(userForm.tokens);
+    if (asTrimmed(userForm.tokens) && !tokens) {
+      setUsersError("Tokens must be a YAML/JSON object.");
+      return;
+    }
+    const description = asTrimmed(userForm.description);
+
+    const nextUser: WorkspaceUser = {
+      username,
+      firstname,
+      lastname,
+      ...(email ? { email } : {}),
+      ...(password ? { password } : {}),
+      ...(uid !== undefined ? { uid } : {}),
+      ...(gid !== undefined ? { gid } : {}),
+      ...(roles?.length ? { roles } : {}),
+      ...(tokens ? { tokens } : {}),
+      ...(authorizedKeys?.length ? { authorized_keys: authorizedKeys } : {}),
+      ...(userForm.reserved === "true"
+        ? { reserved: true }
+        : userForm.reserved === "false"
+          ? { reserved: false }
+          : {}),
+      ...(description ? { description } : {}),
+    };
+
+    const editingKey = usersEditorMode === "edit" ? editingUsername : null;
+    if (editingKey) {
+      if (
+        username !== editingKey &&
+        usersDraft.some((entry) => entry.username === username)
+      ) {
+        setUsersError(`User '${username}' already exists.`);
+        return;
+      }
+    } else if (usersDraft.some((entry) => entry.username === username)) {
+      setUsersError(`User '${username}' already exists.`);
+      return;
+    }
+
+    let nextDraft: WorkspaceUser[];
+    if (editingKey) {
+      nextDraft = usersDraft.map((entry) =>
+        entry.username === editingKey ? nextUser : entry
+      );
+      setUsersEditorMode("edit");
+      setEditingUsername(nextUser.username);
+      setUsersStatus(`User '${nextUser.username}' updated. Save to persist changes.`);
+    } else {
+      nextDraft = [...usersDraft, nextUser];
+      setUsersEditorMode("create");
+      setEditingUsername(null);
+      setUserForm(emptyUserForm());
+      setUsersStatus(`User '${nextUser.username}' added. Save to persist changes.`);
+    }
+
+    setUsersDraft(nextDraft);
+    setUsersSelection((prev) => {
+      const next = { ...prev };
+      if (editingKey && editingKey !== nextUser.username) {
+        delete next[editingKey];
+      }
+      if (!Object.prototype.hasOwnProperty.call(next, nextUser.username)) {
+        next[nextUser.username] = false;
+      }
+      return next;
+    });
+    syncPricingUsersStorage(nextDraft);
+    setUsersError(null);
+    setUserEntryModalOpen(false);
+  };
+
+  const removeUserDraft = (username: string) => {
+    setUsersDraft((prev) => {
+      const next = prev.filter((entry) => entry.username !== username);
+      syncPricingUsersStorage(next);
+      return next;
+    });
+    setUsersSelection((prev) => {
+      const next = { ...prev };
+      delete next[username];
+      return next;
+    });
+    setUsersError(null);
+    setUsersStatus(`User '${username}' removed. Save to persist changes.`);
+    if (editingUsername === username) {
+      setUsersEditorMode("create");
+      setEditingUsername(null);
+      setUserForm(emptyUserForm());
+      setUserEntryModalOpen(false);
+    }
+  };
+
+  const toggleUserSelection = (username: string, checked: boolean) => {
+    setUsersSelection((prev) => ({ ...prev, [username]: checked }));
+  };
+
+  const setUsersSelectionAll = (checked: boolean) => {
+    setUsersSelection((prev) => {
+      const next = { ...prev };
+      usersDraft.forEach((user) => {
+        next[user.username] = checked;
+      });
+      return next;
+    });
+  };
+
+  const deleteSelectedUsers = () => {
+    const selected = usersDraft
+      .map((user) => user.username)
+      .filter((username) => Boolean(usersSelection[username]));
+    if (selected.length === 0) {
+      setUsersError("No users selected.");
+      return;
+    }
+    setUsersDraft((prev) => {
+      const next = prev.filter((entry) => !selected.includes(entry.username));
+      syncPricingUsersStorage(next);
+      return next;
+    });
+    setUsersSelection((prev) => {
+      const next = { ...prev };
+      selected.forEach((username) => {
+        delete next[username];
+      });
+      return next;
+    });
+    setUsersError(null);
+    setUsersStatus(`${selected.length} user(s) removed. Save to persist changes.`);
+    if (editingUsername && selected.includes(editingUsername)) {
+      setUsersEditorMode("create");
+      setEditingUsername(null);
+      setUserForm(emptyUserForm());
+      setUserEntryModalOpen(false);
+    }
+  };
+
+  const triggerUsersImport = (format: "csv" | "yaml") => {
+    usersImportFormatRef.current = format;
+    window.setTimeout(() => {
+      usersImportInputRef.current?.click();
+    }, 0);
+  };
+
+  const handleUsersImportSelect = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const fileName = file.name.toLowerCase();
+    const format =
+      usersImportFormatRef.current ||
+      (fileName.endsWith(".csv") ? "csv" : "yaml");
+
+    setUsersError(null);
+    setUsersStatus(null);
+    try {
+      const text = await file.text();
+      let importedUsers: WorkspaceUser[] = [];
+      if (format === "csv") {
+        importedUsers = parseUsersFromCsv(text);
+      } else {
+        const parsed = YAML.parse(text);
+        if (isRecord(parsed) && "users" in parsed) {
+          importedUsers = extractWorkspaceUsers(parsed.users);
+        } else {
+          importedUsers = extractWorkspaceUsers(parsed);
+        }
+      }
+      const uniqueUsers = dedupeWorkspaceUsers(importedUsers);
+      if (uniqueUsers.length === 0) {
+        setUsersError("Import contains no valid users.");
+        return;
+      }
+      setUsersDraft(uniqueUsers);
+      const nextSelection: Record<string, boolean> = {};
+      uniqueUsers.forEach((user) => {
+        nextSelection[user.username] = false;
+      });
+      setUsersSelection(nextSelection);
+      syncPricingUsersStorage(uniqueUsers);
+      setUsersEditorMode("create");
+      setEditingUsername(null);
+      setUserForm(emptyUserForm());
+      setUsersStatus(
+        `Imported ${uniqueUsers.length} user(s). Save to write ${USERS_GROUP_VARS_PATH}.`
+      );
+    } catch {
+      setUsersError("Failed to import users. Check file format.");
+    } finally {
+      usersImportFormatRef.current = null;
+    }
+  };
+
+  const downloadUsersExport = (filename: string, content: string, mimeType: string) => {
+    if (typeof window === "undefined") return;
+    const blob = new Blob([content], { type: mimeType });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => {
+      window.URL.revokeObjectURL(url);
+    }, 0);
+  };
+
+  const exportUsersYaml = (users: WorkspaceUser[] = usersDraft) => {
+    const yamlExport = YAML.stringify({
+      users: users.map((user) => toYamlUserEntry(user)),
+    });
+    downloadUsersExport("users.yml", yamlExport, "application/x-yaml");
+  };
+
+  const exportUsersCsv = (users: WorkspaceUser[] = usersDraft) => {
+    downloadUsersExport("users.csv", usersToCsv(users), "text/csv;charset=utf-8");
+  };
+
+  const saveWorkspaceUsers = async () => {
+    if (!workspaceId) return;
+    const uniqueUsers = dedupeWorkspaceUsers(
+      usersDraft
+        .map((entry) => normalizeWorkspaceUser(entry))
+        .filter((entry): entry is WorkspaceUser => Boolean(entry))
+    );
+    const invalidCount = usersDraft.length - uniqueUsers.length;
+    if (invalidCount > 0) {
+      setUsersError("Fix invalid users first (username a-z0-9, firstname, lastname).");
+      return;
+    }
+
+    const nextDoc = isRecord(usersDoc) ? { ...usersDoc } : {};
+    nextDoc.users = uniqueUsers.map((entry) => toYamlUserEntry(entry));
+    const content = YAML.stringify(nextDoc);
+
+    setUsersSaving(true);
+    setUsersError(null);
+    setUsersStatus(null);
+    try {
+      const res = await fetch(
+        `${baseUrl}/api/workspaces/${workspaceId}/files/${encodePath(USERS_GROUP_VARS_PATH)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content }),
+        }
+      );
+      if (!res.ok) {
+        throw new Error(await readApiDetail(res));
+      }
+      setUsersDoc(nextDoc);
+      setUsersDraft(uniqueUsers);
+      const nextSelection: Record<string, boolean> = {};
+      uniqueUsers.forEach((user) => {
+        nextSelection[user.username] = false;
+      });
+      setUsersSelection(nextSelection);
+      syncPricingUsersStorage(uniqueUsers);
+      await refreshFiles(workspaceId);
+      setUsersStatus(`Saved ${uniqueUsers.length} user(s) to ${USERS_GROUP_VARS_PATH}.`);
+    } catch (err: any) {
+      setUsersError(err?.message ?? "Failed to save users.");
+    } finally {
+      setUsersSaving(false);
+    }
+  };
+
   const canGenerateCredentials =
     inventoryReady &&
     !!workspaceId &&
@@ -1069,6 +1905,159 @@ export default function WorkspacePanel({
           workspaceSwitcherTarget
         )
       : null;
+
+  const selectedUsersCount = usersDraft.reduce(
+    (sum, user) => sum + (usersSelection[user.username] ? 1 : 0),
+    0
+  );
+
+  const usersEditorOverrideContent = usersOverviewOpen ? (
+    <div className={styles.usersEditorHost}>
+      <div className={styles.usersEditorTopbar}>
+        <span className={`text-body-secondary ${styles.usersHint}`}>
+          Users overview from <code>{USERS_GROUP_VARS_PATH}</code>
+        </span>
+        <div className={styles.usersToolbar}>
+          <button
+            type="button"
+            onClick={() => setUsersSelectionAll(true)}
+            disabled={usersLoading || usersDraft.length === 0}
+            className={styles.usersSecondaryButton}
+          >
+            Select all
+          </button>
+          <button
+            type="button"
+            onClick={() => setUsersSelectionAll(false)}
+            disabled={usersLoading || usersDraft.length === 0}
+            className={styles.usersSecondaryButton}
+          >
+            Deselect all
+          </button>
+          <button
+            type="button"
+            onClick={deleteSelectedUsers}
+            disabled={usersLoading || usersSaving || selectedUsersCount === 0}
+            className={styles.usersDeleteButton}
+          >
+            Delete selected ({selectedUsersCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void saveWorkspaceUsers();
+            }}
+            disabled={usersLoading || usersSaving}
+            className={styles.usersPrimaryButton}
+          >
+            {usersSaving ? "Saving..." : "Save users"}
+          </button>
+          <button
+            type="button"
+            onClick={closeUsersEditor}
+            disabled={usersSaving}
+            className={styles.usersSecondaryButton}
+          >
+            Close overview
+          </button>
+        </div>
+      </div>
+
+      {usersLoading ? (
+        <p className={`text-body-secondary ${styles.usersHint}`}>Loading users...</p>
+      ) : (
+        <div className={styles.usersWorkspace}>
+          <section className={styles.usersOverview}>
+            <div className={styles.usersSectionHeader}>
+              <h4 className={styles.usersSectionTitle}>Overview</h4>
+              <button
+                type="button"
+                onClick={startCreateUserEditor}
+                disabled={usersSaving}
+                className={styles.usersSecondaryButton}
+              >
+                New
+              </button>
+            </div>
+            <div className={styles.usersTableWrap}>
+              {usersDraft.length === 0 ? (
+                <p className={`text-body-secondary ${styles.usersHint}`}>No users added.</p>
+              ) : (
+                <table className={styles.usersTable}>
+                  <thead>
+                    <tr>
+                      <th />
+                      <th>Username</th>
+                      <th>Firstname</th>
+                      <th>Lastname</th>
+                      <th>Email</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usersDraft.map((user) => (
+                      <tr key={user.username}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(usersSelection[user.username])}
+                            onChange={(event) =>
+                              toggleUserSelection(user.username, event.target.checked)
+                            }
+                          />
+                        </td>
+                        <td>{user.username}</td>
+                        <td>{user.firstname}</td>
+                        <td>{user.lastname}</td>
+                        <td>{user.email || "-"}</td>
+                        <td>
+                          <div className={styles.usersListActions}>
+                            <button
+                              type="button"
+                              onClick={() => startEditUserEditor(user.username)}
+                              disabled={usersSaving}
+                              className={styles.usersSecondaryButton}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeUserDraft(user.username)}
+                              disabled={usersSaving}
+                              className={styles.usersDeleteButton}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </section>
+
+        </div>
+      )}
+
+      {usersError ? (
+        <p className={`text-danger ${styles.usersMessage}`}>{usersError}</p>
+      ) : null}
+      {usersStatus ? (
+        <p className={`text-success ${styles.usersMessage}`}>{usersStatus}</p>
+      ) : null}
+      <input
+        ref={usersImportInputRef}
+        type="file"
+        accept=".csv,.yaml,.yml,text/csv,application/x-yaml,text/yaml"
+        onChange={(event) => {
+          void handleUsersImportSelect(event);
+        }}
+        className={styles.usersHiddenInput}
+      />
+    </div>
+  ) : null;
   return (
     <>
       {workspaceSwitcher}
@@ -1151,6 +2140,7 @@ export default function WorkspacePanel({
             toggleDir={toggleDir}
             fileOpError={fileOpError}
             openContextMenu={openContextMenu}
+            editorOverrideContent={usersEditorOverrideContent}
           />
         </div>
         <div className={styles.bottomBar}>
@@ -1185,6 +2175,9 @@ export default function WorkspacePanel({
             uploadStatus={uploadStatus}
             openInventoryCleanup={openOrphanCleanupDialog}
             inventoryCleanupBusy={orphanCleanupLoading || orphanCleanupBusy}
+            onUsersAction={(action: UsersAction) => {
+              void openUsersEditor(action);
+            }}
           />
         </div>
       </Wrapper>
@@ -1288,6 +2281,199 @@ export default function WorkspacePanel({
                 className={styles.cleanupDeleteButton}
               >
                 {orphanCleanupBusy ? "Deleting..." : "Delete selected"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {userEntryModalOpen ? (
+        <div
+          className={styles.usersOverlay}
+          onClick={closeUserEntryModal}
+        >
+          <div
+            className={styles.usersModal}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.usersHeader}>
+              <h3 className={styles.usersTitle}>
+                {usersEditorMode === "edit" && editingUsername
+                  ? `Edit user: ${editingUsername}`
+                  : "Add user"}
+              </h3>
+              <button
+                type="button"
+                onClick={closeUserEntryModal}
+                disabled={usersSaving}
+                className={styles.usersSecondaryButton}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className={styles.usersFormGrid}>
+              <label className={styles.usersField}>
+                <span>Username* (a-z0-9)</span>
+                <input
+                  value={userForm.username}
+                  onChange={(event) =>
+                    setUserForm((prev) => ({
+                      ...prev,
+                      username: asTrimmed(event.target.value).toLowerCase(),
+                    }))
+                  }
+                  className={styles.usersInput}
+                  placeholder="admin"
+                />
+              </label>
+              <label className={styles.usersField}>
+                <span>Firstname*</span>
+                <input
+                  value={userForm.firstname}
+                  onChange={(event) =>
+                    setUserForm((prev) => ({ ...prev, firstname: event.target.value }))
+                  }
+                  className={styles.usersInput}
+                  placeholder="Admin"
+                />
+              </label>
+              <label className={styles.usersField}>
+                <span>Lastname*</span>
+                <input
+                  value={userForm.lastname}
+                  onChange={(event) =>
+                    setUserForm((prev) => ({ ...prev, lastname: event.target.value }))
+                  }
+                  className={styles.usersInput}
+                  placeholder="User"
+                />
+              </label>
+              <label className={styles.usersField}>
+                <span>Email (optional)</span>
+                <input
+                  value={userForm.email}
+                  onChange={(event) =>
+                    setUserForm((prev) => ({ ...prev, email: event.target.value }))
+                  }
+                  className={styles.usersInput}
+                  placeholder="admin@example.org"
+                />
+              </label>
+              <label className={styles.usersField}>
+                <span>Password (optional)</span>
+                <input
+                  value={userForm.password}
+                  onChange={(event) =>
+                    setUserForm((prev) => ({ ...prev, password: event.target.value }))
+                  }
+                  className={styles.usersInput}
+                  placeholder="{{ 42 | strong_password }}"
+                />
+              </label>
+              <label className={styles.usersField}>
+                <span>Reserved (optional)</span>
+                <select
+                  value={userForm.reserved}
+                  onChange={(event) =>
+                    setUserForm((prev) => ({
+                      ...prev,
+                      reserved: event.target.value as "" | "true" | "false",
+                    }))
+                  }
+                  className={styles.usersInput}
+                >
+                  <option value="">not set</option>
+                  <option value="true">true</option>
+                  <option value="false">false</option>
+                </select>
+              </label>
+              <label className={styles.usersField}>
+                <span>UID (optional)</span>
+                <input
+                  value={userForm.uid}
+                  onChange={(event) =>
+                    setUserForm((prev) => ({ ...prev, uid: event.target.value }))
+                  }
+                  className={styles.usersInput}
+                  placeholder="1028"
+                />
+              </label>
+              <label className={styles.usersField}>
+                <span>GID (optional)</span>
+                <input
+                  value={userForm.gid}
+                  onChange={(event) =>
+                    setUserForm((prev) => ({ ...prev, gid: event.target.value }))
+                  }
+                  className={styles.usersInput}
+                  placeholder="1028"
+                />
+              </label>
+              <label className={styles.usersField}>
+                <span>Roles (optional)</span>
+                <input
+                  value={userForm.roles}
+                  onChange={(event) =>
+                    setUserForm((prev) => ({ ...prev, roles: event.target.value }))
+                  }
+                  className={styles.usersInput}
+                  placeholder="role-a,role-b"
+                />
+              </label>
+              <label className={`${styles.usersField} ${styles.usersFieldWide}`}>
+                <span>Authorized keys (optional, one per line)</span>
+                <textarea
+                  rows={2}
+                  value={userForm.authorized_keys}
+                  onChange={(event) =>
+                    setUserForm((prev) => ({
+                      ...prev,
+                      authorized_keys: event.target.value,
+                    }))
+                  }
+                  className={styles.usersTextArea}
+                />
+              </label>
+              <label className={`${styles.usersField} ${styles.usersFieldWide}`}>
+                <span>Tokens (optional YAML/JSON object)</span>
+                <textarea
+                  rows={2}
+                  value={userForm.tokens}
+                  onChange={(event) =>
+                    setUserForm((prev) => ({ ...prev, tokens: event.target.value }))
+                  }
+                  className={styles.usersTextArea}
+                />
+              </label>
+              <label className={`${styles.usersField} ${styles.usersFieldWide}`}>
+                <span>Description (optional)</span>
+                <input
+                  value={userForm.description}
+                  onChange={(event) =>
+                    setUserForm((prev) => ({ ...prev, description: event.target.value }))
+                  }
+                  className={styles.usersInput}
+                  placeholder="Generic reserved username"
+                />
+              </label>
+            </div>
+
+            <div className={styles.usersFooter}>
+              <button
+                type="button"
+                onClick={closeUserEntryModal}
+                disabled={usersSaving}
+                className={styles.usersSecondaryButton}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={applyUserEditor}
+                disabled={usersSaving}
+                className={styles.usersPrimaryButton}
+              >
+                {usersEditorMode === "edit" ? "Apply changes" : "Add user"}
               </button>
             </div>
           </div>

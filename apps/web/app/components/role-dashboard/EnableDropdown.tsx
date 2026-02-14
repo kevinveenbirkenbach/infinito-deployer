@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import styles from "./styles.module.css";
 
 type PlanOption = { id: string; label: string };
+type PricingModel = "app" | "bundle";
 
 type RoleStateAction = "enable" | "enabled" | "disable";
 
@@ -17,6 +18,7 @@ type EnableDropdownProps = {
   enabled: boolean;
   disabled?: boolean;
   compact?: boolean;
+  pricingModel?: PricingModel;
   contextLabel?: string;
   plans?: PlanOption[];
   selectedPlanId?: string | null;
@@ -31,6 +33,24 @@ type EnableDropdownProps = {
   onEnable: () => void;
   onDisable: () => void;
 };
+
+type PricingUser = {
+  firstname: string;
+  lastname: string;
+  email?: string;
+  username: string;
+};
+
+type PricingQuote = {
+  model: PricingModel;
+  users: number;
+  servers: number;
+  apps: number;
+  total: number;
+};
+
+const PRICING_USERS_STORAGE_KEY = "infinito.pricing.users.v1";
+const PRICING_USERS_UPDATED_EVENT = "infinito:pricing-users-updated";
 
 function asTrimmedString(value: unknown): string {
   return String(value || "").trim();
@@ -54,10 +74,42 @@ function normalizePositiveInt(value: unknown, fallback: number): number {
   return Math.max(1, Math.floor(num));
 }
 
+function readPricingUsers(): PricingUser[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(PRICING_USERS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry) => ({
+        firstname: asTrimmedString((entry as any)?.firstname),
+        lastname: asTrimmedString((entry as any)?.lastname),
+        email: asTrimmedString((entry as any)?.email) || undefined,
+        username: asTrimmedString((entry as any)?.username).toLowerCase(),
+      }))
+      .filter(
+        (entry) =>
+          entry.firstname &&
+          entry.lastname &&
+          /^[a-z0-9]+$/.test(entry.username)
+      );
+  } catch {
+    return [];
+  }
+}
+
+function persistPricingUsers(nextUsers: PricingUser[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PRICING_USERS_STORAGE_KEY, JSON.stringify(nextUsers));
+  window.dispatchEvent(new Event(PRICING_USERS_UPDATED_EVENT));
+}
+
 export default function EnableDropdown({
   enabled,
   disabled = false,
   compact = false,
+  pricingModel = "app",
   contextLabel,
   plans,
   selectedPlanId = null,
@@ -76,19 +128,9 @@ export default function EnableDropdown({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [stateMenuOpen, setStateMenuOpen] = useState(false);
   const [calculatorOpen, setCalculatorOpen] = useState(false);
-  const [usersInput, setUsersInput] = useState(
-    normalizePositiveInt(defaultUserCount, 1)
-  );
-  const [serversInput, setServersInput] = useState(
-    normalizePositiveInt(serverCount, 1)
-  );
-  const [appsInput, setAppsInput] = useState(normalizePositiveInt(appCount, 1));
-  const [quote, setQuote] = useState<{
-    users: number;
-    servers: number;
-    apps: number;
-    total: number;
-  } | null>(null);
+  const [pricingUsers, setPricingUsers] = useState<PricingUser[]>([]);
+  const [calcError, setCalcError] = useState<string | null>(null);
+  const [quote, setQuote] = useState<PricingQuote | null>(null);
   const stateButtonRef = useRef<HTMLButtonElement | null>(null);
   const stateMenuRef = useRef<HTMLDivElement | null>(null);
   const prevEnabledRef = useRef<boolean>(enabled);
@@ -98,6 +140,7 @@ export default function EnableDropdown({
   void pricing;
   void pricingSummary;
   void baseUrl;
+  void defaultUserCount;
 
   useEffect(() => {
     if (!enabled && prevEnabledRef.current && inactiveState !== "disable") {
@@ -105,6 +148,25 @@ export default function EnableDropdown({
     }
     prevEnabledRef.current = enabled;
   }, [enabled, inactiveState]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const syncUsers = () => {
+      setPricingUsers(readPricingUsers());
+    };
+    syncUsers();
+    const onStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== PRICING_USERS_STORAGE_KEY) return;
+      syncUsers();
+    };
+    const onCustomUpdate = () => syncUsers();
+    window.addEventListener("storage", onStorage);
+    window.addEventListener(PRICING_USERS_UPDATED_EVENT, onCustomUpdate);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(PRICING_USERS_UPDATED_EVENT, onCustomUpdate);
+    };
+  }, []);
 
   const planOptions = Array.isArray(plans)
     ? plans
@@ -146,19 +208,47 @@ export default function EnableDropdown({
     };
   }, [stateMenuOpen]);
 
+  const normalizedServerCount = Math.max(0, Math.floor(Number(serverCount) || 0));
+  const normalizedBundleRoleCount = Math.max(0, Math.floor(Number(appCount) || 0));
+  const usersCount = pricingUsers.length;
+  const calculatedServers = pricingModel === "app" ? normalizedServerCount : 1;
+  const calculatedApps = pricingModel === "app" ? 1 : normalizedBundleRoleCount;
+
+  const calculatorModelLabel =
+    pricingModel === "bundle" ? "users × roles" : "users × servers × app";
+
+  const canCalculate =
+    usersCount > 0 &&
+    (pricingModel === "bundle" ? calculatedApps > 0 : calculatedServers > 0);
+
+  useEffect(() => {
+    setQuote(null);
+  }, [pricingModel, usersCount, calculatedServers, calculatedApps]);
+
   const openCalculator = () => {
-    setUsersInput(normalizePositiveInt(defaultUserCount, 1));
-    setServersInput(normalizePositiveInt(serverCount, 1));
-    setAppsInput(normalizePositiveInt(appCount, 1));
+    setCalcError(null);
     setCalculatorOpen(true);
   };
 
   const applyCalculation = () => {
-    const users = normalizePositiveInt(usersInput, 1);
-    const servers = normalizePositiveInt(serversInput, 1);
-    const apps = normalizePositiveInt(appsInput, 1);
-    const total = users * servers * apps;
-    setQuote({ users, servers, apps, total });
+    if (!canCalculate) {
+      if (usersCount <= 0) {
+        setCalcError("Add at least one user.");
+        return;
+      }
+      if (pricingModel === "bundle") {
+        setCalcError("Bundle has no roles to calculate.");
+      } else {
+        setCalcError("No enabled servers for this app.");
+      }
+      return;
+    }
+    const users = normalizePositiveInt(usersCount, 1);
+    const servers = normalizePositiveInt(calculatedServers, 1);
+    const apps = normalizePositiveInt(calculatedApps, 1);
+    const total = pricingModel === "bundle" ? users * apps : users * servers * apps;
+    setQuote({ model: pricingModel, users, servers, apps, total });
+    setCalcError(null);
     setCalculatorOpen(false);
   };
 
@@ -222,13 +312,6 @@ export default function EnableDropdown({
     () => ROLE_STATE_OPTIONS.filter((option) => option.id !== activeState),
     [activeState]
   );
-
-  const stateHint =
-    activeState === "disable"
-      ? "Disabled: role will not be deployed."
-      : activeState === "enable"
-        ? "Enable: role will be deployed on next setup."
-        : null;
 
   const calculateButtonLabel = quote ? "Recalculate" : "Calculate";
 
@@ -305,7 +388,6 @@ export default function EnableDropdown({
               </div>
             ) : null}
           </div>
-          {stateHint ? <span className={styles.enableWarningText}>{stateHint}</span> : null}
         </div>
       </div>
 
@@ -317,40 +399,43 @@ export default function EnableDropdown({
           >
             <h4 className={styles.enableConfirmTitle}>Calculate estimate</h4>
             <p className={styles.enableConfirmText}>
-              Model: users × servers × apps
+              Model: {calculatorModelLabel}
             </p>
-            <div className={styles.enableCalcGrid}>
-              <label className={styles.enableCalcField}>
+            <div className={styles.enableCalcReadonlyGrid}>
+              <label className={styles.enableCalcReadonlyField}>
                 <span>Users</span>
                 <input
                   type="number"
-                  min={1}
-                  value={usersInput}
-                  onChange={(event) => setUsersInput(Number(event.target.value))}
+                  value={String(usersCount)}
                   className={styles.enableCalcInput}
+                  readOnly
                 />
               </label>
-              <label className={styles.enableCalcField}>
-                <span>Servers</span>
+              <label className={styles.enableCalcReadonlyField}>
+                <span>{pricingModel === "bundle" ? "Roles" : "Servers"}</span>
                 <input
                   type="number"
-                  min={1}
-                  value={serversInput}
-                  onChange={(event) => setServersInput(Number(event.target.value))}
+                  value={String(pricingModel === "bundle" ? calculatedApps : calculatedServers)}
                   className={styles.enableCalcInput}
+                  readOnly
                 />
               </label>
-              <label className={styles.enableCalcField}>
+              <label className={styles.enableCalcReadonlyField}>
                 <span>Apps</span>
                 <input
                   type="number"
-                  min={1}
-                  value={appsInput}
-                  onChange={(event) => setAppsInput(Number(event.target.value))}
+                  value={String(calculatedApps)}
                   className={styles.enableCalcInput}
+                  readOnly
                 />
               </label>
             </div>
+            <p className={styles.enableCalcHint}>
+              Manage users in Inventory via the new Users button.
+            </p>
+            {calcError ? (
+              <p className={styles.enableCalcError}>{calcError}</p>
+            ) : null}
             <div className={styles.enableConfirmActions}>
               <button
                 type="button"
@@ -362,6 +447,7 @@ export default function EnableDropdown({
               <button
                 type="button"
                 onClick={applyCalculation}
+                disabled={!canCalculate}
                 className={styles.enableDisableButton}
               >
                 Calculate

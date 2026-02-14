@@ -14,7 +14,7 @@ type RoleGridViewProps = {
   roles: Role[];
   selected: Set<string>;
   onToggleSelected: (id: string) => void;
-  serverCount?: number;
+  roleServerCountByRole?: Record<string, number>;
   rolePlans?: Record<string, { id: string; label: string }[]>;
   selectedPlanByRole?: Record<string, string | null>;
   onSelectRolePlan?: (roleId: string, planId: string | null) => void;
@@ -32,7 +32,7 @@ export default function RoleGridView({
   roles,
   selected,
   onToggleSelected,
-  serverCount = 1,
+  roleServerCountByRole,
   rolePlans,
   selectedPlanByRole,
   onSelectRolePlan,
@@ -56,6 +56,10 @@ export default function RoleGridView({
     <div className={styles.gridRoot} style={gridStyle}>
       {roles.map((role) => {
         const selectedState = selected.has(role.id);
+        const roleServerCount = Math.max(
+          0,
+          Math.floor(Number(roleServerCountByRole?.[role.id] || 0))
+        );
         const statusColors = colorForStatus(role.status);
         const statusStyle = {
           "--status-bg": statusColors.bg,
@@ -114,6 +118,7 @@ export default function RoleGridView({
                   ) : null}
                   <EnableDropdown
                     enabled={selectedState}
+                    pricingModel="app"
                     plans={rolePlans?.[role.id]}
                     selectedPlanId={selectedPlanByRole?.[role.id] ?? null}
                     onSelectPlan={(planId) => onSelectRolePlan?.(role.id, planId)}
@@ -121,7 +126,7 @@ export default function RoleGridView({
                     pricing={role.pricing || null}
                     pricingSummary={role.pricing_summary || null}
                     baseUrl={baseUrl}
-                    serverCount={serverCount}
+                    serverCount={roleServerCount}
                     appCount={1}
                     onEnable={() => {
                       if (!selectedState) onToggleSelected(role.id);
@@ -269,6 +274,7 @@ export default function RoleGridView({
                 ) : null}
                 <EnableDropdown
                   enabled={selectedState}
+                  pricingModel="app"
                   plans={rolePlans?.[role.id]}
                   selectedPlanId={selectedPlanByRole?.[role.id] ?? null}
                   onSelectPlan={(planId) => onSelectRolePlan?.(role.id, planId)}
@@ -276,7 +282,7 @@ export default function RoleGridView({
                   pricing={role.pricing || null}
                   pricingSummary={role.pricing_summary || null}
                   baseUrl={baseUrl}
-                  serverCount={serverCount}
+                  serverCount={roleServerCount}
                   appCount={1}
                   onEnable={() => {
                     if (!selectedState) onToggleSelected(role.id);

@@ -330,8 +330,6 @@ export default function RoleDashboard({
     return out;
   }, [matrixAliases, serverMetaByAlias]);
 
-  const serverCount = Math.max(1, matrixAliases.length || 0);
-
   const selectedLookup = useMemo(() => {
     const out: Record<string, Set<string>> = {};
     if (selectedByAlias) {
@@ -351,6 +349,18 @@ export default function RoleDashboard({
     }
     return out;
   }, [selectedByAlias, activeAlias, selected]);
+
+  const roleServerCountByRole = useMemo(() => {
+    const counts: Record<string, number> = {};
+    roles.forEach((role) => {
+      const roleId = String(role.id || "").trim();
+      if (!roleId) return;
+      counts[roleId] = matrixAliases.reduce((sum, alias) => {
+        return sum + (selectedLookup[alias]?.has(roleId) ? 1 : 0);
+      }, 0);
+    });
+    return counts;
+  }, [roles, matrixAliases, selectedLookup]);
 
   const rolePlanOptions = useMemo(() => {
     const out: Record<string, { id: string; label: string }[]> = {};
@@ -1386,7 +1396,6 @@ export default function RoleDashboard({
                 gridGap={gridGap}
                 minHeight={viewConfig.minHeight}
                 activeAlias={String(activeAlias || "").trim() || matrixAliases[0] || "server"}
-                serverCount={serverCount}
                 bundleStates={bundleStateById}
                 onEnableBundle={requestEnableBundle}
                 onDisableBundle={disableBundle}
@@ -1447,6 +1456,7 @@ export default function RoleDashboard({
                                     enabled={selectedState}
                                     disabled={!selectable}
                                     compact
+                                    pricingModel="app"
                                     plans={rolePlanOptions[role.id]}
                                     selectedPlanId={
                                       selectedPlanLookup[alias]?.[role.id] ?? null
@@ -1458,7 +1468,7 @@ export default function RoleDashboard({
                                     pricing={role.pricing || null}
                                     pricingSummary={role.pricing_summary || null}
                                     baseUrl={baseUrl}
-                                    serverCount={serverCount}
+                                    serverCount={selectedState ? 1 : 0}
                                     appCount={1}
                                     contextLabel={`device "${alias}" for "${role.display_name}"`}
                                     onEnable={() => {
@@ -1508,7 +1518,7 @@ export default function RoleDashboard({
                 onSelectRolePlan={(roleId, planId) =>
                   selectPlanByAlias(String(activeAlias || "").trim(), roleId, planId)
                 }
-                serverCount={serverCount}
+                roleServerCountByRole={roleServerCountByRole}
                 baseUrl={baseUrl}
                 developerMode={accessMode === "developer"}
                 onEditRoleConfig={
@@ -1526,7 +1536,7 @@ export default function RoleDashboard({
                 onSelectRolePlan={(roleId, planId) =>
                   selectPlanByAlias(String(activeAlias || "").trim(), roleId, planId)
                 }
-                serverCount={serverCount}
+                roleServerCountByRole={roleServerCountByRole}
                 baseUrl={baseUrl}
                 developerMode={accessMode === "developer"}
                 onEditRoleConfig={

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { CSSProperties } from "react";
 import { colorForStatus, displayTargets } from "./helpers";
 import EnableDropdown from "./EnableDropdown";
@@ -14,7 +15,7 @@ type RoleListViewProps = {
   selected: Set<string>;
   iconSize: number;
   onToggleSelected: (id: string) => void;
-  serverCount?: number;
+  roleServerCountByRole?: Record<string, number>;
   rolePlans?: Record<string, { id: string; label: string }[]>;
   selectedPlanByRole?: Record<string, string | null>;
   onSelectRolePlan?: (roleId: string, planId: string | null) => void;
@@ -23,13 +24,25 @@ type RoleListViewProps = {
   onOpenVideo: (url: string, title: string) => void;
 };
 
+function collapseEmojiForRole(role: Role): string {
+  const targets = (role.deployment_targets || []).map((entry) =>
+    String(entry || "").trim().toLowerCase()
+  );
+  const hasServer = targets.includes("server");
+  const hasWorkstation = targets.includes("workstation");
+  if (hasServer && hasWorkstation) return "🧩";
+  if (hasServer) return "🖥️";
+  if (hasWorkstation) return "💻";
+  return "📦";
+}
+
 export default function RoleListView({
   baseUrl,
   roles,
   selected,
   iconSize,
   onToggleSelected,
-  serverCount = 1,
+  roleServerCountByRole,
   rolePlans,
   selectedPlanByRole,
   onSelectRolePlan,
@@ -37,6 +50,20 @@ export default function RoleListView({
   onEditRoleConfig,
   onOpenVideo,
 }: RoleListViewProps) {
+  const [expandedTitleIds, setExpandedTitleIds] = useState<Set<string>>(new Set());
+
+  const toggleTitleExpansion = (roleId: string) => {
+    setExpandedTitleIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(roleId)) {
+        next.delete(roleId);
+      } else {
+        next.add(roleId);
+      }
+      return next;
+    });
+  };
+
   return (
     <div className={styles.listRoot}>
       <div className={`${styles.listGrid} ${styles.listHeader}`}>
@@ -49,6 +76,15 @@ export default function RoleListView({
       </div>
       {roles.map((role) => {
         const selectedState = selected.has(role.id);
+        const roleServerCount = Math.max(
+          0,
+          Math.floor(Number(roleServerCountByRole?.[role.id] || 0))
+        );
+        const name = String(role.display_name || "").trim();
+        const collapsedByLength = name.length > 30;
+        const expanded = expandedTitleIds.has(role.id);
+        const collapseName = collapsedByLength && !expanded;
+        const collapseEmoji = collapseEmojiForRole(role);
         const statusColors = colorForStatus(role.status);
         const statusStyle = {
           "--status-bg": statusColors.bg,
@@ -66,7 +102,30 @@ export default function RoleListView({
             <div className={styles.listRoleCell}>
               <RoleLogoView role={role} size={iconSize} />
               <div className={styles.listRoleText}>
-                <div className={styles.listRoleName}>{role.display_name}</div>
+                {collapseName ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleTitleExpansion(role.id)}
+                    className={styles.listRoleExpandButton}
+                    title={name}
+                    aria-label={`Expand title for ${name}`}
+                  >
+                    <span aria-hidden="true">{collapseEmoji}</span>
+                  </button>
+                ) : collapsedByLength ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleTitleExpansion(role.id)}
+                    className={styles.listRoleExpandedButton}
+                    title="Collapse title"
+                    aria-label={`Collapse title for ${name}`}
+                  >
+                    <span className={styles.listRoleNameExpanded}>{name}</span>
+                    <span aria-hidden="true">🔽</span>
+                  </button>
+                ) : (
+                  <div className={styles.listRoleName}>{name}</div>
+                )}
               </div>
             </div>
             <span
@@ -100,6 +159,7 @@ export default function RoleListView({
               ) : null}
               <EnableDropdown
                 enabled={selectedState}
+                pricingModel="app"
                 plans={rolePlans?.[role.id]}
                 selectedPlanId={selectedPlanByRole?.[role.id] ?? null}
                 onSelectPlan={(planId) => onSelectRolePlan?.(role.id, planId)}
@@ -107,7 +167,7 @@ export default function RoleListView({
                 pricing={role.pricing || null}
                 pricingSummary={role.pricing_summary || null}
                 baseUrl={baseUrl}
-                serverCount={serverCount}
+                serverCount={roleServerCount}
                 appCount={1}
                 onEnable={() => {
                   if (!selectedState) onToggleSelected(role.id);

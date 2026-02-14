@@ -169,3 +169,263 @@
   font-size: 12px;
   cursor: pointer;
 }
+
+.usersOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1460;
+  background: rgba(4, 10, 24, 0.78);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.usersModal {
+  width: min(1080px, 96vw);
+  max-height: min(90vh, 880px);
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--deployer-panel-workspace-bg);
+  box-shadow: var(--deployer-shadow-strong);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.usersHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.usersTitle {
+  margin: 0;
+  font-size: 20px;
+}
+
+.usersHint {
+  margin: 0;
+  font-size: 13px;
+}
+
+.usersToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.usersEditorHost {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  height: 100%;
+}
+
+.usersEditorTopbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.usersWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+.usersOverview,
+.usersEditor {
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 12px;
+  background: var(--deployer-card-bg-soft);
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+}
+
+.usersSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.usersSectionTitle {
+  margin: 0;
+  font-size: 14px;
+}
+
+.usersFormGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.usersField {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.usersFieldWide {
+  grid-column: 1 / -1;
+}
+
+.usersInput,
+.usersTextArea {
+  width: 100%;
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 10px;
+  background: rgba(12, 19, 35, 0.72);
+  color: var(--bs-body-color);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.usersTextArea {
+  resize: vertical;
+  min-height: 62px;
+}
+
+.usersFormActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.usersList {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--deployer-card-bg-soft);
+  max-height: 260px;
+  overflow: auto;
+}
+
+.usersTableWrap {
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 12px;
+  background: var(--deployer-card-bg-soft);
+  max-height: 420px;
+  overflow: auto;
+}
+
+.usersTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.usersTable th,
+.usersTable td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--bs-border-color-translucent);
+  border-right: 1px solid var(--bs-border-color-translucent);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.usersTable th:last-child,
+.usersTable td:last-child {
+  border-right: 0;
+}
+
+.usersTable thead th {
+  position: sticky;
+  top: 0;
+  background: rgba(10, 18, 36, 0.96);
+  z-index: 1;
+}
+
+.usersListItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(12, 19, 35, 0.72);
+}
+
+.usersListActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.usersListMeta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.usersFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.usersPrimaryButton,
+.usersSecondaryButton,
+.usersDeleteButton {
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.usersPrimaryButton {
+  border: 1px solid var(--bs-success-border-subtle);
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-success-text-emphasis);
+}
+
+.usersSecondaryButton {
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+}
+
+.usersDeleteButton {
+  border: 1px solid var(--bs-danger-border-subtle);
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
+}
+
+.usersPrimaryButton:disabled,
+.usersSecondaryButton:disabled,
+.usersDeleteButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.usersMessage {
+  margin: 0;
+}
+
+.usersHiddenInput {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .usersFormGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .usersFormGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

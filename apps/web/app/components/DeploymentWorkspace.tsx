@@ -9,7 +9,6 @@ import WorkspacePanel from "./WorkspacePanel";
 import LiveDeploymentView from "./LiveDeploymentView";
 import DeploymentWorkspaceServerSwitcher from "./DeploymentWorkspaceServerSwitcher";
 import ProviderOrderPanel from "./ProviderOrderPanel";
-import UsersPanel from "./UsersPanel";
 import styles from "./DeploymentWorkspace.module.css";
 import { createInitialState } from "../lib/deploy_form";
 import { buildDeploymentPayload } from "../lib/deployment_payload";
@@ -197,7 +196,7 @@ export default function DeploymentWorkspace({
     "customer"
   );
   const [activePanel, setActivePanel] = useState<
-    "store" | "server" | "inventory" | "deploy" | "users"
+    "store" | "server" | "inventory" | "deploy"
   >("store");
 
   useEffect(() => {
@@ -1278,58 +1277,8 @@ export default function DeploymentWorkspace({
     [servers]
   );
 
-  const usersPanelEnabled = useMemo(() => {
-    const keycloakAliases = new Set<string>();
-    Object.entries(selectedRolesByAlias || {}).forEach(([alias, roleIds]) => {
-      const roles = Array.isArray(roleIds) ? roleIds : [];
-      if (roles.includes("web-app-keycloak")) {
-        const key = String(alias || "").trim();
-        if (key) keycloakAliases.add(key);
-      }
-    });
-    const deployedKeycloakAliases = Array.from(keycloakAliases).filter((alias) =>
-      deployedAliases.has(alias)
-    );
-    const reachableKeycloakAliases = deployedKeycloakAliases.filter((alias) => {
-      const status = connectionResults[alias];
-      return Boolean(status?.ping_ok && status?.ssh_ok);
-    });
-    return reachableKeycloakAliases.length > 0;
-  }, [selectedRolesByAlias, deployedAliases, connectionResults]);
-
-  const usersPanelDisabledReason = useMemo(() => {
-    if (servers.length === 0) {
-      return "Add at least one device first.";
-    }
-    const keycloakAliases = new Set<string>();
-    Object.entries(selectedRolesByAlias || {}).forEach(([alias, roleIds]) => {
-      const roles = Array.isArray(roleIds) ? roleIds : [];
-      if (roles.includes("web-app-keycloak")) {
-        const key = String(alias || "").trim();
-        if (key) keycloakAliases.add(key);
-      }
-    });
-    if (keycloakAliases.size === 0) {
-      return "Enable web-app-keycloak for at least one device.";
-    }
-    const deployedKeycloakAliases = Array.from(keycloakAliases).filter((alias) =>
-      deployedAliases.has(alias)
-    );
-    if (deployedKeycloakAliases.length === 0) {
-      return "Run setup successfully for a Keycloak-enabled device first.";
-    }
-    const reachable = deployedKeycloakAliases.some((alias) => {
-      const status = connectionResults[alias];
-      return Boolean(status?.ping_ok && status?.ssh_ok);
-    });
-    if (!reachable) {
-      return "Run a successful connection test for a deployed Keycloak device.";
-    }
-    return "User management requires an active deployed server with Keycloak and LDAP.";
-  }, [servers.length, selectedRolesByAlias, deployedAliases, connectionResults]);
-
   const panels: {
-    key: "store" | "server" | "inventory" | "deploy" | "users";
+    key: "store" | "server" | "inventory" | "deploy";
     title: string;
     content: ReactNode;
     disabled?: boolean;
@@ -1783,13 +1732,6 @@ export default function DeploymentWorkspace({
           </div>
         </div>
       ),
-    },
-    {
-      key: "users",
-      title: "Users",
-      disabled: !usersPanelEnabled,
-      disabledReason: usersPanelDisabledReason,
-      content: <UsersPanel baseUrl={baseUrl} workspaceId={workspaceId} />,
     },
   ];
 

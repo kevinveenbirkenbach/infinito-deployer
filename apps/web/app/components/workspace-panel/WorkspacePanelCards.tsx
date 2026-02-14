@@ -39,10 +39,14 @@ export default function WorkspacePanelCards(props: any) {
     uploadStatus,
     openInventoryCleanup,
     inventoryCleanupBusy,
+    onUsersAction,
   } = props;
 
   const [secretsMenuOpen, setSecretsMenuOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [usersMenuOpen, setUsersMenuOpen] = useState(false);
+  const [usersImportMenuOpen, setUsersImportMenuOpen] = useState(false);
+  const [usersExportMenuOpen, setUsersExportMenuOpen] = useState(false);
   const [vaultResetConfirmOpen, setVaultResetConfirmOpen] = useState(false);
   const [scopeModalOpen, setScopeModalOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState<"all" | "custom">("all");
@@ -88,19 +92,22 @@ export default function WorkspacePanelCards(props: any) {
   );
 
   useEffect(() => {
-    if (!secretsMenuOpen && !workspaceMenuOpen) return;
+    if (!secretsMenuOpen && !workspaceMenuOpen && !usersMenuOpen) return;
     const onMouseDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
       if (menuRootRef.current?.contains(target)) return;
       setSecretsMenuOpen(false);
       setWorkspaceMenuOpen(false);
+      setUsersMenuOpen(false);
+      setUsersImportMenuOpen(false);
+      setUsersExportMenuOpen(false);
     };
     document.addEventListener("mousedown", onMouseDown);
     return () => {
       document.removeEventListener("mousedown", onMouseDown);
     };
-  }, [secretsMenuOpen, workspaceMenuOpen]);
+  }, [secretsMenuOpen, workspaceMenuOpen, usersMenuOpen]);
 
   const buildFullSelection = () => {
     const next: Record<string, boolean> = {};
@@ -195,6 +202,9 @@ export default function WorkspacePanelCards(props: any) {
               onClick={() => {
                 setSecretsMenuOpen((prev) => !prev);
                 setWorkspaceMenuOpen(false);
+                setUsersMenuOpen(false);
+                setUsersImportMenuOpen(false);
+                setUsersExportMenuOpen(false);
               }}
               className={styles.menuTrigger}
             >
@@ -264,6 +274,9 @@ export default function WorkspacePanelCards(props: any) {
               onClick={() => {
                 setWorkspaceMenuOpen((prev) => !prev);
                 setSecretsMenuOpen(false);
+                setUsersMenuOpen(false);
+                setUsersImportMenuOpen(false);
+                setUsersExportMenuOpen(false);
               }}
               className={styles.menuTrigger}
             >
@@ -334,6 +347,176 @@ export default function WorkspacePanelCards(props: any) {
                 {uploadStatus ? (
                   <p className={`text-success ${styles.menuStatus}`}>{uploadStatus}</p>
                 ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <div className={styles.menuWrap}>
+            <button
+              type="button"
+              onClick={() => {
+                setUsersMenuOpen((prev) => !prev);
+                setSecretsMenuOpen(false);
+                setWorkspaceMenuOpen(false);
+                setUsersImportMenuOpen(false);
+                setUsersExportMenuOpen(false);
+              }}
+              disabled={!workspaceId}
+              className={styles.menuTrigger}
+            >
+              <i className="fa-solid fa-users" aria-hidden="true" />
+              <span>Users</span>
+              <i
+                className={`fa-solid ${
+                  usersMenuOpen ? "fa-chevron-up" : "fa-chevron-down"
+                }`}
+                aria-hidden="true"
+              />
+            </button>
+            {usersMenuOpen ? (
+              <div className={styles.menuPanel}>
+                <ul className={styles.menuList}>
+                  <li>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUsersMenuOpen(false);
+                        setUsersImportMenuOpen(false);
+                        setUsersExportMenuOpen(false);
+                        onUsersAction?.("overview");
+                      }}
+                      disabled={!workspaceId}
+                      className={styles.menuItem}
+                    >
+                      <span className={styles.menuItemLabel}>
+                        <i className="fa-solid fa-table-list" aria-hidden="true" />
+                        Overview
+                      </span>
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUsersMenuOpen(false);
+                        setUsersImportMenuOpen(false);
+                        setUsersExportMenuOpen(false);
+                        onUsersAction?.("add");
+                      }}
+                      disabled={!workspaceId}
+                      className={styles.menuItem}
+                    >
+                      <span className={styles.menuItemLabel}>
+                        <i className="fa-solid fa-user-plus" aria-hidden="true" />
+                        Add
+                      </span>
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUsersImportMenuOpen((prev) => !prev);
+                        setUsersExportMenuOpen(false);
+                      }}
+                      disabled={!workspaceId}
+                      className={styles.menuItem}
+                    >
+                      <span className={styles.menuItemLabel}>
+                        <i className="fa-solid fa-file-arrow-up" aria-hidden="true" />
+                        Import
+                      </span>
+                      <i
+                        className={`fa-solid ${
+                          usersImportMenuOpen ? "fa-chevron-up" : "fa-chevron-down"
+                        }`}
+                        aria-hidden="true"
+                      />
+                    </button>
+                    {usersImportMenuOpen ? (
+                      <div className={styles.submenu}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUsersMenuOpen(false);
+                            setUsersImportMenuOpen(false);
+                            setUsersExportMenuOpen(false);
+                            onUsersAction?.("import-csv");
+                          }}
+                          className={styles.submenuItem}
+                        >
+                          <i className="fa-solid fa-file-csv" aria-hidden="true" />
+                          CSV
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUsersMenuOpen(false);
+                            setUsersImportMenuOpen(false);
+                            setUsersExportMenuOpen(false);
+                            onUsersAction?.("import-yaml");
+                          }}
+                          className={styles.submenuItem}
+                        >
+                          <i className="fa-solid fa-file-code" aria-hidden="true" />
+                          YAML
+                        </button>
+                      </div>
+                    ) : null}
+                  </li>
+                  <li>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUsersExportMenuOpen((prev) => !prev);
+                        setUsersImportMenuOpen(false);
+                      }}
+                      disabled={!workspaceId}
+                      className={styles.menuItem}
+                    >
+                      <span className={styles.menuItemLabel}>
+                        <i className="fa-solid fa-file-export" aria-hidden="true" />
+                        Export
+                      </span>
+                      <i
+                        className={`fa-solid ${
+                          usersExportMenuOpen ? "fa-chevron-up" : "fa-chevron-down"
+                        }`}
+                        aria-hidden="true"
+                      />
+                    </button>
+                    {usersExportMenuOpen ? (
+                      <div className={styles.submenu}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUsersMenuOpen(false);
+                            setUsersImportMenuOpen(false);
+                            setUsersExportMenuOpen(false);
+                            onUsersAction?.("export-csv");
+                          }}
+                          className={styles.submenuItem}
+                        >
+                          <i className="fa-solid fa-file-csv" aria-hidden="true" />
+                          CSV
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUsersMenuOpen(false);
+                            setUsersImportMenuOpen(false);
+                            setUsersExportMenuOpen(false);
+                            onUsersAction?.("export-yaml");
+                          }}
+                          className={styles.submenuItem}
+                        >
+                          <i className="fa-solid fa-file-code" aria-hidden="true" />
+                          YAML
+                        </button>
+                      </div>
+                    ) : null}
+                  </li>
+                </ul>
               </div>
             ) : null}
           </div>

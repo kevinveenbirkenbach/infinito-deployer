@@ -46,6 +46,7 @@ export default function WorkspacePanelFileEditor(props: any) {
     toggleDir,
     fileOpError,
     openContextMenu,
+    editorOverrideContent,
   } = props;
 
   return (
@@ -99,7 +100,9 @@ export default function WorkspacePanelFileEditor(props: any) {
       <div className={`${styles.panel} ${styles.editorPanel}`}>
         <label className={`text-body-tertiary ${styles.label}`}>Editor</label>
         <div className={styles.editorWrap}>
-          {!activePath ? (
+          {editorOverrideContent ? (
+            editorOverrideContent
+          ) : !activePath ? (
             <p className={`text-body-tertiary ${styles.emptyMessage}`}>
               Select a file from the workspace to edit it.
             </p>
