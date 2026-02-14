@@ -98,6 +98,7 @@ export default function BundleGridView({
               <div className={styles.bundleControlRow}>
                 <EnableDropdown
                   enabled={state.enabled}
+                  compact
                   pricingModel="bundle"
                   plans={[{ id: "community", label: "Community" }]}
                   selectedPlanId="community"

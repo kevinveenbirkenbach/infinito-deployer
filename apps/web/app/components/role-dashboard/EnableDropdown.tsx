@@ -7,8 +7,15 @@ import styles from "./styles.module.css";
 type PlanOption = { id: string; label: string };
 type PricingModel = "app" | "bundle";
 type EnableDropdownVariant = "default" | "tile";
+type EnableStateButtonSize = "compact" | "default" | "tile";
 
 type RoleStateAction = "enable" | "enabled" | "disable";
+
+type RoleStateConfig = {
+  label: string;
+  iconClass: string;
+  toneClass: string;
+};
 
 type EnableDropdownProps = {
   enabled: boolean;
@@ -50,6 +57,30 @@ type PricingQuote = {
 
 const PRICING_USERS_STORAGE_KEY = "infinito.pricing.users.v1";
 const PRICING_USERS_UPDATED_EVENT = "infinito:pricing-users-updated";
+
+const ROLE_STATE_CONFIG: Record<RoleStateAction, RoleStateConfig> = {
+  enable: {
+    label: "Enable",
+    iconClass: "fa-solid fa-power-off",
+    toneClass: styles.enableStateDropdownButtonEnable,
+  },
+  enabled: {
+    label: "Enabled",
+    iconClass: "fa-solid fa-toggle-on",
+    toneClass: styles.enableStateDropdownButtonEnabled,
+  },
+  disable: {
+    label: "Disable",
+    iconClass: "fa-solid fa-toggle-off",
+    toneClass: styles.enableStateDropdownButtonDisable,
+  },
+};
+
+const STATE_BUTTON_SIZE_CLASS: Record<EnableStateButtonSize, string> = {
+  compact: styles.enableStateDropdownButtonSizeCompact,
+  default: styles.enableStateDropdownButtonSizeDefault,
+  tile: styles.enableStateDropdownButtonSizeTile,
+};
 
 function asTrimmedString(value: unknown): string {
   return String(value || "").trim();
@@ -96,6 +127,15 @@ function readPricingUsers(): PricingUser[] {
   } catch {
     return [];
   }
+}
+
+function stateButtonSizeClass(
+  variant: EnableDropdownVariant,
+  compact: boolean
+): EnableStateButtonSize {
+  if (variant === "tile") return "tile";
+  if (compact) return "compact";
+  return "default";
 }
 
 export default function EnableDropdown({
@@ -198,9 +238,18 @@ export default function EnableDropdown({
 
   const requestDisable = () => {
     if (disabled) return;
-    if (enabled || inactiveState !== "disable") {
-      setConfirmOpen(true);
+    setConfirmOpen(true);
+  };
+
+  const confirmDisable = () => {
+    if (disabled) return;
+    setConfirmOpen(false);
+    setInactiveState("disable");
+    if (hasPlanOptions) {
+      onSelectPlan?.(null);
+      return;
     }
+    onDisable();
   };
 
   const triggerEnable = (action: RoleStateAction) => {
@@ -233,24 +282,8 @@ export default function EnableDropdown({
   };
 
   const activeState: RoleStateAction = enabled ? "enabled" : inactiveState;
-
-  const activeStateLabel = useMemo(() => {
-    if (activeState === "enabled") return "Enabled";
-    if (activeState === "disable") return "Disable";
-    return "Enable";
-  }, [activeState]);
-
-  const stateButtonClass = useMemo(() => {
-    if (activeState === "enabled") return styles.enableStateDropdownButtonEnabled;
-    if (activeState === "disable") return styles.enableStateDropdownButtonDisable;
-    return styles.enableStateDropdownButtonEnable;
-  }, [activeState]);
-
-  const stateIconClass = useMemo(() => {
-    if (activeState === "enabled") return "fa-solid fa-toggle-on";
-    if (activeState === "disable") return "fa-solid fa-toggle-off";
-    return "fa-solid fa-power-off";
-  }, [activeState]);
+  const stateConfig = ROLE_STATE_CONFIG[activeState];
+  const sizeClass = STATE_BUTTON_SIZE_CLASS[stateButtonSizeClass(variant, compact)];
 
   const tilePriceLabel = quoteLabel;
 
@@ -263,20 +296,18 @@ export default function EnableDropdown({
     applyStateAction("enabled");
   };
 
-  const renderStateControl = (withLeadingIcon = false) => (
+  const renderStateControl = () => (
     <button
       type="button"
       disabled={disabled}
       onClick={handleStateToggle}
-      className={`${styles.enableStateDropdownButton} ${stateButtonClass} ${
+      className={`${styles.enableStateDropdownButton} ${stateConfig.toneClass} ${sizeClass} ${
         disabled ? styles.enableSwitchButtonLocked : ""
       }`}
     >
       <span className={styles.enableStateDropdownButtonLabel}>
-        {withLeadingIcon ? (
-          <i className={stateIconClass} aria-hidden="true" />
-        ) : null}
-        <span>{activeStateLabel}</span>
+        <i className={stateConfig.iconClass} aria-hidden="true" />
+        <span>{stateConfig.label}</span>
       </span>
     </button>
   );
@@ -290,7 +321,7 @@ export default function EnableDropdown({
             <span className={styles.enableTilePriceCaption}>per month</span>
           </div>
           <div className={styles.enableTileActionColumn}>
-            {renderStateControl(true)}
+            {renderStateControl()}
             {onOpenDetails ? (
               <button
                 type="button"
@@ -341,23 +372,19 @@ export default function EnableDropdown({
       )}
 
       {confirmOpen ? (
-        <div
-          className={styles.enableConfirmOverlay}
-          onClick={() => setConfirmOpen(false)}
-        >
+        <div className={styles.enableConfirmOverlay} onClick={() => setConfirmOpen(false)}>
           <div
             className={styles.enableConfirmCard}
             onClick={(event) => event.stopPropagation()}
           >
-            <h4 className={styles.enableConfirmTitle}>Disable app selection?</h4>
+            <h4 className={styles.enableConfirmTitle}>Disable selection?</h4>
             <p className={styles.enableConfirmText}>
               {contextLabel
-                ? `Disabling will remove this app from ${contextLabel}.`
-                : "Disabling will remove this app from the current deployment selection."}
+                ? `Warning: Disabling will remove this app from ${contextLabel}.`
+                : "Warning: Disabling will remove this app from the current deployment selection."}
             </p>
             <p className={styles.enableConfirmText}>
-              It will no longer be written to inventory for that scope and will not run
-              in deployments until you enable it again.
+              It will no longer be deployed until you enable it again.
             </p>
             <div className={styles.enableConfirmActions}>
               <button
@@ -369,15 +396,7 @@ export default function EnableDropdown({
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setConfirmOpen(false);
-                  setInactiveState("disable");
-                  if (hasPlanOptions) {
-                    onSelectPlan?.(null);
-                    return;
-                  }
-                  onDisable();
-                }}
+                onClick={confirmDisable}
                 className={styles.enableDisableButton}
               >
                 Disable

@@ -159,6 +159,7 @@ export default function RoleListView({
               ) : null}
               <EnableDropdown
                 enabled={selectedState}
+                compact
                 pricingModel="app"
                 plans={rolePlans?.[role.id]}
                 selectedPlanId={selectedPlanByRole?.[role.id] ?? null}

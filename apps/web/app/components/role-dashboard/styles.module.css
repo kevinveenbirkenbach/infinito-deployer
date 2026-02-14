@@ -181,7 +181,7 @@
 }
 
 .enableControlCompact {
-  grid-template-columns: minmax(96px, 1fr) minmax(120px, auto);
+  grid-template-columns: minmax(0, 1fr) minmax(104px, auto);
   width: 100%;
 }
 
@@ -224,6 +224,10 @@
   font-size: 12px;
   display: inline-flex;
   align-items: center;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .enablePriceRow {
@@ -279,16 +283,31 @@
 
 .enableStateDropdownButton {
   width: 100%;
-  min-height: 30px;
-  padding: 0 10px;
   border-radius: 999px;
   border: 1px solid transparent;
-  font-size: 12px;
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 6px;
   white-space: nowrap;
+}
+
+.enableStateDropdownButtonSizeCompact {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.enableStateDropdownButtonSizeDefault {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.enableStateDropdownButtonSizeTile {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
 }
 
 .enableStateDropdownButtonLabel {
@@ -296,6 +315,14 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.enableStateDropdownButtonLabel span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .enableStateDropdownButtonEnable {
@@ -924,7 +951,7 @@
 
 .listGrid {
   display: grid;
-  grid-template-columns: minmax(200px, 2.2fr) minmax(120px, 0.9fr) minmax(160px, 1.2fr) minmax(240px, 2.4fr) minmax(120px, 1fr) minmax(90px, 0.8fr);
+  grid-template-columns: minmax(200px, 2.2fr) minmax(120px, 0.9fr) minmax(160px, 1.2fr) minmax(240px, 2.4fr) minmax(120px, 1fr) minmax(232px, 1.4fr);
   gap: 12px;
 }
 
