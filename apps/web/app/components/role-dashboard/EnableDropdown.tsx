@@ -10,12 +10,6 @@ type EnableDropdownVariant = "default" | "tile";
 
 type RoleStateAction = "enable" | "enabled" | "disable";
 
-const ROLE_STATE_OPTIONS: { id: RoleStateAction; label: string }[] = [
-  { id: "enable", label: "Enable" },
-  { id: "enabled", label: "Enabled" },
-  { id: "disable", label: "Disable" },
-];
-
 type EnableDropdownProps = {
   enabled: boolean;
   disabled?: boolean;
@@ -128,10 +122,7 @@ export default function EnableDropdown({
 }: EnableDropdownProps) {
   const [inactiveState, setInactiveState] = useState<"enable" | "disable">("enable");
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [stateMenuOpen, setStateMenuOpen] = useState(false);
   const [pricingUsers, setPricingUsers] = useState<PricingUser[]>([]);
-  const stateButtonRef = useRef<HTMLButtonElement | null>(null);
-  const stateMenuRef = useRef<HTMLDivElement | null>(null);
   const prevEnabledRef = useRef<boolean>(enabled);
 
   // Keep legacy pricing props for backward compatibility with existing callers.
@@ -185,28 +176,6 @@ export default function EnableDropdown({
     ? planOptions.find((plan) => plan.id === selectedPlanValue)?.label || "Community"
     : "Community";
 
-  useEffect(() => {
-    if (!stateMenuOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (stateMenuRef.current?.contains(target)) return;
-      if (stateButtonRef.current?.contains(target)) return;
-      setStateMenuOpen(false);
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setStateMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [stateMenuOpen]);
-
   const normalizedServerCount = Math.max(0, Math.floor(Number(serverCount) || 0));
   const normalizedBundleRoleCount = Math.max(1, Math.floor(Number(appCount) || 0));
   const usersCount = pricingUsers.length;
@@ -255,7 +224,6 @@ export default function EnableDropdown({
   };
 
   const applyStateAction = (action: RoleStateAction) => {
-    setStateMenuOpen(false);
     if (disabled) return;
     if (action === "disable") {
       requestDisable();
@@ -267,8 +235,9 @@ export default function EnableDropdown({
   const activeState: RoleStateAction = enabled ? "enabled" : inactiveState;
 
   const activeStateLabel = useMemo(() => {
-    const found = ROLE_STATE_OPTIONS.find((entry) => entry.id === activeState);
-    return found?.label || "Enable";
+    if (activeState === "enabled") return "Enabled";
+    if (activeState === "disable") return "Disable";
+    return "Enable";
   }, [activeState]);
 
   const stateButtonClass = useMemo(() => {
@@ -276,11 +245,6 @@ export default function EnableDropdown({
     if (activeState === "disable") return styles.enableStateDropdownButtonDisable;
     return styles.enableStateDropdownButtonEnable;
   }, [activeState]);
-
-  const stateMenuOptions = useMemo(
-    () => ROLE_STATE_OPTIONS.filter((option) => option.id !== activeState),
-    [activeState]
-  );
 
   const stateIconClass = useMemo(() => {
     if (activeState === "enabled") return "fa-solid fa-toggle-on";
@@ -290,48 +254,31 @@ export default function EnableDropdown({
 
   const tilePriceLabel = quoteLabel;
 
-  const renderStateControl = (openUpward = false, withLeadingIcon = false) => (
-    <div
-      className={`${styles.enableStateControl} ${openUpward ? styles.enableStateControlUp : ""}`}
+  const handleStateToggle = () => {
+    if (disabled) return;
+    if (enabled) {
+      applyStateAction("disable");
+      return;
+    }
+    applyStateAction("enabled");
+  };
+
+  const renderStateControl = (withLeadingIcon = false) => (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={handleStateToggle}
+      className={`${styles.enableStateDropdownButton} ${stateButtonClass} ${
+        disabled ? styles.enableSwitchButtonLocked : ""
+      }`}
     >
-      <button
-        ref={stateButtonRef}
-        type="button"
-        disabled={disabled}
-        onClick={() => setStateMenuOpen((prev) => !prev)}
-        className={`${styles.enableStateDropdownButton} ${stateButtonClass} ${
-          disabled ? styles.enableSwitchButtonLocked : ""
-        }`}
-      >
-        <span className={styles.enableStateDropdownButtonLabel}>
-          {withLeadingIcon ? (
-            <i className={stateIconClass} aria-hidden="true" />
-          ) : null}
-          <span>{activeStateLabel}</span>
-        </span>
-        <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-      </button>
-      {stateMenuOpen ? (
-        <div ref={stateMenuRef} className={styles.enableStateMenu} role="menu">
-          {stateMenuOptions.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              onClick={() => applyStateAction(option.id)}
-              className={`${styles.enableStateMenuItem} ${
-                option.id === "enable"
-                  ? styles.enableStateMenuItemEnable
-                  : option.id === "enabled"
-                    ? styles.enableStateMenuItemEnabled
-                    : styles.enableStateMenuItemDisable
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
+      <span className={styles.enableStateDropdownButtonLabel}>
+        {withLeadingIcon ? (
+          <i className={stateIconClass} aria-hidden="true" />
+        ) : null}
+        <span>{activeStateLabel}</span>
+      </span>
+    </button>
   );
 
   return (
@@ -343,7 +290,7 @@ export default function EnableDropdown({
             <span className={styles.enableTilePriceCaption}>per month</span>
           </div>
           <div className={styles.enableTileActionColumn}>
-            {renderStateControl(true, true)}
+            {renderStateControl(true)}
             {onOpenDetails ? (
               <button
                 type="button"
