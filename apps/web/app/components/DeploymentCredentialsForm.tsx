@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import styles from "./DeploymentCredentialsForm.module.css";
+import ModeToggle from "./ModeToggle";
 import RemoveServerModal from "./deployment-credentials/RemoveServerModal";
 import ServerCollectionView from "./deployment-credentials/ServerCollectionView";
 import {
@@ -30,8 +31,8 @@ type DeploymentCredentialsFormProps = {
   onAddServer: (aliasHint?: string) => void;
   openCredentialsAlias?: string | null;
   onOpenCredentialsAliasHandled?: () => void;
-  deviceMode?: "customer" | "expert" | "developer";
-  onDeviceModeChange?: (mode: "customer" | "expert" | "developer") => void;
+  deviceMode?: "customer" | "expert";
+  onDeviceModeChange?: (mode: "customer" | "expert") => void;
   compact?: boolean;
 };
 
@@ -43,10 +44,6 @@ const SERVER_VIEW_ICONS: Record<ServerViewMode, string> = {
 const ROW_FILTER_OPTIONS: number[] = [1, 2, 3, 5, 10, 20, 100, 500, 1000];
 
 function formatViewLabel(mode: ServerViewMode): string {
-  return mode.charAt(0).toUpperCase() + mode.slice(1);
-}
-
-function formatDeviceModeLabel(mode: "customer" | "expert" | "developer"): string {
   return mode.charAt(0).toUpperCase() + mode.slice(1);
 }
 
@@ -87,13 +84,10 @@ export default function DeploymentCredentialsForm({
   const filtersPopoverRef = useRef<HTMLDivElement | null>(null);
   const viewButtonRef = useRef<HTMLButtonElement | null>(null);
   const viewPopoverRef = useRef<HTMLDivElement | null>(null);
-  const modeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const modePopoverRef = useRef<HTMLDivElement | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filtersPos, setFiltersPos] = useState({ top: 0, left: 0 });
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
-  const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
   const [pendingAction, setPendingAction] = useState<{
     mode: "delete" | "purge";
@@ -288,26 +282,6 @@ export default function DeploymentCredentialsForm({
       document.removeEventListener("keydown", handleEscape);
     };
   }, [viewMenuOpen]);
-
-  useEffect(() => {
-    if (!modeMenuOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (modePopoverRef.current?.contains(target)) return;
-      if (modeButtonRef.current?.contains(target)) return;
-      setModeMenuOpen(false);
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setModeMenuOpen(false);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [modeMenuOpen]);
 
   const filtersOverlay =
     filtersOpen && typeof document !== "undefined"
@@ -763,47 +737,7 @@ export default function DeploymentCredentialsForm({
               <div className={styles.controlsRight}>
                 {deviceMode && onDeviceModeChange ? (
                   <div className={styles.deviceModeControl}>
-                    <button
-                      ref={modeButtonRef}
-                      type="button"
-                      onClick={() => setModeMenuOpen((prev) => !prev)}
-                      className={`${styles.deviceModeButton} ${
-                        deviceMode === "customer"
-                          ? styles.deviceModeButtonCustomer
-                          : deviceMode === "expert"
-                          ? styles.deviceModeButtonExpert
-                          : styles.deviceModeButtonDeveloper
-                      }`}
-                      aria-haspopup="menu"
-                      aria-expanded={modeMenuOpen}
-                    >
-                      <i className="fa-solid fa-sliders" aria-hidden="true" />
-                      <span>Mode: {formatDeviceModeLabel(deviceMode)}</span>
-                      <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-                    </button>
-                    {modeMenuOpen ? (
-                      <div
-                        ref={modePopoverRef}
-                        className={styles.deviceModeMenu}
-                        role="menu"
-                      >
-                        {(["customer", "expert", "developer"] as const).map((mode) => (
-                          <button
-                            key={mode}
-                            type="button"
-                            onClick={() => {
-                              onDeviceModeChange(mode);
-                              setModeMenuOpen(false);
-                            }}
-                            className={`${styles.deviceModeMenuItem} ${
-                              deviceMode === mode ? styles.deviceModeMenuItemActive : ""
-                            }`}
-                          >
-                            <span>{formatDeviceModeLabel(mode)}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
+                    <ModeToggle mode={deviceMode} onModeChange={onDeviceModeChange} />
                   </div>
                 ) : null}
                 <div className={styles.viewModeControl}>

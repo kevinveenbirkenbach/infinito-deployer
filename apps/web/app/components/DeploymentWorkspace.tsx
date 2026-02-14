@@ -192,12 +192,30 @@ export default function DeploymentWorkspace({
   const [openCredentialsAlias, setOpenCredentialsAlias] = useState<string | null>(
     null
   );
-  const [deviceMode, setDeviceMode] = useState<"customer" | "expert" | "developer">(
-    "customer"
-  );
+  const [deviceMode, setDeviceMode] = useState<"customer" | "expert">("customer");
+  const [expertConfirmOpen, setExpertConfirmOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<
     "store" | "server" | "inventory" | "deploy"
   >("store");
+  const handleModeChange = useCallback(
+    (mode: "customer" | "expert") => {
+      if (mode === deviceMode) return;
+      if (mode === "expert") {
+        setExpertConfirmOpen(true);
+        return;
+      }
+      setExpertConfirmOpen(false);
+      setDeviceMode("customer");
+    },
+    [deviceMode]
+  );
+  const cancelExpertMode = useCallback(() => {
+    setExpertConfirmOpen(false);
+  }, []);
+  const confirmExpertMode = useCallback(() => {
+    setExpertConfirmOpen(false);
+    setDeviceMode("expert");
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -462,6 +480,7 @@ export default function DeploymentWorkspace({
     setLiveCanceling(false);
     setLiveError(null);
     setOpenCredentialsAlias(null);
+    setExpertConfirmOpen(false);
     setConnectRequestKey(0);
     setCancelRequestKey(0);
   }, [workspaceId]);
@@ -473,7 +492,7 @@ export default function DeploymentWorkspace({
       return;
     }
     const stored = window.localStorage.getItem(`infinito.devices.mode.${workspaceId}`);
-    if (stored === "customer" || stored === "expert" || stored === "developer") {
+    if (stored === "customer" || stored === "expert") {
       setDeviceMode(stored);
       return;
     }
@@ -494,6 +513,15 @@ export default function DeploymentWorkspace({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [deployRolePickerOpen]);
+
+  useEffect(() => {
+    if (!expertConfirmOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setExpertConfirmOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [expertConfirmOpen]);
 
   const applySelectedRolesByAlias = useCallback(
     (rolesByAlias: Record<string, string[]>) => {
@@ -1307,6 +1335,8 @@ export default function DeploymentWorkspace({
           onSelectPlanForAlias={selectRolePlanForAlias}
           serverSwitcher={serverSwitcher}
           onCreateServerForTarget={(target) => addServer(target)}
+          mode={deviceMode}
+          onModeChange={handleModeChange}
           compact
         />
       ),
@@ -1316,18 +1346,12 @@ export default function DeploymentWorkspace({
       title: "Devices",
       content: (
         <div className={styles.serverPanelStack}>
-          {deviceMode === "developer" ? (
-            <div className={styles.serverModeHint}>
-              Developer mode keeps the existing manual device workflow unchanged.
-            </div>
-          ) : (
-            <ProviderOrderPanel
-              baseUrl={baseUrl}
-              workspaceId={workspaceId}
-              mode={deviceMode}
-              onOrderedServer={handleProviderOrderedServer}
-            />
-          )}
+          <ProviderOrderPanel
+            baseUrl={baseUrl}
+            workspaceId={workspaceId}
+            mode={deviceMode}
+            onOrderedServer={handleProviderOrderedServer}
+          />
           <DeploymentCredentialsForm
             baseUrl={baseUrl}
             workspaceId={workspaceId}
@@ -1343,7 +1367,7 @@ export default function DeploymentWorkspace({
             openCredentialsAlias={openCredentialsAlias}
             onOpenCredentialsAliasHandled={() => setOpenCredentialsAlias(null)}
             deviceMode={deviceMode}
-            onDeviceModeChange={setDeviceMode}
+            onDeviceModeChange={handleModeChange}
             compact
           />
         </div>
@@ -1863,6 +1887,45 @@ export default function DeploymentWorkspace({
                   </label>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {expertConfirmOpen ? (
+        <div
+          onClick={cancelExpertMode}
+          className={styles.modeConfirmOverlay}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className={styles.modeConfirmCard}
+          >
+            <div className={styles.modeConfirmTitleRow}>
+              <i
+                className={`fa-solid fa-triangle-exclamation ${styles.modeConfirmIcon}`}
+                aria-hidden="true"
+              />
+              <h3 className={styles.modeConfirmTitle}>Enable Expert mode?</h3>
+            </div>
+            <p className={styles.modeConfirmText}>
+              Expert mode unlocks direct app configuration editing. Wrong values can
+              cause misconfigurations.
+            </p>
+            <div className={styles.modeConfirmActions}>
+              <button
+                onClick={cancelExpertMode}
+                className={`${styles.modeActionButton} ${styles.modeActionButtonSuccess}`}
+              >
+                <i className="fa-solid fa-circle-check" aria-hidden="true" />
+                <span>Cancel</span>
+              </button>
+              <button
+                onClick={confirmExpertMode}
+                className={`${styles.modeActionButton} ${styles.modeActionButtonDanger}`}
+              >
+                <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
+                <span>Enable</span>
+              </button>
             </div>
           </div>
         </div>

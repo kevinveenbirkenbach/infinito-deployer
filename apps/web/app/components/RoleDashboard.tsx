@@ -17,6 +17,7 @@ import RoleListView from "./role-dashboard/RoleListView";
 import RoleLogoView from "./role-dashboard/RoleLogoView";
 import RoleVideoModal from "./role-dashboard/RoleVideoModal";
 import { VIEW_MODES } from "./role-dashboard/types";
+import ModeToggle from "./ModeToggle";
 import styles from "./RoleDashboard.module.css";
 import type { Bundle, Role, ViewMode } from "./role-dashboard/types";
 
@@ -93,6 +94,8 @@ type RoleDashboardProps = {
   ) => void;
   serverSwitcher?: ReactNode;
   onCreateServerForTarget?: (target: string) => string | null;
+  mode?: "customer" | "expert";
+  onModeChange?: (mode: "customer" | "expert") => void;
   compact?: boolean;
 };
 
@@ -115,6 +118,8 @@ export default function RoleDashboard({
   onSelectPlanForAlias,
   serverSwitcher,
   onCreateServerForTarget,
+  mode: controlledMode,
+  onModeChange,
   compact = false,
 }: RoleDashboardProps) {
   const Wrapper = compact ? "div" : "section";
@@ -141,15 +146,12 @@ export default function RoleDashboard({
   const scopePopoverRef = useRef<HTMLDivElement | null>(null);
   const viewButtonRef = useRef<HTMLButtonElement | null>(null);
   const viewPopoverRef = useRef<HTMLDivElement | null>(null);
-  const modeRootRef = useRef<HTMLDivElement | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filtersPos, setFiltersPos] = useState({ top: 0, left: 0 });
-  const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
-  const [accessMode, setAccessMode] = useState<"customer" | "developer">("customer");
-  const [developerConfirmOpen, setDeveloperConfirmOpen] = useState(false);
+  const [localMode, setLocalMode] = useState<"customer" | "expert">("customer");
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [editorContent, setEditorContent] = useState("");
   const [editorPath, setEditorPath] = useState("");
@@ -895,40 +897,31 @@ export default function RoleDashboard({
   }, [softwareScope, viewMode]);
 
   useEffect(() => {
-    if (!modeMenuOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (modeRootRef.current?.contains(target)) return;
-      setModeMenuOpen(false);
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setModeMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [modeMenuOpen]);
-
-  useEffect(() => {
     const onEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (developerConfirmOpen) {
-        setDeveloperConfirmOpen(false);
-        return;
-      }
       if (editingRole) {
         setEditingRole(null);
       }
     };
     window.addEventListener("keydown", onEscape);
     return () => window.removeEventListener("keydown", onEscape);
-  }, [developerConfirmOpen, editingRole]);
+  }, [editingRole]);
+
+  const activeMode = controlledMode ?? localMode;
+  const applyMode = (mode: "customer" | "expert") => {
+    if (onModeChange) {
+      onModeChange(mode);
+      return;
+    }
+    setLocalMode(mode);
+  };
+
+  const handleModeChange = (mode: "customer" | "expert") => {
+    applyMode(mode);
+    if (mode === "customer") {
+      setEditingRole(null);
+    }
+  };
 
   const startEditRoleConfig = async (role: Role, aliasOverride?: string) => {
     if (!onLoadRoleAppConfig) return;
@@ -999,20 +992,6 @@ export default function RoleDashboard({
     } finally {
       setEditorBusy(false);
     }
-  };
-
-  const switchMode = (mode: "customer" | "developer") => {
-    if (mode === accessMode) {
-      setModeMenuOpen(false);
-      return;
-    }
-    setModeMenuOpen(false);
-    if (mode === "developer") {
-      setDeveloperConfirmOpen(true);
-      return;
-    }
-    setAccessMode("customer");
-    setEditingRole(null);
   };
 
   const filtersOverlay =
@@ -1384,42 +1363,11 @@ export default function RoleDashboard({
                 </div>
               ) : null}
               <div
-                ref={modeRootRef}
                 className={`${styles.modeControl} ${
                   softwareScope === "bundles" ? styles.modeControlRight : ""
                 }`}
               >
-                <button
-                  onClick={() => setModeMenuOpen((prev) => !prev)}
-                  className={`${styles.modeButton} ${
-                    accessMode === "customer"
-                      ? styles.modeButtonCustomer
-                      : styles.modeButtonDeveloper
-                  }`}
-                  aria-haspopup="menu"
-                  aria-expanded={modeMenuOpen}
-                >
-                  <i className="fa-solid fa-sliders" aria-hidden="true" />
-                  <span>Mode:</span>
-                  <span>{accessMode === "customer" ? "Customer" : "Developer"}</span>
-                  <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-                </button>
-                {modeMenuOpen ? (
-                  <div className={styles.modeMenu} role="menu">
-                    <button
-                      onClick={() => switchMode("customer")}
-                      className={styles.modeMenuItem}
-                    >
-                      <span>Customer</span>
-                    </button>
-                    <button
-                      onClick={() => switchMode("developer")}
-                      className={styles.modeMenuItem}
-                    >
-                      <span>Developer</span>
-                    </button>
-                  </div>
-                ) : null}
+                <ModeToggle mode={activeMode} onModeChange={handleModeChange} />
               </div>
             </div>
           </div>
@@ -1522,7 +1470,7 @@ export default function RoleDashboard({
                                       }
                                     }}
                                   />
-                                  {accessMode === "developer" && onLoadRoleAppConfig ? (
+                                  {activeMode === "expert" && onLoadRoleAppConfig ? (
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -1560,7 +1508,7 @@ export default function RoleDashboard({
                 }
                 roleServerCountByRole={roleServerCountByRole}
                 baseUrl={baseUrl}
-                developerMode={accessMode === "developer"}
+                developerMode={activeMode === "expert"}
                 onEditRoleConfig={
                   onLoadRoleAppConfig ? (role) => void startEditRoleConfig(role) : undefined
                 }
@@ -1578,7 +1526,7 @@ export default function RoleDashboard({
                 }
                 roleServerCountByRole={roleServerCountByRole}
                 baseUrl={baseUrl}
-                developerMode={accessMode === "developer"}
+                developerMode={activeMode === "expert"}
                 onEditRoleConfig={
                   onLoadRoleAppConfig ? (role) => void startEditRoleConfig(role) : undefined
                 }
@@ -1704,48 +1652,6 @@ export default function RoleDashboard({
                 className={`${styles.modeActionButton} ${styles.modeActionButtonDanger}`}
               >
                 <span>Overwrite</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-      {developerConfirmOpen ? (
-        <div
-          onClick={() => setDeveloperConfirmOpen(false)}
-          className={styles.modeConfirmOverlay}
-        >
-          <div
-            onClick={(event) => event.stopPropagation()}
-            className={styles.modeConfirmCard}
-          >
-            <div className={styles.modeConfirmTitleRow}>
-              <i
-                className={`fa-solid fa-triangle-exclamation ${styles.modeConfirmIcon}`}
-                aria-hidden="true"
-              />
-              <h3 className={styles.modeConfirmTitle}>Enable Developer mode?</h3>
-            </div>
-            <p className={styles.modeConfirmText}>
-              Developer mode unlocks direct app configuration editing. Wrong values
-              can cause misconfigurations.
-            </p>
-            <div className={styles.modeConfirmActions}>
-              <button
-                onClick={() => setDeveloperConfirmOpen(false)}
-                className={`${styles.modeActionButton} ${styles.modeActionButtonSuccess}`}
-              >
-                <i className="fa-solid fa-circle-check" aria-hidden="true" />
-                <span>Cancel</span>
-              </button>
-              <button
-                onClick={() => {
-                  setDeveloperConfirmOpen(false);
-                  setAccessMode("developer");
-                }}
-                className={`${styles.modeActionButton} ${styles.modeActionButtonDanger}`}
-              >
-                <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
-                <span>Enable</span>
               </button>
             </div>
           </div>

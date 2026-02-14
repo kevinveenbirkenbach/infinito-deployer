@@ -615,3 +615,82 @@
   font-size: 12px;
   padding: 6px 8px;
 }
+
+.modeConfirmOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 10, 18, 0.84);
+  display: grid;
+  place-items: center;
+  z-index: 240;
+}
+
+.modeConfirmCard {
+  width: min(520px, 92vw);
+  border-radius: 16px;
+  border: 1px solid var(--bs-warning-border-subtle);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bs-warning-text-emphasis) 24%, var(--bs-body-bg) 76%) 0%,
+    color-mix(in srgb, var(--bs-warning-text-emphasis) 20%, var(--bs-body-bg) 80%) 100%
+  );
+  box-shadow: var(--deployer-shadow-strong);
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.modeConfirmTitleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modeConfirmIcon {
+  color: var(--bs-warning-text-emphasis);
+  font-size: 20px;
+}
+
+.modeConfirmTitle {
+  margin: 0;
+  font-size: 20px;
+  color: var(--bs-warning-text-emphasis);
+}
+
+.modeConfirmText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--bs-warning-text-emphasis);
+}
+
+.modeConfirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modeActionButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  padding: 7px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.modeActionButtonDanger {
+  border-color: var(--bs-danger-border-subtle);
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
+}
+
+.modeActionButtonSuccess {
+  border-color: var(--bs-success-border-subtle);
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-success-text-emphasis);
+}

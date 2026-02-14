@@ -126,66 +126,6 @@
   margin-left: auto;
 }
 
-.modeButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  gap: 6px;
-  white-space: nowrap;
-  padding: 8px 12px;
-  height: 38px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.modeButtonCustomer {
-  border-color: var(--bs-success-border-subtle);
-  background: var(--bs-success-bg-subtle);
-  color: var(--bs-success-text-emphasis);
-}
-
-.modeButtonDeveloper {
-  border-color: var(--bs-warning-border-subtle);
-  background: var(--bs-warning-bg-subtle);
-  color: var(--bs-warning-text-emphasis);
-}
-
-.modeMenu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  min-width: 150px;
-  border-radius: 12px;
-  border: 1px solid var(--bs-border-color-translucent);
-  background: var(--bs-body-bg);
-  box-shadow: var(--deployer-shadow-strong);
-  z-index: 1200;
-  padding: 6px;
-  display: grid;
-  gap: 4px;
-}
-
-.modeMenuItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  text-align: left;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--bs-body-color);
-  padding: 7px 10px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.modeMenuItem:hover {
-  background: var(--bs-tertiary-bg);
-}
-
 .viewModeButtons {
   display: flex;
   gap: 6px;
