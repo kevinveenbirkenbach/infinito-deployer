@@ -14,6 +14,7 @@ type RoleGridViewProps = {
   roles: Role[];
   selected: Set<string>;
   onToggleSelected: (id: string) => void;
+  serverCount?: number;
   rolePlans?: Record<string, { id: string; label: string }[]>;
   selectedPlanByRole?: Record<string, string | null>;
   onSelectRolePlan?: (roleId: string, planId: string | null) => void;
@@ -31,6 +32,7 @@ export default function RoleGridView({
   roles,
   selected,
   onToggleSelected,
+  serverCount = 1,
   rolePlans,
   selectedPlanByRole,
   onSelectRolePlan,
@@ -119,6 +121,8 @@ export default function RoleGridView({
                     pricing={role.pricing || null}
                     pricingSummary={role.pricing_summary || null}
                     baseUrl={baseUrl}
+                    serverCount={serverCount}
+                    appCount={1}
                     onEnable={() => {
                       if (!selectedState) onToggleSelected(role.id);
                     }}
@@ -272,6 +276,8 @@ export default function RoleGridView({
                   pricing={role.pricing || null}
                   pricingSummary={role.pricing_summary || null}
                   baseUrl={baseUrl}
+                  serverCount={serverCount}
+                  appCount={1}
                   onEnable={() => {
                     if (!selectedState) onToggleSelected(role.id);
                   }}

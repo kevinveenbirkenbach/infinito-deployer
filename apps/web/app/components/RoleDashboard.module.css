@@ -122,6 +122,10 @@
   z-index: 60;
 }
 
+.modeControlRight {
+  margin-left: auto;
+}
+
 .modeButton {
   display: inline-flex;
   align-items: center;

@@ -91,6 +91,7 @@ type RoleDashboardProps = {
     planId: string | null
   ) => void;
   serverSwitcher?: ReactNode;
+  onCreateServerForTarget?: (target: string) => string | null;
   compact?: boolean;
 };
 
@@ -112,6 +113,7 @@ export default function RoleDashboard({
   selectedPlanByAlias,
   onSelectPlanForAlias,
   serverSwitcher,
+  onCreateServerForTarget,
   compact = false,
 }: RoleDashboardProps) {
   const Wrapper = compact ? "div" : "section";
@@ -162,6 +164,10 @@ export default function RoleDashboard({
   const [bundles, setBundles] = useState<Bundle[]>([]);
   const [bundlesLoading, setBundlesLoading] = useState(false);
   const [bundlesError, setBundlesError] = useState<string | null>(null);
+  const [bundleMergePrompt, setBundleMergePrompt] = useState<{
+    bundle: Bundle;
+    alias: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!activeVideo) return;
@@ -323,6 +329,8 @@ export default function RoleDashboard({
     });
     return out;
   }, [matrixAliases, serverMetaByAlias]);
+
+  const serverCount = Math.max(1, matrixAliases.length || 0);
 
   const selectedLookup = useMemo(() => {
     const out: Record<string, Set<string>> = {};
@@ -610,6 +618,115 @@ export default function RoleDashboard({
     }
   };
 
+  const knownRoleIds = useMemo(
+    () => new Set(roles.map((role) => String(role.id || "").trim()).filter(Boolean)),
+    [roles]
+  );
+
+  const resolveBundleAlias = (bundle: Bundle): string => {
+    const currentAlias = String(activeAlias || "").trim();
+    if (currentAlias) return currentAlias;
+
+    const existingAliases = matrixAliases
+      .map((alias) => String(alias || "").trim())
+      .filter(Boolean);
+    if (existingAliases.length > 0) {
+      const deployTarget = String(bundle.deploy_target || "").trim().toLowerCase();
+      const targetMatch =
+        existingAliases.find((alias) => alias.toLowerCase() === deployTarget) ||
+        existingAliases.find((alias) =>
+          alias.toLowerCase().includes(deployTarget === "workstation" ? "workstation" : "server")
+        );
+      return targetMatch || existingAliases[0];
+    }
+
+    const createdAlias = onCreateServerForTarget?.(bundle.deploy_target);
+    return String(createdAlias || bundle.deploy_target || "server").trim() || "server";
+  };
+
+  const applyBundleToAlias = (
+    bundle: Bundle,
+    alias: string,
+    strategy: "merge" | "overwrite"
+  ) => {
+    const targetAlias = String(alias || "").trim();
+    if (!targetAlias) return;
+    const bundleRoleIds = (Array.isArray(bundle.role_ids) ? bundle.role_ids : [])
+      .map((roleId) => String(roleId || "").trim())
+      .filter((roleId) => roleId && knownRoleIds.has(roleId));
+    if (bundleRoleIds.length === 0) return;
+
+    const existing = selectedLookup[targetAlias] || new Set<string>();
+    const desired =
+      strategy === "merge"
+        ? new Set<string>([...Array.from(existing), ...bundleRoleIds])
+        : new Set<string>(bundleRoleIds);
+
+    const roleIdsToCheck = new Set<string>([
+      ...Array.from(existing),
+      ...Array.from(desired),
+    ]);
+    roleIdsToCheck.forEach((roleId) => {
+      const hasNow = existing.has(roleId);
+      const shouldHave = desired.has(roleId);
+      if (hasNow === shouldHave) return;
+      if (shouldHave) {
+        const defaultPlan = defaultPlanByRole[roleId] || "community";
+        selectPlanByAlias(targetAlias, roleId, defaultPlan);
+      } else {
+        selectPlanByAlias(targetAlias, roleId, null);
+      }
+    });
+  };
+
+  const requestEnableBundle = (bundle: Bundle) => {
+    const alias = resolveBundleAlias(bundle);
+    const existing = selectedLookup[alias] || new Set<string>();
+    if (existing.size === 0) {
+      applyBundleToAlias(bundle, alias, "overwrite");
+      return;
+    }
+    setBundleMergePrompt({ bundle, alias });
+  };
+
+  const disableBundle = (bundle: Bundle) => {
+    const alias = resolveBundleAlias(bundle);
+    const existing = selectedLookup[alias] || new Set<string>();
+    const bundleRoleIds = (Array.isArray(bundle.role_ids) ? bundle.role_ids : [])
+      .map((roleId) => String(roleId || "").trim())
+      .filter((roleId) => roleId && knownRoleIds.has(roleId));
+    bundleRoleIds.forEach((roleId) => {
+      if (existing.has(roleId)) {
+        selectPlanByAlias(alias, roleId, null);
+      }
+    });
+  };
+
+  const bundleStateById = useMemo(() => {
+    const alias = String(activeAlias || "").trim() || matrixAliases[0] || "";
+    const selectedForAlias = selectedLookup[alias] || new Set<string>();
+    const stateMap: Record<
+      string,
+      { enabled: boolean; selectedCount: number; totalCount: number }
+    > = {};
+    bundles.forEach((bundle) => {
+      const bundleRoleIds = (Array.isArray(bundle.role_ids) ? bundle.role_ids : [])
+        .map((roleId) => String(roleId || "").trim())
+        .filter((roleId) => roleId && knownRoleIds.has(roleId));
+      const totalCount = bundleRoleIds.length;
+      const selectedCount = bundleRoleIds.reduce(
+        (sum, roleId) => sum + (selectedForAlias.has(roleId) ? 1 : 0),
+        0
+      );
+      stateMap[bundle.id] = {
+        enabled: totalCount > 0 && selectedCount === totalCount,
+        selectedCount,
+        totalCount,
+      };
+    });
+    return stateMap;
+  }, [activeAlias, matrixAliases, selectedLookup, bundles, knownRoleIds]);
+
   useEffect(() => {
     setPage(1);
   }, [
@@ -719,6 +836,7 @@ export default function RoleDashboard({
     setViewMenuOpen(false);
     setShowSelectedOnly(false);
     setStatusFilter(new Set());
+    setTargetFilter("all");
     setCategoryFilter(new Set());
     setTagFilter(new Set());
     if (viewMode === "matrix") {
@@ -1171,7 +1289,7 @@ export default function RoleDashboard({
                   </div>
                 ) : null}
               </div>
-              {serverSwitcher && viewMode !== "matrix" ? (
+              {softwareScope === "apps" && serverSwitcher && viewMode !== "matrix" ? (
                 <div className={styles.serverSwitcherSlot}>{serverSwitcher}</div>
               ) : null}
               {softwareScope === "apps" ? (
@@ -1215,7 +1333,12 @@ export default function RoleDashboard({
                   ) : null}
                 </div>
               ) : null}
-              <div ref={modeRootRef} className={styles.modeControl}>
+              <div
+                ref={modeRootRef}
+                className={`${styles.modeControl} ${
+                  softwareScope === "bundles" ? styles.modeControlRight : ""
+                }`}
+              >
                 <button
                   onClick={() => setModeMenuOpen((prev) => !prev)}
                   className={`${styles.modeButton} ${
@@ -1262,6 +1385,11 @@ export default function RoleDashboard({
                 computedColumns={computedColumns}
                 gridGap={gridGap}
                 minHeight={viewConfig.minHeight}
+                activeAlias={String(activeAlias || "").trim() || matrixAliases[0] || "server"}
+                serverCount={serverCount}
+                bundleStates={bundleStateById}
+                onEnableBundle={requestEnableBundle}
+                onDisableBundle={disableBundle}
               />
             ) : viewMode === "matrix" ? (
               matrixAliases.length === 0 ? (
@@ -1330,6 +1458,8 @@ export default function RoleDashboard({
                                     pricing={role.pricing || null}
                                     pricingSummary={role.pricing_summary || null}
                                     baseUrl={baseUrl}
+                                    serverCount={serverCount}
+                                    appCount={1}
                                     contextLabel={`device "${alias}" for "${role.display_name}"`}
                                     onEnable={() => {
                                       if (!selectedState) {
@@ -1378,6 +1508,7 @@ export default function RoleDashboard({
                 onSelectRolePlan={(roleId, planId) =>
                   selectPlanByAlias(String(activeAlias || "").trim(), roleId, planId)
                 }
+                serverCount={serverCount}
                 baseUrl={baseUrl}
                 developerMode={accessMode === "developer"}
                 onEditRoleConfig={
@@ -1395,6 +1526,7 @@ export default function RoleDashboard({
                 onSelectRolePlan={(roleId, planId) =>
                   selectPlanByAlias(String(activeAlias || "").trim(), roleId, planId)
                 }
+                serverCount={serverCount}
                 baseUrl={baseUrl}
                 developerMode={accessMode === "developer"}
                 onEditRoleConfig={
@@ -1436,6 +1568,63 @@ export default function RoleDashboard({
       </div>
 
       <RoleVideoModal activeVideo={activeVideo} onClose={() => setActiveVideo(null)} />
+      {bundleMergePrompt ? (
+        <div
+          onClick={() => setBundleMergePrompt(null)}
+          className={styles.modeConfirmOverlay}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className={styles.modeConfirmCard}
+          >
+            <div className={styles.modeConfirmTitleRow}>
+              <i
+                className={`fa-solid fa-diagram-project ${styles.modeConfirmIcon}`}
+                aria-hidden="true"
+              />
+              <h3 className={styles.modeConfirmTitle}>Bundle deployment strategy</h3>
+            </div>
+            <p className={styles.modeConfirmText}>
+              Server "{bundleMergePrompt.alias}" already has app selections. Choose how
+              to apply "{bundleMergePrompt.bundle.title}".
+            </p>
+            <div className={styles.modeConfirmActions}>
+              <button
+                onClick={() => setBundleMergePrompt(null)}
+                className={styles.modeActionButton}
+              >
+                <span>Cancel</span>
+              </button>
+              <button
+                onClick={() => {
+                  applyBundleToAlias(
+                    bundleMergePrompt.bundle,
+                    bundleMergePrompt.alias,
+                    "merge"
+                  );
+                  setBundleMergePrompt(null);
+                }}
+                className={`${styles.modeActionButton} ${styles.modeActionButtonSuccess}`}
+              >
+                <span>Merge</span>
+              </button>
+              <button
+                onClick={() => {
+                  applyBundleToAlias(
+                    bundleMergePrompt.bundle,
+                    bundleMergePrompt.alias,
+                    "overwrite"
+                  );
+                  setBundleMergePrompt(null);
+                }}
+                className={`${styles.modeActionButton} ${styles.modeActionButtonDanger}`}
+              >
+                <span>Overwrite</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {developerConfirmOpen ? (
         <div
           onClick={() => setDeveloperConfirmOpen(false)}

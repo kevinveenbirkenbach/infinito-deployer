@@ -626,12 +626,19 @@ export default function DeploymentWorkspace({
   );
 
   const addServer = useCallback(
-    (_aliasHint?: string) => {
+    (aliasHint?: string) => {
       const existing = new Set(servers.map((server) => server.alias));
-      let alias = "device";
+      const normalizedHint = String(aliasHint || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+      const baseAlias = normalizedHint || "device";
+      let alias = baseAlias;
       let idx = 2;
       while (existing.has(alias)) {
-        alias = `device-${idx}`;
+        alias = `${baseAlias}-${idx}`;
         idx += 1;
       }
 
@@ -640,6 +647,7 @@ export default function DeploymentWorkspace({
       );
       setSelectedByAlias((prev) => ({ ...prev, [alias]: new Set<string>() }));
       setActiveAlias(alias);
+      return alias;
     },
     [servers, createServer]
   );
@@ -1349,6 +1357,7 @@ export default function DeploymentWorkspace({
           selectedPlanByAlias={selectedPlansByAlias}
           onSelectPlanForAlias={selectRolePlanForAlias}
           serverSwitcher={serverSwitcher}
+          onCreateServerForTarget={(target) => addServer(target)}
           compact
         />
       ),

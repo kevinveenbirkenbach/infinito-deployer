@@ -14,6 +14,7 @@ type RoleListViewProps = {
   selected: Set<string>;
   iconSize: number;
   onToggleSelected: (id: string) => void;
+  serverCount?: number;
   rolePlans?: Record<string, { id: string; label: string }[]>;
   selectedPlanByRole?: Record<string, string | null>;
   onSelectRolePlan?: (roleId: string, planId: string | null) => void;
@@ -28,6 +29,7 @@ export default function RoleListView({
   selected,
   iconSize,
   onToggleSelected,
+  serverCount = 1,
   rolePlans,
   selectedPlanByRole,
   onSelectRolePlan,
@@ -105,6 +107,8 @@ export default function RoleListView({
                 pricing={role.pricing || null}
                 pricingSummary={role.pricing_summary || null}
                 baseUrl={baseUrl}
+                serverCount={serverCount}
+                appCount={1}
                 onEnable={() => {
                   if (!selectedState) onToggleSelected(role.id);
                 }}
