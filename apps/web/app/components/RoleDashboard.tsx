@@ -1542,7 +1542,6 @@ export default function RoleDashboard({
                                     baseUrl={baseUrl}
                                     serverCount={selectedState ? 1 : 0}
                                     appCount={1}
-                                    contextLabel={`device "${alias}" for "${role.display_name}"`}
                                     onEnable={() => {
                                       if (!selectedState) {
                                         toggleSelectedByAlias(alias, role.id);

@@ -204,7 +204,6 @@ export default function RoleGridView({
                       onDisable={() => {
                         if (selectedState) onToggleSelected(role.id);
                       }}
-                      contextLabel={`the active device for "${role.display_name}"`}
                     />
                   </div>
                 </div>
@@ -334,7 +333,6 @@ export default function RoleGridView({
                     onDisable={() => {
                       if (selectedState) onToggleSelected(role.id);
                     }}
-                    contextLabel={`the active device for "${role.display_name}"`}
                   />
                 </div>
               </div>
@@ -351,7 +349,7 @@ export default function RoleGridView({
           <div className={styles.enableConfirmCard} onClick={(event) => event.stopPropagation()}>
             <h4 className={styles.enableConfirmTitle}>Disable selection?</h4>
             <p className={styles.enableConfirmText}>
-              Warning: Disabling will remove "{pendingMiniDisableRole.display_name}" from the
+              Warning: Disabling will remove this app from the
               current deployment selection.
             </p>
             <p className={styles.enableConfirmText}>

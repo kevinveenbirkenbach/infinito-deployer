@@ -159,7 +159,6 @@ export default function RoleDetailsModal({
               appCount={1}
               onEnable={onEnable}
               onDisable={onDisable}
-              contextLabel={`device "${selectedAlias}" for "${role.display_name}"`}
             />
           </div>
         </div>

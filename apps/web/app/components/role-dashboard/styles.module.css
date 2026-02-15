@@ -19,7 +19,8 @@
 }
 
 .cardSelected {
-  border: 2px solid var(--bs-body-color);
+  border: 2px solid var(--bs-success-border-subtle);
+  background: color-mix(in srgb, var(--bs-success-bg-subtle) 80%, var(--bs-body-bg) 20%);
 }
 
 .horizontalCard {
@@ -999,7 +1000,8 @@
 }
 
 .listRowSelected {
-  border: 2px solid var(--bs-body-color);
+  border: 2px solid var(--bs-success-border-subtle);
+  background: color-mix(in srgb, var(--bs-success-bg-subtle) 80%, var(--bs-body-bg) 20%);
 }
 
 .listRoleCell {

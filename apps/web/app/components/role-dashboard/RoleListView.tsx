@@ -163,7 +163,6 @@ export default function RoleListView({
                 onDisable={() => {
                   if (selectedState) onToggleSelected(role.id);
                 }}
-                contextLabel={`the active device for "${role.display_name}"`}
               />
             </div>
           </div>
