@@ -36,10 +36,6 @@ function formatViewLabel(mode: ViewMode): string {
 }
 
 type SoftwareScope = "apps" | "bundles";
-const SOFTWARE_SCOPE_OPTIONS: { id: SoftwareScope; label: string }[] = [
-  { id: "bundles", label: "Bundles" },
-  { id: "apps", label: "Apps" },
-];
 
 const SW_QUERY_KEYS = {
   scope: "sw_scope",
@@ -168,15 +164,12 @@ export default function RoleDashboard({
   const controlsRef = useRef<HTMLDivElement | null>(null);
   const filtersButtonRef = useRef<HTMLButtonElement | null>(null);
   const filtersPopoverRef = useRef<HTMLDivElement | null>(null);
-  const scopeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const scopePopoverRef = useRef<HTMLDivElement | null>(null);
   const viewButtonRef = useRef<HTMLButtonElement | null>(null);
   const viewPopoverRef = useRef<HTMLDivElement | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filtersPos, setFiltersPos] = useState({ top: 0, left: 0 });
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
-  const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
   const [localMode, setLocalMode] = useState<"customer" | "expert">("customer");
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [editorContent, setEditorContent] = useState("");
@@ -959,28 +952,6 @@ export default function RoleDashboard({
   }, [viewMenuOpen]);
 
   useEffect(() => {
-    if (!scopeMenuOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (scopePopoverRef.current?.contains(target)) return;
-      if (scopeButtonRef.current?.contains(target)) return;
-      setScopeMenuOpen(false);
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setScopeMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [scopeMenuOpen]);
-
-  useEffect(() => {
     if (softwareScope !== "bundles") return;
     setViewMenuOpen(false);
     if (viewMode === "matrix") {
@@ -1412,49 +1383,32 @@ export default function RoleDashboard({
                 <span>Filters</span>
                 <i className="fa-solid fa-chevron-down" aria-hidden="true" />
               </button>
-              <div className={styles.scopeControl}>
-                <button
-                  ref={scopeButtonRef}
-                  type="button"
-                  onClick={() => setScopeMenuOpen((prev) => !prev)}
-                  className={`${styles.toolbarButton} ${styles.scopeButton}`}
-                  aria-haspopup="menu"
-                  aria-expanded={scopeMenuOpen}
-                >
-                  <i className="fa-solid fa-layer-group" aria-hidden="true" />
-                  <span>
-                    {SOFTWARE_SCOPE_OPTIONS.find((option) => option.id === softwareScope)?.label ||
-                      "Bundles"}
-                  </span>
-                  <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-                </button>
-                {scopeMenuOpen ? (
-                  <div
-                    ref={scopePopoverRef}
-                    className={styles.scopeMenu}
-                    role="menu"
-                  >
-                    {SOFTWARE_SCOPE_OPTIONS.map((option) => (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() => {
-                          setSoftwareScope(option.id);
-                          setScopeMenuOpen(false);
-                        }}
-                        className={`${styles.scopeMenuItem} ${
-                          softwareScope === option.id ? styles.scopeMenuItemActive : ""
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
               {softwareScope === "apps" && serverSwitcher && viewMode !== "matrix" ? (
                 <div className={styles.serverSwitcherSlot}>{serverSwitcher}</div>
               ) : null}
+              <button
+                type="button"
+                onClick={() =>
+                  setSoftwareScope((prev) => (prev === "apps" ? "bundles" : "apps"))
+                }
+                className={`${styles.toolbarButton} ${styles.scopeToggleButton} ${
+                  softwareScope === "apps"
+                    ? styles.scopeToggleButtonApps
+                    : styles.scopeToggleButtonBundles
+                }`}
+                aria-label="Toggle apps and bundles"
+                aria-pressed={softwareScope === "apps"}
+              >
+                <i
+                  className={
+                    softwareScope === "apps"
+                      ? "fa-solid fa-toggle-on"
+                      : "fa-solid fa-toggle-off"
+                  }
+                  aria-hidden="true"
+                />
+                <span>{softwareScope === "apps" ? "Apps" : "Bundles"}</span>
+              </button>
               {softwareScope === "apps" ? (
                 <div className={styles.viewModeControl}>
                   <button
@@ -1496,11 +1450,7 @@ export default function RoleDashboard({
                   ) : null}
                 </div>
               ) : null}
-              <div
-                className={`${styles.modeControl} ${
-                  softwareScope === "bundles" ? styles.modeControlRight : ""
-                }`}
-              >
+              <div className={styles.modeControl}>
                 <ModeToggle mode={activeMode} onModeChange={handleModeChange} />
               </div>
             </div>
