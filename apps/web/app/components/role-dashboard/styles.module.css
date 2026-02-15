@@ -726,6 +726,17 @@
   outline: none;
 }
 
+.miniCardSelected {
+  border: 2px solid var(--bs-success-border-subtle);
+  background: color-mix(in srgb, var(--bs-success-bg-subtle) 80%, var(--bs-body-bg) 20%);
+}
+
+.miniCardDeselectedFlash {
+  border: 2px solid var(--bs-danger-border-subtle);
+  background: color-mix(in srgb, var(--bs-danger-bg-subtle) 82%, var(--bs-body-bg) 18%);
+  animation: miniCardDeselectedFade 5s ease-out forwards;
+}
+
 .miniTitle {
   width: 100%;
   font-size: 11px;
@@ -738,6 +749,18 @@
 
 .miniCard:focus-visible {
   box-shadow: 0 0 0 2px var(--bs-info);
+}
+
+@keyframes miniCardDeselectedFade {
+  0% {
+    border-color: var(--bs-danger-border-subtle);
+    background: color-mix(in srgb, var(--bs-danger-bg-subtle) 82%, var(--bs-body-bg) 18%);
+  }
+
+  100% {
+    border-color: var(--bs-border-color-translucent);
+    background: var(--bs-body-bg);
+  }
 }
 
 .miniSelectedBadge {
