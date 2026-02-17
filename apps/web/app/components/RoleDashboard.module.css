@@ -495,6 +495,28 @@
   color: var(--deployer-disabled-text);
 }
 
+.columnToggleButton {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+
+.columnTransportButton {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+
+.columnTransportButtonActive {
+  border-color: var(--bs-info-border-subtle);
+  background: var(--bs-info-bg-subtle);
+  color: var(--bs-info-text-emphasis);
+}
+
 .modeConfirmOverlay,
 .configEditorOverlay {
   position: fixed;

@@ -56,7 +56,7 @@ export type Role = {
   } | null;
 };
 
-export const VIEW_MODES = ["detail", "list", "mini", "matrix"] as const;
+export const VIEW_MODES = ["detail", "list", "row", "column", "mini", "matrix"] as const;
 export type ViewMode = (typeof VIEW_MODES)[number];
 
 export type ViewConfig = {

@@ -10,6 +10,7 @@ import { VIEW_CONFIG, VIEW_MODE_ICONS } from "./role-dashboard/constants";
 import { sortStatuses } from "./role-dashboard/helpers";
 import { hexToRgba } from "./deployment-credentials/device-visuals";
 import BundleGridView from "./role-dashboard/BundleGridView";
+import RoleColumnView from "./role-dashboard/RoleColumnView";
 import EnableDropdown from "./role-dashboard/EnableDropdown";
 import RoleDetailsModal from "./role-dashboard/RoleDetailsModal";
 import RoleGridView from "./role-dashboard/RoleGridView";
@@ -159,9 +160,12 @@ export default function RoleDashboard({
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useState<ViewMode>("detail");
+  const [columnAnimationRunning, setColumnAnimationRunning] = useState(true);
+  const [columnSpeedOffsetSeconds, setColumnSpeedOffsetSeconds] = useState(0);
   const [rowsOverride, setRowsOverride] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const filtersButtonRef = useRef<HTMLButtonElement | null>(null);
   const filtersPopoverRef = useRef<HTMLDivElement | null>(null);
   const viewButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -317,8 +321,25 @@ export default function RoleDashboard({
 
   useEffect(() => {
     const node = scrollRef.current;
-    if (!node) return;
+    const contentNode = contentRef.current;
+    if (!node && !contentNode) return;
+    const toNumber = (value: string) => {
+      const parsed = Number.parseFloat(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
     const update = () => {
+      const currentContentNode = contentRef.current;
+      if (currentContentNode) {
+        const computed = window.getComputedStyle(currentContentNode);
+        const horizontalPadding = toNumber(computed.paddingLeft) + toNumber(computed.paddingRight);
+        const verticalPadding = toNumber(computed.paddingTop) + toNumber(computed.paddingBottom);
+        setGridSize({
+          width: Math.max(0, (currentContentNode.clientWidth || 0) - horizontalPadding),
+          height: Math.max(0, (currentContentNode.clientHeight || 0) - verticalPadding),
+        });
+        return;
+      }
+      if (!node) return;
       const controlsHeight = controlsRef.current?.clientHeight ?? 0;
       setGridSize({
         width: node.clientWidth || 0,
@@ -331,8 +352,9 @@ export default function RoleDashboard({
       return () => window.removeEventListener("resize", update);
     }
     const observer = new ResizeObserver(() => update());
-    observer.observe(node);
+    if (node) observer.observe(node);
     if (controlsRef.current) observer.observe(controlsRef.current);
+    if (contentNode) observer.observe(contentNode);
     return () => observer.disconnect();
   }, []);
 
@@ -598,11 +620,16 @@ export default function RoleDashboard({
   }, [appFilteredRoles, selected, showSelectedOnly, viewMode, matrixAliases, selectedLookup]);
 
   const viewConfig = VIEW_CONFIG[viewMode];
+  const isLaneAnimatedView =
+    softwareScope === "apps" && (viewMode === "row" || viewMode === "column");
   const gridGap = 16;
   const widthBuffer = viewMode === "mini" ? 80 : viewConfig.horizontal ? 360 : 140;
   const minCardWidth = Math.max(viewConfig.minWidth, viewConfig.iconSize + widthBuffer);
   const computedColumns =
-    viewMode === "list" || viewMode === "matrix"
+    viewMode === "list" ||
+    viewMode === "matrix" ||
+    viewMode === "row" ||
+    viewMode === "column"
       ? 1
       : Math.max(
           1,
@@ -610,14 +637,27 @@ export default function RoleDashboard({
         );
   const contentHeightBuffer =
     viewMode === "mini" ? 24 : viewMode === "matrix" ? 12 : 8;
+  const laneMinSize = viewMode === "row" ? 188 : viewMode === "column" ? 220 : viewConfig.minHeight;
+  const rowAxisSize = viewMode === "column" ? gridSize.width : gridSize.height;
   const computedRows = Math.max(
     1,
     Math.floor(
-      (Math.max(0, gridSize.height - contentHeightBuffer) + gridGap) /
-        (viewConfig.minHeight + gridGap)
+      (Math.max(0, rowAxisSize - contentHeightBuffer) + gridGap) /
+        (laneMinSize + gridGap)
     )
   );
   const rows = Math.max(1, rowsOverride ?? computedRows);
+  const laneGap = 14;
+  const laneCount = Math.max(1, rows);
+  const laneGapTotal = Math.max(0, laneGap * (laneCount - 1));
+  const rowLaneSize = Math.max(
+    188,
+    Math.floor(Math.max(0, gridSize.height - laneGapTotal) / laneCount)
+  );
+  const columnLaneSize = Math.max(
+    220,
+    Math.floor(Math.max(0, gridSize.width - laneGapTotal) / laneCount)
+  );
   const pageSize = Math.max(1, rows * computedColumns);
   const activeItemCount =
     softwareScope === "bundles" ? filteredBundles.length : filteredRoles.length;
@@ -633,12 +673,13 @@ export default function RoleDashboard({
     return next.sort((a, b) => a - b);
   }, [activeItemCount, computedColumns, rowsOverride]);
 
-  const pageCount = Math.max(1, Math.ceil(activeItemCount / pageSize));
-  const currentPage = Math.min(page, pageCount);
+  const pageCount = isLaneAnimatedView ? 1 : Math.max(1, Math.ceil(activeItemCount / pageSize));
+  const currentPage = isLaneAnimatedView ? 1 : Math.min(page, pageCount);
   const paginatedRoles = useMemo(() => {
+    if (isLaneAnimatedView) return filteredRoles;
     const start = (currentPage - 1) * pageSize;
     return filteredRoles.slice(start, start + pageSize);
-  }, [filteredRoles, currentPage, pageSize]);
+  }, [filteredRoles, currentPage, pageSize, isLaneAnimatedView]);
   const paginatedBundles = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredBundles.slice(start, start + pageSize);
@@ -1457,6 +1498,7 @@ export default function RoleDashboard({
           </div>
 
           <div
+            ref={contentRef}
             className={`${styles.content} ${
               softwareScope === "apps" && viewMode === "matrix" ? styles.contentMatrix : ""
             }`}
@@ -1578,6 +1620,26 @@ export default function RoleDashboard({
                 baseUrl={baseUrl}
                 onOpenVideo={(url, title) => setActiveVideo({ url, title })}
               />
+            ) : viewMode === "row" || viewMode === "column" ? (
+              <RoleColumnView
+                roles={paginatedRoles}
+                selected={selected}
+                iconSize={viewConfig.iconSize}
+                variant={viewMode}
+                laneCount={rows}
+                laneSize={viewMode === "row" ? rowLaneSize : columnLaneSize}
+                animationRunning={columnAnimationRunning}
+                speedOffsetSeconds={columnSpeedOffsetSeconds}
+                onToggleSelected={onToggleSelected}
+                rolePlans={rolePlanOptions}
+                selectedPlanByRole={activeSelectedPlanByRole}
+                onSelectRolePlan={(roleId, planId) =>
+                  selectPlanByAlias(String(activeAlias || "").trim(), roleId, planId)
+                }
+                roleServerCountByRole={roleServerCountByRole}
+                baseUrl={baseUrl}
+                onOpenVideo={(url, title) => setActiveVideo({ url, title })}
+              />
             ) : (
               <RoleGridView
                 roles={paginatedRoles}
@@ -1608,25 +1670,89 @@ export default function RoleDashboard({
 
         <div className={`text-body-secondary ${styles.pagination}`}>
           <button
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            disabled={currentPage <= 1}
+            type="button"
+            onClick={() => {
+              if (isLaneAnimatedView) {
+                setColumnAnimationRunning(true);
+                setColumnSpeedOffsetSeconds((prev) => prev + 1);
+                return;
+              }
+              setPage((prev) => Math.max(1, prev - 1));
+            }}
+            disabled={isLaneAnimatedView ? false : currentPage <= 1}
             className={`${styles.pageButton} ${
-              currentPage <= 1 ? styles.pageButtonDisabled : styles.pageButtonEnabled
+              isLaneAnimatedView
+                ? `${styles.pageButtonEnabled} ${styles.columnTransportButton}`
+                : currentPage <= 1
+                  ? styles.pageButtonDisabled
+                  : styles.pageButtonEnabled
             }`}
+            aria-label={isLaneAnimatedView ? "Animation slower" : "Previous page"}
+            title={isLaneAnimatedView ? "Langsamer" : "Previous page"}
           >
-            Prev
+            {isLaneAnimatedView ? (
+              <>
+                <i className="fa-solid fa-minus" aria-hidden="true" />
+                <span className="visually-hidden">Langsamer</span>
+              </>
+            ) : (
+              "Prev"
+            )}
           </button>
-          <span>
-            Page {currentPage} / {pageCount}
-          </span>
+          {isLaneAnimatedView ? (
+            <button
+              type="button"
+              onClick={() => setColumnAnimationRunning((prev) => !prev)}
+              className={`${styles.pageButton} ${styles.pageButtonEnabled} ${styles.columnToggleButton}`}
+              aria-label={columnAnimationRunning ? "Stop animation" : "Start animation"}
+              title={columnAnimationRunning ? "Stop animation" : "Start animation"}
+            >
+              <i
+                className={
+                  columnAnimationRunning
+                    ? "fa-solid fa-circle-stop"
+                    : "fa-solid fa-circle-play"
+                }
+                aria-hidden="true"
+              />
+              <span className="visually-hidden">
+                {columnAnimationRunning ? "Stop" : "Start"}
+              </span>
+            </button>
+          ) : (
+            <span>
+              Page {currentPage} / {pageCount}
+            </span>
+          )}
           <button
-            onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))}
-            disabled={currentPage >= pageCount}
+            type="button"
+            onClick={() => {
+              if (isLaneAnimatedView) {
+                setColumnAnimationRunning(true);
+                setColumnSpeedOffsetSeconds((prev) => prev - 1);
+                return;
+              }
+              setPage((prev) => Math.min(pageCount, prev + 1));
+            }}
+            disabled={isLaneAnimatedView ? false : currentPage >= pageCount}
             className={`${styles.pageButton} ${
-              currentPage >= pageCount ? styles.pageButtonDisabled : styles.pageButtonEnabled
+              isLaneAnimatedView
+                ? `${styles.pageButtonEnabled} ${styles.columnTransportButton}`
+                : currentPage >= pageCount
+                  ? styles.pageButtonDisabled
+                  : styles.pageButtonEnabled
             }`}
+            aria-label={isLaneAnimatedView ? "Animation faster" : "Next page"}
+            title={isLaneAnimatedView ? "Schneller" : "Next page"}
           >
-            Next
+            {isLaneAnimatedView ? (
+              <>
+                <i className="fa-solid fa-plus" aria-hidden="true" />
+                <span className="visually-hidden">Schneller</span>
+              </>
+            ) : (
+              "Next"
+            )}
           </button>
         </div>
       </div>

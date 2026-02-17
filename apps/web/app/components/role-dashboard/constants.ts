@@ -62,6 +62,8 @@ export const SIMPLEICON_STOP_WORDS = new Set([
 export const VIEW_MODE_ICONS: Record<ViewMode, string> = {
   detail: "fa-solid fa-table-cells-large",
   list: "fa-solid fa-list",
+  row: "fa-solid fa-grip-lines",
+  column: "fa-solid fa-columns",
   mini: "fa-solid fa-border-all",
   matrix: "fa-solid fa-table",
 };
@@ -80,6 +82,24 @@ export const VIEW_CONFIG: Record<ViewMode, ViewConfig> = {
     minWidth: 520,
     minHeight: 84,
     iconSize: 40,
+    showDescription: true,
+    showTargets: true,
+    showLinks: true,
+    horizontal: true,
+  },
+  row: {
+    minWidth: 700,
+    minHeight: 188,
+    iconSize: 44,
+    showDescription: true,
+    showTargets: true,
+    showLinks: true,
+    horizontal: true,
+  },
+  column: {
+    minWidth: 620,
+    minHeight: 220,
+    iconSize: 52,
     showDescription: true,
     showTargets: true,
     showLinks: true,
