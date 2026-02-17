@@ -9,6 +9,7 @@ import { filterRoles } from "../lib/role_filter";
 import { VIEW_CONFIG, VIEW_MODE_ICONS } from "./role-dashboard/constants";
 import { sortStatuses } from "./role-dashboard/helpers";
 import { hexToRgba } from "./deployment-credentials/device-visuals";
+import BundleColumnView from "./role-dashboard/BundleColumnView";
 import BundleGridView from "./role-dashboard/BundleGridView";
 import RoleColumnView from "./role-dashboard/RoleColumnView";
 import EnableDropdown from "./role-dashboard/EnableDropdown";
@@ -203,6 +204,7 @@ export default function RoleDashboard({
   const [viewMode, setViewMode] = useState<ViewMode>("detail");
   const [columnAnimationRunning, setColumnAnimationRunning] = useState(true);
   const [animatedRoleOffset, setAnimatedRoleOffset] = useState(0);
+  const [animatedBundleOffset, setAnimatedBundleOffset] = useState(0);
   const [rowsOverride, setRowsOverride] = useState<number | null>(null);
   const [listForcedOpenColumns, setListForcedOpenColumns] = useState<
     OptionalListColumnKey[]
@@ -678,8 +680,10 @@ export default function RoleDashboard({
   }, [appFilteredRoles, selected, showSelectedOnly, viewMode, matrixAliases, selectedLookup]);
 
   const viewConfig = VIEW_CONFIG[viewMode];
-  const isLaneAnimatedView =
-    softwareScope === "apps" && (viewMode === "row" || viewMode === "column");
+  const isLaneView = viewMode === "row" || viewMode === "column";
+  const isLaneAnimatedView = isLaneView;
+  const isAppLaneAnimatedView = softwareScope === "apps" && isLaneView;
+  const isBundleLaneAnimatedView = softwareScope === "bundles" && isLaneView;
   const gridGap = 16;
   const widthBuffer = viewMode === "mini" ? 80 : viewConfig.horizontal ? 360 : 140;
   const minCardWidth = Math.max(viewConfig.minWidth, viewConfig.iconSize + widthBuffer);
@@ -734,7 +738,7 @@ export default function RoleDashboard({
   const pageCount = isLaneAnimatedView ? 1 : Math.max(1, Math.ceil(activeItemCount / pageSize));
   const currentPage = isLaneAnimatedView ? 1 : Math.min(page, pageCount);
   const animatedRoles = useMemo(() => {
-    if (!isLaneAnimatedView || filteredRoles.length === 0) return filteredRoles;
+    if (!isAppLaneAnimatedView || filteredRoles.length === 0) return filteredRoles;
     const total = filteredRoles.length;
     const normalizedOffset = ((animatedRoleOffset % total) + total) % total;
     if (normalizedOffset === 0) return filteredRoles;
@@ -742,16 +746,29 @@ export default function RoleDashboard({
       ...filteredRoles.slice(normalizedOffset),
       ...filteredRoles.slice(0, normalizedOffset),
     ];
-  }, [filteredRoles, animatedRoleOffset, isLaneAnimatedView]);
+  }, [filteredRoles, animatedRoleOffset, isAppLaneAnimatedView]);
+  const animatedBundles = useMemo(() => {
+    if (!isBundleLaneAnimatedView || filteredBundles.length === 0) return filteredBundles;
+    const total = filteredBundles.length;
+    const normalizedOffset = ((animatedBundleOffset % total) + total) % total;
+    if (normalizedOffset === 0) return filteredBundles;
+    return [
+      ...filteredBundles.slice(normalizedOffset),
+      ...filteredBundles.slice(0, normalizedOffset),
+    ];
+  }, [filteredBundles, animatedBundleOffset, isBundleLaneAnimatedView]);
   const paginatedRoles = useMemo(() => {
-    if (isLaneAnimatedView) return animatedRoles;
+    if (isAppLaneAnimatedView) return animatedRoles;
     const start = (currentPage - 1) * pageSize;
     return filteredRoles.slice(start, start + pageSize);
-  }, [filteredRoles, currentPage, pageSize, isLaneAnimatedView, animatedRoles]);
+  }, [filteredRoles, currentPage, pageSize, isAppLaneAnimatedView, animatedRoles]);
   const paginatedBundles = useMemo(() => {
+    if (isBundleLaneAnimatedView) return animatedBundles;
     const start = (currentPage - 1) * pageSize;
     return filteredBundles.slice(start, start + pageSize);
-  }, [filteredBundles, currentPage, pageSize]);
+  }, [filteredBundles, currentPage, pageSize, isBundleLaneAnimatedView, animatedBundles]);
+  const laneAnimatedItemCount =
+    softwareScope === "bundles" ? filteredBundles.length : filteredRoles.length;
 
   const selectedCount = useMemo(() => {
     if (viewMode !== "matrix") return selected.size;
@@ -981,6 +998,7 @@ export default function RoleDashboard({
   useEffect(() => {
     setPage(1);
     setAnimatedRoleOffset(0);
+    setAnimatedBundleOffset(0);
   }, [
     query,
     statusFilter,
@@ -1062,12 +1080,8 @@ export default function RoleDashboard({
   }, [viewMenuOpen]);
 
   useEffect(() => {
-    if (softwareScope !== "bundles") return;
     setViewMenuOpen(false);
-    if (viewMode === "matrix") {
-      setViewMode("detail");
-    }
-  }, [softwareScope, viewMode]);
+  }, [softwareScope]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1523,72 +1537,70 @@ export default function RoleDashboard({
                 />
                 <span>{softwareScope === "apps" ? "Apps" : "Bundles"}</span>
               </button>
-              {softwareScope === "apps" ? (
-                <div className={styles.viewModeControl}>
-                  <button
-                    ref={viewButtonRef}
-                    onClick={() => setViewMenuOpen((prev) => !prev)}
-                    className={`${styles.viewModeButton} ${styles.viewModeButtonActive}`}
-                    aria-haspopup="menu"
-                    aria-expanded={viewMenuOpen}
+              <div className={styles.viewModeControl}>
+                <button
+                  ref={viewButtonRef}
+                  onClick={() => setViewMenuOpen((prev) => !prev)}
+                  className={`${styles.viewModeButton} ${styles.viewModeButtonActive}`}
+                  aria-haspopup="menu"
+                  aria-expanded={viewMenuOpen}
+                >
+                  <i className={VIEW_MODE_ICONS[viewMode]} aria-hidden="true" />
+                  <span>{formatViewLabel(viewMode)}</span>
+                  <i className="fa-solid fa-chevron-down" aria-hidden="true" />
+                </button>
+                {viewMenuOpen ? (
+                  <div
+                    ref={viewPopoverRef}
+                    className={styles.viewModeMenu}
+                    role="menu"
                   >
-                    <i className={VIEW_MODE_ICONS[viewMode]} aria-hidden="true" />
-                    <span>{formatViewLabel(viewMode)}</span>
-                    <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-                  </button>
-                  {viewMenuOpen ? (
+                    {DEFAULT_VIEW_MODES.map((mode) => {
+                      const active = viewMode === mode;
+                      return (
+                        <button
+                          key={mode}
+                          onClick={() => {
+                            setViewMode(mode);
+                            setViewMenuOpen(false);
+                          }}
+                          className={`${styles.viewModeMenuItem} ${
+                            active ? styles.viewModeMenuItemActive : ""
+                          }`}
+                        >
+                          <i className={VIEW_MODE_ICONS[mode]} aria-hidden="true" />
+                          <span>{formatViewLabel(mode)}</span>
+                        </button>
+                      );
+                    })}
                     <div
-                      ref={viewPopoverRef}
-                      className={styles.viewModeMenu}
-                      role="menu"
+                      key="view-mode-group-animated"
+                      className={styles.viewModeMenuSectionLabel}
+                      role="presentation"
                     >
-                      {DEFAULT_VIEW_MODES.map((mode) => {
-                        const active = viewMode === mode;
-                        return (
-                          <button
-                            key={mode}
-                            onClick={() => {
-                              setViewMode(mode);
-                              setViewMenuOpen(false);
-                            }}
-                            className={`${styles.viewModeMenuItem} ${
-                              active ? styles.viewModeMenuItemActive : ""
-                            }`}
-                          >
-                            <i className={VIEW_MODE_ICONS[mode]} aria-hidden="true" />
-                            <span>{formatViewLabel(mode)}</span>
-                          </button>
-                        );
-                      })}
-                      <div
-                        key="view-mode-group-animated"
-                        className={styles.viewModeMenuSectionLabel}
-                        role="presentation"
-                      >
-                        Animated
-                      </div>
-                      {ANIMATED_VIEW_MODES.map((mode) => {
-                        const active = viewMode === mode;
-                        return (
-                          <button
-                            key={mode}
-                            onClick={() => {
-                              setViewMode(mode);
-                              setViewMenuOpen(false);
-                            }}
-                            className={`${styles.viewModeMenuItem} ${
-                              active ? styles.viewModeMenuItemActive : ""
-                            }`}
-                          >
-                            <i className={VIEW_MODE_ICONS[mode]} aria-hidden="true" />
-                            <span>{formatViewLabel(mode)}</span>
-                          </button>
-                        );
-                      })}
+                      Animated
                     </div>
-                  ) : null}
-                </div>
-              ) : null}
+                    {ANIMATED_VIEW_MODES.map((mode) => {
+                      const active = viewMode === mode;
+                      return (
+                        <button
+                          key={mode}
+                          onClick={() => {
+                            setViewMode(mode);
+                            setViewMenuOpen(false);
+                          }}
+                          className={`${styles.viewModeMenuItem} ${
+                            active ? styles.viewModeMenuItemActive : ""
+                          }`}
+                        >
+                          <i className={VIEW_MODE_ICONS[mode]} aria-hidden="true" />
+                          <span>{formatViewLabel(mode)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
               <div className={styles.modeControl}>
                 <ModeToggle mode={activeMode} onModeChange={handleModeChange} />
               </div>
@@ -1602,16 +1614,33 @@ export default function RoleDashboard({
             }`}
           >
             {softwareScope === "bundles" ? (
-              <BundleGridView
-                bundles={paginatedBundles}
-                computedColumns={computedColumns}
-                gridGap={gridGap}
-                minHeight={viewConfig.minHeight}
-                activeAlias={String(activeAlias || "").trim() || matrixAliases[0] || "server"}
-                bundleStates={bundleStateById}
-                onEnableBundle={requestEnableBundle}
-                onDisableBundle={disableBundle}
-              />
+              viewMode === "row" || viewMode === "column" ? (
+                <BundleColumnView
+                  bundles={paginatedBundles}
+                  iconSize={viewConfig.iconSize}
+                  variant={viewMode}
+                  laneCount={rows}
+                  laneSize={viewMode === "row" ? rowLaneSize : columnLaneSize}
+                  animationRunning={columnAnimationRunning}
+                  activeAlias={String(activeAlias || "").trim() || matrixAliases[0] || "server"}
+                  bundleStates={bundleStateById}
+                  onEnableBundle={requestEnableBundle}
+                  onDisableBundle={disableBundle}
+                />
+              ) : (
+                <BundleGridView
+                  bundles={paginatedBundles}
+                  viewMode={viewMode}
+                  viewConfig={viewConfig}
+                  computedColumns={computedColumns}
+                  gridGap={gridGap}
+                  minHeight={viewConfig.minHeight}
+                  activeAlias={String(activeAlias || "").trim() || matrixAliases[0] || "server"}
+                  bundleStates={bundleStateById}
+                  onEnableBundle={requestEnableBundle}
+                  onDisableBundle={disableBundle}
+                />
+              )
             ) : viewMode === "matrix" ? (
               matrixAliases.length === 0 ? (
                 <div className={`text-body-secondary ${styles.matrixEmpty}`}>
@@ -1783,17 +1812,21 @@ export default function RoleDashboard({
             type="button"
             onClick={() => {
               if (isLaneAnimatedView) {
-                if (filteredRoles.length === 0) return;
+                if (laneAnimatedItemCount === 0) return;
                 const animatedStep = Math.max(1, laneCount);
-                setAnimatedRoleOffset((prev) => prev - animatedStep);
+                if (softwareScope === "bundles") {
+                  setAnimatedBundleOffset((prev) => prev - animatedStep);
+                } else {
+                  setAnimatedRoleOffset((prev) => prev - animatedStep);
+                }
                 return;
               }
               setPage((prev) => Math.max(1, prev - 1));
             }}
-            disabled={isLaneAnimatedView ? filteredRoles.length <= 1 : currentPage <= 1}
+            disabled={isLaneAnimatedView ? laneAnimatedItemCount <= 1 : currentPage <= 1}
             className={`${styles.pageButton} ${
               isLaneAnimatedView
-                ? filteredRoles.length <= 1
+                ? laneAnimatedItemCount <= 1
                   ? styles.pageButtonDisabled
                   : `${styles.pageButtonEnabled} ${styles.columnTransportButton}`
                 : currentPage <= 1
@@ -1845,17 +1878,21 @@ export default function RoleDashboard({
             type="button"
             onClick={() => {
               if (isLaneAnimatedView) {
-                if (filteredRoles.length === 0) return;
+                if (laneAnimatedItemCount === 0) return;
                 const animatedStep = Math.max(1, laneCount);
-                setAnimatedRoleOffset((prev) => prev + animatedStep);
+                if (softwareScope === "bundles") {
+                  setAnimatedBundleOffset((prev) => prev + animatedStep);
+                } else {
+                  setAnimatedRoleOffset((prev) => prev + animatedStep);
+                }
                 return;
               }
               setPage((prev) => Math.min(pageCount, prev + 1));
             }}
-            disabled={isLaneAnimatedView ? filteredRoles.length <= 1 : currentPage >= pageCount}
+            disabled={isLaneAnimatedView ? laneAnimatedItemCount <= 1 : currentPage >= pageCount}
             className={`${styles.pageButton} ${
               isLaneAnimatedView
-                ? filteredRoles.length <= 1
+                ? laneAnimatedItemCount <= 1
                   ? styles.pageButtonDisabled
                   : `${styles.pageButtonEnabled} ${styles.columnTransportButton}`
                 : currentPage >= pageCount
