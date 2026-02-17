@@ -26,6 +26,8 @@ type RoleGridViewProps = {
   onOpenDetails?: (role: Role) => void;
 };
 
+const DESELECTION_FADE_DURATION_MS = 3000;
+
 export default function RoleGridView({
   baseUrl,
   roles,
@@ -44,10 +46,10 @@ export default function RoleGridView({
 }: RoleGridViewProps) {
   const [hoveredRoleId, setHoveredRoleId] = useState<string | null>(null);
   const [pendingMiniDisableRoleId, setPendingMiniDisableRoleId] = useState<string | null>(null);
-  const [miniDeselectionFlashRoleIds, setMiniDeselectionFlashRoleIds] = useState<Set<string>>(
+  const [deselectionFlashRoleIds, setDeselectionFlashRoleIds] = useState<Set<string>>(
     new Set()
   );
-  const miniDeselectionTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const deselectionTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const gridStyle = {
     "--role-grid-columns": computedColumns,
@@ -55,13 +57,13 @@ export default function RoleGridView({
     "--role-grid-gap": `${gridGap}px`,
   } as CSSProperties;
 
-  const clearMiniDeselectionFlash = (roleId: string) => {
-    const timer = miniDeselectionTimersRef.current[roleId];
+  const clearDeselectionFlash = (roleId: string) => {
+    const timer = deselectionTimersRef.current[roleId];
     if (timer) {
       clearTimeout(timer);
-      delete miniDeselectionTimersRef.current[roleId];
+      delete deselectionTimersRef.current[roleId];
     }
-    setMiniDeselectionFlashRoleIds((prev) => {
+    setDeselectionFlashRoleIds((prev) => {
       if (!prev.has(roleId)) return prev;
       const next = new Set(prev);
       next.delete(roleId);
@@ -69,27 +71,27 @@ export default function RoleGridView({
     });
   };
 
-  const triggerMiniDeselectionFlash = (roleId: string) => {
-    clearMiniDeselectionFlash(roleId);
-    setMiniDeselectionFlashRoleIds((prev) => {
+  const triggerDeselectionFlash = (roleId: string) => {
+    clearDeselectionFlash(roleId);
+    setDeselectionFlashRoleIds((prev) => {
       const next = new Set(prev);
       next.add(roleId);
       return next;
     });
-    miniDeselectionTimersRef.current[roleId] = setTimeout(() => {
-      setMiniDeselectionFlashRoleIds((prev) => {
+    deselectionTimersRef.current[roleId] = setTimeout(() => {
+      setDeselectionFlashRoleIds((prev) => {
         if (!prev.has(roleId)) return prev;
         const next = new Set(prev);
         next.delete(roleId);
         return next;
       });
-      delete miniDeselectionTimersRef.current[roleId];
-    }, 5000);
+      delete deselectionTimersRef.current[roleId];
+    }, DESELECTION_FADE_DURATION_MS);
   };
 
   const requestMiniToggle = (roleId: string, selectedState: boolean) => {
     if (!selectedState) {
-      clearMiniDeselectionFlash(roleId);
+      clearDeselectionFlash(roleId);
       onToggleSelected(roleId);
       return;
     }
@@ -108,13 +110,13 @@ export default function RoleGridView({
     setPendingMiniDisableRoleId(null);
     if (!stillSelected) return;
     onToggleSelected(roleId);
-    triggerMiniDeselectionFlash(roleId);
+    triggerDeselectionFlash(roleId);
   };
 
   useEffect(() => {
     return () => {
-      Object.values(miniDeselectionTimersRef.current).forEach((timer) => clearTimeout(timer));
-      miniDeselectionTimersRef.current = {};
+      Object.values(deselectionTimersRef.current).forEach((timer) => clearTimeout(timer));
+      deselectionTimersRef.current = {};
     };
   }, []);
 
@@ -129,6 +131,7 @@ export default function RoleGridView({
       <div className={styles.gridRoot} style={gridStyle}>
         {roles.map((role) => {
           const selectedState = selected.has(role.id);
+          const isDeselectionFlashing = deselectionFlashRoleIds.has(role.id);
           const plans = rolePlans?.[role.id] || [{ id: "community", label: "Community" }];
           const fallbackPlanId =
             plans.find((plan) => plan.id === "community")?.id || plans[0]?.id || "community";
@@ -156,7 +159,7 @@ export default function RoleGridView({
                 key={role.id}
                 className={`${styles.cardBase} ${styles.horizontalCard} ${
                   selectedState ? styles.cardSelected : styles.cardDefault
-                }`}
+                } ${isDeselectionFlashing ? styles.cardDeselectedFlash : ""}`}
                 style={cardHeightStyle}
               >
                 <div className={styles.horizontalHeader}>
@@ -191,7 +194,14 @@ export default function RoleGridView({
                       pricingModel="app"
                       plans={plans}
                       selectedPlanId={selectedPlanId}
-                      onSelectPlan={(planId) => onSelectRolePlan?.(role.id, planId)}
+                      onSelectPlan={(planId) => {
+                        onSelectRolePlan?.(role.id, planId);
+                        if (selectedState && !planId) {
+                          triggerDeselectionFlash(role.id);
+                          return;
+                        }
+                        if (planId) clearDeselectionFlash(role.id);
+                      }}
                       roleId={role.id}
                       pricing={role.pricing || null}
                       pricingSummary={role.pricing_summary || null}
@@ -199,10 +209,14 @@ export default function RoleGridView({
                       serverCount={roleServerCount}
                       appCount={1}
                       onEnable={() => {
+                        clearDeselectionFlash(role.id);
                         if (!selectedState) onToggleSelected(role.id);
                       }}
                       onDisable={() => {
-                        if (selectedState) onToggleSelected(role.id);
+                        if (selectedState) {
+                          onToggleSelected(role.id);
+                          triggerDeselectionFlash(role.id);
+                        }
                       }}
                     />
                   </div>
@@ -220,8 +234,6 @@ export default function RoleGridView({
           if (viewMode === "mini") {
             const showTooltip = hoveredRoleId === role.id;
             const targets = displayTargets(role.deployment_targets ?? []);
-            const isDeselectionFlashing =
-              !selectedState && miniDeselectionFlashRoleIds.has(role.id);
             return (
               <article
                 key={role.id}
@@ -282,7 +294,7 @@ export default function RoleGridView({
               key={role.id}
               className={`${styles.cardBase} ${styles.detailCard} ${
                 selectedState ? styles.cardSelected : styles.cardDefault
-              }`}
+              } ${isDeselectionFlashing ? styles.cardDeselectedFlash : ""}`}
               style={cardHeightStyle}
             >
               <div className={styles.detailHeader}>
@@ -320,7 +332,14 @@ export default function RoleGridView({
                     pricingModel="app"
                     plans={plans}
                     selectedPlanId={selectedPlanId}
-                    onSelectPlan={(planId) => onSelectRolePlan?.(role.id, planId)}
+                    onSelectPlan={(planId) => {
+                      onSelectRolePlan?.(role.id, planId);
+                      if (selectedState && !planId) {
+                        triggerDeselectionFlash(role.id);
+                        return;
+                      }
+                      if (planId) clearDeselectionFlash(role.id);
+                    }}
                     roleId={role.id}
                     pricing={role.pricing || null}
                     pricingSummary={role.pricing_summary || null}
@@ -328,10 +347,14 @@ export default function RoleGridView({
                     serverCount={roleServerCount}
                     appCount={1}
                     onEnable={() => {
+                      clearDeselectionFlash(role.id);
                       if (!selectedState) onToggleSelected(role.id);
                     }}
                     onDisable={() => {
-                      if (selectedState) onToggleSelected(role.id);
+                      if (selectedState) {
+                        onToggleSelected(role.id);
+                        triggerDeselectionFlash(role.id);
+                      }
                     }}
                   />
                 </div>

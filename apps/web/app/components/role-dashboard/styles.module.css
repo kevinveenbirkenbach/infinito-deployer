@@ -12,15 +12,35 @@
   box-shadow: var(--deployer-shadow);
   min-width: 0;
   overflow: visible;
+  transition: border-color 220ms ease, background-color 220ms ease;
 }
 
 .cardDefault {
-  border: 1px solid var(--bs-border-color-translucent);
+  border: 2px solid var(--bs-info-border-subtle);
+  background: color-mix(in srgb, var(--bs-info-bg-subtle) 74%, var(--bs-body-bg) 26%);
 }
 
 .cardSelected {
   border: 2px solid var(--bs-success-border-subtle);
   background: color-mix(in srgb, var(--bs-success-bg-subtle) 80%, var(--bs-body-bg) 20%);
+}
+
+.cardDeselectedFlash {
+  border: 2px solid var(--bs-danger-border-subtle);
+  background: color-mix(in srgb, var(--bs-danger-bg-subtle) 82%, var(--bs-body-bg) 18%);
+  animation: deselectedFadeToInfo 3s ease-out forwards;
+}
+
+@keyframes deselectedFadeToInfo {
+  0% {
+    border-color: var(--bs-danger-border-subtle);
+    background: color-mix(in srgb, var(--bs-danger-bg-subtle) 82%, var(--bs-body-bg) 18%);
+  }
+
+  100% {
+    border-color: var(--bs-info-border-subtle);
+    background: color-mix(in srgb, var(--bs-info-bg-subtle) 74%, var(--bs-body-bg) 26%);
+  }
 }
 
 .horizontalCard {
@@ -291,6 +311,14 @@
   justify-content: flex-start;
   gap: 6px;
   white-space: nowrap;
+  transition:
+    border-color var(--enable-state-fade-ms, 220ms) ease,
+    background-color var(--enable-state-fade-ms, 220ms) ease,
+    color var(--enable-state-fade-ms, 220ms) ease;
+}
+
+.enableStateDropdownButtonSlowFade {
+  --enable-state-fade-ms: 3000ms;
 }
 
 .enableStateDropdownButtonSizeCompact {
@@ -733,9 +761,7 @@
 }
 
 .miniCardDeselectedFlash {
-  border: 2px solid var(--bs-danger-border-subtle);
-  background: color-mix(in srgb, var(--bs-danger-bg-subtle) 82%, var(--bs-body-bg) 18%);
-  animation: miniCardDeselectedFade 5s ease-out forwards;
+  animation: deselectedFadeToInfo 3s ease-out forwards;
 }
 
 .miniTitle {
@@ -750,18 +776,6 @@
 
 .miniCard:focus-visible {
   box-shadow: 0 0 0 2px var(--bs-info);
-}
-
-@keyframes miniCardDeselectedFade {
-  0% {
-    border-color: var(--bs-danger-border-subtle);
-    background: color-mix(in srgb, var(--bs-danger-bg-subtle) 82%, var(--bs-body-bg) 18%);
-  }
-
-  100% {
-    border-color: var(--bs-border-color-translucent);
-    background: var(--bs-body-bg);
-  }
 }
 
 .miniSelectedBadge {
@@ -993,15 +1007,21 @@
   border-radius: 14px;
   background: var(--bs-body-bg);
   box-shadow: var(--deployer-shadow);
+  transition: border-color 220ms ease, background-color 220ms ease;
 }
 
 .listRowDefault {
-  border: 1px solid var(--bs-border-color-translucent);
+  border: 2px solid var(--bs-info-border-subtle);
+  background: color-mix(in srgb, var(--bs-info-bg-subtle) 74%, var(--bs-body-bg) 26%);
 }
 
 .listRowSelected {
   border: 2px solid var(--bs-success-border-subtle);
   background: color-mix(in srgb, var(--bs-success-bg-subtle) 80%, var(--bs-body-bg) 20%);
+}
+
+.listRowDeselectedFlash {
+  animation: deselectedFadeToInfo 3s ease-out forwards;
 }
 
 .listRoleCell {

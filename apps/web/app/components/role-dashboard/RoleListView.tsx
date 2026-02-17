@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { colorForStatus, displayTargets } from "./helpers";
 import EnableDropdown from "./EnableDropdown";
@@ -21,6 +21,8 @@ type RoleListViewProps = {
   onSelectRolePlan?: (roleId: string, planId: string | null) => void;
   onOpenVideo: (url: string, title: string) => void;
 };
+
+const DESELECTION_FADE_DURATION_MS = 3000;
 
 function collapseEmojiForRole(role: Role): string {
   const targets = (role.deployment_targets || []).map((entry) =>
@@ -47,6 +49,10 @@ export default function RoleListView({
   onOpenVideo,
 }: RoleListViewProps) {
   const [expandedTitleIds, setExpandedTitleIds] = useState<Set<string>>(new Set());
+  const [deselectionFlashRoleIds, setDeselectionFlashRoleIds] = useState<Set<string>>(
+    new Set()
+  );
+  const deselectionTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const toggleTitleExpansion = (roleId: string) => {
     setExpandedTitleIds((prev) => {
@@ -60,6 +66,45 @@ export default function RoleListView({
     });
   };
 
+  const clearDeselectionFlash = (roleId: string) => {
+    const timer = deselectionTimersRef.current[roleId];
+    if (timer) {
+      clearTimeout(timer);
+      delete deselectionTimersRef.current[roleId];
+    }
+    setDeselectionFlashRoleIds((prev) => {
+      if (!prev.has(roleId)) return prev;
+      const next = new Set(prev);
+      next.delete(roleId);
+      return next;
+    });
+  };
+
+  const triggerDeselectionFlash = (roleId: string) => {
+    clearDeselectionFlash(roleId);
+    setDeselectionFlashRoleIds((prev) => {
+      const next = new Set(prev);
+      next.add(roleId);
+      return next;
+    });
+    deselectionTimersRef.current[roleId] = setTimeout(() => {
+      setDeselectionFlashRoleIds((prev) => {
+        if (!prev.has(roleId)) return prev;
+        const next = new Set(prev);
+        next.delete(roleId);
+        return next;
+      });
+      delete deselectionTimersRef.current[roleId];
+    }, DESELECTION_FADE_DURATION_MS);
+  };
+
+  useEffect(() => {
+    return () => {
+      Object.values(deselectionTimersRef.current).forEach((timer) => clearTimeout(timer));
+      deselectionTimersRef.current = {};
+    };
+  }, []);
+
   return (
     <div className={styles.listRoot}>
       <div className={`${styles.listGrid} ${styles.listHeader}`}>
@@ -72,6 +117,7 @@ export default function RoleListView({
       </div>
       {roles.map((role) => {
         const selectedState = selected.has(role.id);
+        const isDeselectionFlashing = deselectionFlashRoleIds.has(role.id);
         const roleServerCount = Math.max(
           0,
           Math.floor(Number(roleServerCountByRole?.[role.id] || 0))
@@ -93,7 +139,7 @@ export default function RoleListView({
             key={role.id}
             className={`${styles.listGrid} ${styles.listRow} ${
               selectedState ? styles.listRowSelected : styles.listRowDefault
-            }`}
+            } ${isDeselectionFlashing ? styles.listRowDeselectedFlash : ""}`}
           >
             <div className={styles.listRoleCell}>
               <RoleLogoView role={role} size={iconSize} />
@@ -150,7 +196,14 @@ export default function RoleListView({
                 pricingModel="app"
                 plans={rolePlans?.[role.id]}
                 selectedPlanId={selectedPlanByRole?.[role.id] ?? null}
-                onSelectPlan={(planId) => onSelectRolePlan?.(role.id, planId)}
+                onSelectPlan={(planId) => {
+                  onSelectRolePlan?.(role.id, planId);
+                  if (selectedState && !planId) {
+                    triggerDeselectionFlash(role.id);
+                    return;
+                  }
+                  if (planId) clearDeselectionFlash(role.id);
+                }}
                 roleId={role.id}
                 pricing={role.pricing || null}
                 pricingSummary={role.pricing_summary || null}
@@ -158,10 +211,14 @@ export default function RoleListView({
                 serverCount={roleServerCount}
                 appCount={1}
                 onEnable={() => {
+                  clearDeselectionFlash(role.id);
                   if (!selectedState) onToggleSelected(role.id);
                 }}
                 onDisable={() => {
-                  if (selectedState) onToggleSelected(role.id);
+                  if (selectedState) {
+                    onToggleSelected(role.id);
+                    triggerDeselectionFlash(role.id);
+                  }
                 }}
               />
             </div>

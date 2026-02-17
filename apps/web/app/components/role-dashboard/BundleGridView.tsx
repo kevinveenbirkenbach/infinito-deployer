@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import EnableDropdown from "./EnableDropdown";
 import styles from "./styles.module.css";
@@ -22,6 +23,8 @@ type BundleGridViewProps = {
   onDisableBundle: (bundle: Bundle) => void;
 };
 
+const DESELECTION_FADE_DURATION_MS = 3000;
+
 function bundleIconClass(bundle: Bundle): string {
   const raw = String(bundle.logo_class || "").trim();
   return raw || "fa-solid fa-layer-group";
@@ -37,11 +40,55 @@ export default function BundleGridView({
   onEnableBundle,
   onDisableBundle,
 }: BundleGridViewProps) {
+  const [deselectionFlashBundleIds, setDeselectionFlashBundleIds] = useState<Set<string>>(
+    new Set()
+  );
+  const deselectionTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
   const gridStyle = {
     "--role-grid-columns": computedColumns,
     "--role-grid-row-height": `${minHeight}px`,
     "--role-grid-gap": `${gridGap}px`,
   } as CSSProperties;
+
+  const clearDeselectionFlash = (bundleId: string) => {
+    const timer = deselectionTimersRef.current[bundleId];
+    if (timer) {
+      clearTimeout(timer);
+      delete deselectionTimersRef.current[bundleId];
+    }
+    setDeselectionFlashBundleIds((prev) => {
+      if (!prev.has(bundleId)) return prev;
+      const next = new Set(prev);
+      next.delete(bundleId);
+      return next;
+    });
+  };
+
+  const triggerDeselectionFlash = (bundleId: string) => {
+    clearDeselectionFlash(bundleId);
+    setDeselectionFlashBundleIds((prev) => {
+      const next = new Set(prev);
+      next.add(bundleId);
+      return next;
+    });
+    deselectionTimersRef.current[bundleId] = setTimeout(() => {
+      setDeselectionFlashBundleIds((prev) => {
+        if (!prev.has(bundleId)) return prev;
+        const next = new Set(prev);
+        next.delete(bundleId);
+        return next;
+      });
+      delete deselectionTimersRef.current[bundleId];
+    }, DESELECTION_FADE_DURATION_MS);
+  };
+
+  useEffect(() => {
+    return () => {
+      Object.values(deselectionTimersRef.current).forEach((timer) => clearTimeout(timer));
+      deselectionTimersRef.current = {};
+    };
+  }, []);
 
   return (
     <div className={styles.gridRoot} style={gridStyle}>
@@ -54,13 +101,14 @@ export default function BundleGridView({
         const roleIds = Array.isArray(bundle.role_ids) ? bundle.role_ids : [];
         const visibleRoles = roleIds.slice(0, 2);
         const hiddenRoles = Math.max(0, roleIds.length - visibleRoles.length);
+        const isDeselectionFlashing = deselectionFlashBundleIds.has(bundle.id);
 
         return (
           <article
             key={bundle.id}
             className={`${styles.cardBase} ${styles.bundleCard} ${
               state.enabled ? styles.cardSelected : styles.cardDefault
-            }`}
+            } ${isDeselectionFlashing ? styles.cardDeselectedFlash : ""}`}
           >
             <div className={styles.detailTitleRow}>
               <div className={styles.detailRoleMeta}>
@@ -104,8 +152,14 @@ export default function BundleGridView({
                   selectedPlanId="community"
                   appCount={Math.max(1, roleIds.length)}
                   contextLabel={`device "${activeAlias}" for bundle "${bundle.title}"`}
-                  onEnable={() => onEnableBundle(bundle)}
-                  onDisable={() => onDisableBundle(bundle)}
+                  onEnable={() => {
+                    clearDeselectionFlash(bundle.id);
+                    onEnableBundle(bundle);
+                  }}
+                  onDisable={() => {
+                    onDisableBundle(bundle);
+                    if (state.enabled) triggerDeselectionFlash(bundle.id);
+                  }}
                 />
               </div>
             </div>

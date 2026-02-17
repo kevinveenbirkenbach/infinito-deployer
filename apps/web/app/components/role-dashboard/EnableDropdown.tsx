@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./styles.module.css";
 
 type PlanOption = { id: string; label: string };
@@ -57,6 +57,8 @@ type PricingQuote = {
 
 const PRICING_USERS_STORAGE_KEY = "infinito.pricing.users.v1";
 const PRICING_USERS_UPDATED_EVENT = "infinito:pricing-users-updated";
+const DEACTIVATION_FADE_DURATION_MS = 3000;
+const DEACTIVATION_FADE_START_DELAY_MS = 30;
 
 const ROLE_STATE_CONFIG: Record<RoleStateAction, RoleStateConfig> = {
   enable: {
@@ -161,9 +163,12 @@ export default function EnableDropdown({
   onDisable,
 }: EnableDropdownProps) {
   const [inactiveState, setInactiveState] = useState<"enable" | "disable">("enable");
+  const [slowStateFadeActive, setSlowStateFadeActive] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pricingUsers, setPricingUsers] = useState<PricingUser[]>([]);
   const prevEnabledRef = useRef<boolean>(enabled);
+  const fadeStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fadeResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep legacy pricing props for backward compatibility with existing callers.
   void roleId;
@@ -172,12 +177,46 @@ export default function EnableDropdown({
   void baseUrl;
   void defaultUserCount;
 
+  const clearStateFadeTimers = useCallback(() => {
+    if (fadeStartTimerRef.current) {
+      clearTimeout(fadeStartTimerRef.current);
+      fadeStartTimerRef.current = null;
+    }
+    if (fadeResetTimerRef.current) {
+      clearTimeout(fadeResetTimerRef.current);
+      fadeResetTimerRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
-    if (!enabled && prevEnabledRef.current && inactiveState !== "disable") {
+    const wasEnabled = prevEnabledRef.current;
+    if (!enabled && wasEnabled) {
+      clearStateFadeTimers();
+      setSlowStateFadeActive(false);
+      setInactiveState("disable");
+      fadeStartTimerRef.current = setTimeout(() => {
+        setSlowStateFadeActive(true);
+        setInactiveState("enable");
+        fadeResetTimerRef.current = setTimeout(() => {
+          setSlowStateFadeActive(false);
+          fadeResetTimerRef.current = null;
+        }, DEACTIVATION_FADE_DURATION_MS);
+        fadeStartTimerRef.current = null;
+      }, DEACTIVATION_FADE_START_DELAY_MS);
+    } else if (enabled && !wasEnabled) {
+      clearStateFadeTimers();
+      setSlowStateFadeActive(false);
       setInactiveState("enable");
     }
     prevEnabledRef.current = enabled;
-  }, [enabled, inactiveState]);
+  }, [enabled, clearStateFadeTimers]);
+
+  useEffect(
+    () => () => {
+      clearStateFadeTimers();
+    },
+    [clearStateFadeTimers]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -254,6 +293,8 @@ export default function EnableDropdown({
 
   const triggerEnable = (action: RoleStateAction) => {
     if (disabled) return;
+    clearStateFadeTimers();
+    setSlowStateFadeActive(false);
     setInactiveState("enable");
     if (action === "enabled") {
       if (!enabled) {
@@ -302,6 +343,8 @@ export default function EnableDropdown({
       disabled={disabled}
       onClick={handleStateToggle}
       className={`${styles.enableStateDropdownButton} ${stateConfig.toneClass} ${sizeClass} ${
+        slowStateFadeActive ? styles.enableStateDropdownButtonSlowFade : ""
+      } ${
         disabled ? styles.enableSwitchButtonLocked : ""
       }`}
     >
