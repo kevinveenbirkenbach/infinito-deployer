@@ -14,7 +14,10 @@ import RoleColumnView from "./role-dashboard/RoleColumnView";
 import EnableDropdown from "./role-dashboard/EnableDropdown";
 import RoleDetailsModal from "./role-dashboard/RoleDetailsModal";
 import RoleGridView from "./role-dashboard/RoleGridView";
-import RoleListView from "./role-dashboard/RoleListView";
+import RoleListView, {
+  OPTIONAL_LIST_COLUMNS,
+  type OptionalListColumnKey,
+} from "./role-dashboard/RoleListView";
 import RoleLogoView from "./role-dashboard/RoleLogoView";
 import RoleVideoModal from "./role-dashboard/RoleVideoModal";
 import { VIEW_MODES } from "./role-dashboard/types";
@@ -50,6 +53,8 @@ const SW_QUERY_KEYS = {
   selected: "sw_selected",
   view: "sw_view",
   rows: "sw_rows",
+  listOpen: "sw_list_open",
+  listClosed: "sw_list_closed",
 } as const;
 
 function normalizeFacet(value: string): string {
@@ -68,6 +73,40 @@ function parseFacetCsvParam(value: string | null): string[] {
     .split(",")
     .map((entry) => normalizeFacet(entry))
     .filter(Boolean);
+}
+
+const OPTIONAL_LIST_COLUMN_SET = new Set<string>(OPTIONAL_LIST_COLUMNS);
+
+function parseListColumnCsvParam(value: string | null): OptionalListColumnKey[] {
+  const seen = new Set<OptionalListColumnKey>();
+  String(value || "")
+    .split(",")
+    .map((entry) => String(entry || "").trim().toLowerCase())
+    .forEach((entry) => {
+      if (!OPTIONAL_LIST_COLUMN_SET.has(entry)) return;
+      seen.add(entry as OptionalListColumnKey);
+    });
+  return OPTIONAL_LIST_COLUMNS.filter((entry) => seen.has(entry));
+}
+
+function normalizeListColumnState(
+  openColumns: OptionalListColumnKey[],
+  closedColumns: OptionalListColumnKey[]
+): {
+  open: OptionalListColumnKey[];
+  closed: OptionalListColumnKey[];
+} {
+  const openSet = new Set<OptionalListColumnKey>(openColumns);
+  const closedSet = new Set<OptionalListColumnKey>(closedColumns);
+  OPTIONAL_LIST_COLUMNS.forEach((column) => {
+    if (openSet.has(column) && closedSet.has(column)) {
+      openSet.delete(column);
+    }
+  });
+  return {
+    open: OPTIONAL_LIST_COLUMNS.filter((column) => openSet.has(column)),
+    closed: OPTIONAL_LIST_COLUMNS.filter((column) => closedSet.has(column)),
+  };
 }
 
 function collectFacetValues<T>(
@@ -165,6 +204,12 @@ export default function RoleDashboard({
   const [columnAnimationRunning, setColumnAnimationRunning] = useState(true);
   const [animatedRoleOffset, setAnimatedRoleOffset] = useState(0);
   const [rowsOverride, setRowsOverride] = useState<number | null>(null);
+  const [listForcedOpenColumns, setListForcedOpenColumns] = useState<
+    OptionalListColumnKey[]
+  >([]);
+  const [listForcedClosedColumns, setListForcedClosedColumns] = useState<
+    OptionalListColumnKey[]
+  >([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -267,6 +312,17 @@ export default function RoleDashboard({
           Number.isInteger(parsed) && parsed > 0 ? parsed : null
         );
       }
+    }
+
+    const listOpenParam = params.get(SW_QUERY_KEYS.listOpen);
+    const listClosedParam = params.get(SW_QUERY_KEYS.listClosed);
+    if (listOpenParam !== null || listClosedParam !== null) {
+      const normalized = normalizeListColumnState(
+        parseListColumnCsvParam(listOpenParam),
+        parseListColumnCsvParam(listClosedParam)
+      );
+      setListForcedOpenColumns(normalized.open);
+      setListForcedClosedColumns(normalized.closed);
     }
 
     querySyncReadyRef.current = true;
@@ -1042,6 +1098,8 @@ export default function RoleDashboard({
     params.set(SW_QUERY_KEYS.selected, showSelectedOnly ? "1" : "0");
     params.set(SW_QUERY_KEYS.view, viewMode);
     params.set(SW_QUERY_KEYS.rows, rowsOverride ? String(rowsOverride) : "auto");
+    params.set(SW_QUERY_KEYS.listOpen, listForcedOpenColumns.join(","));
+    params.set(SW_QUERY_KEYS.listClosed, listForcedClosedColumns.join(","));
     window.history.replaceState({}, "", url.toString());
   }, [
     softwareScope,
@@ -1053,6 +1111,8 @@ export default function RoleDashboard({
     showSelectedOnly,
     viewMode,
     rowsOverride,
+    listForcedOpenColumns,
+    listForcedClosedColumns,
   ]);
 
   useEffect(() => {
@@ -1657,6 +1717,13 @@ export default function RoleDashboard({
                 roleServerCountByRole={roleServerCountByRole}
                 baseUrl={baseUrl}
                 onOpenVideo={(url, title) => setActiveVideo({ url, title })}
+                forcedOpenColumns={listForcedOpenColumns}
+                forcedClosedColumns={listForcedClosedColumns}
+                onListColumnsChange={({ open, closed }) => {
+                  const normalized = normalizeListColumnState(open, closed);
+                  setListForcedOpenColumns(normalized.open);
+                  setListForcedClosedColumns(normalized.closed);
+                }}
               />
             ) : viewMode === "row" || viewMode === "column" ? (
               <RoleColumnView
