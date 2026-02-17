@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import styles from "./styles.module.css";
 
 type PlanOption = { id: string; label: string };
@@ -440,40 +441,43 @@ export default function EnableDropdown({
         </div>
       )}
 
-      {confirmOpen ? (
-        <div className={styles.enableConfirmOverlay} onClick={() => setConfirmOpen(false)}>
-          <div
-            className={styles.enableConfirmCard}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h4 className={styles.enableConfirmTitle}>Disable selection?</h4>
-            <p className={styles.enableConfirmText}>
-              {contextLabel
-                ? `Warning: Disabling will remove this app from ${contextLabel}.`
-                : "Warning: Disabling will remove this app from the current deployment selection."}
-            </p>
-            <p className={styles.enableConfirmText}>
-              It will no longer be deployed until you enable it again.
-            </p>
-            <div className={styles.enableConfirmActions}>
-              <button
-                type="button"
-                onClick={() => setConfirmOpen(false)}
-                className={styles.enableCancelButton}
+      {confirmOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div className={styles.enableConfirmOverlay} onClick={() => setConfirmOpen(false)}>
+              <div
+                className={styles.enableConfirmCard}
+                onClick={(event) => event.stopPropagation()}
               >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDisable}
-                className={styles.enableDisableButton}
-              >
-                Disable
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+                <h4 className={styles.enableConfirmTitle}>Disable selection?</h4>
+                <p className={styles.enableConfirmText}>
+                  {contextLabel
+                    ? `Warning: Disabling will remove this app from ${contextLabel}.`
+                    : "Warning: Disabling will remove this app from the current deployment selection."}
+                </p>
+                <p className={styles.enableConfirmText}>
+                  It will no longer be deployed until you enable it again.
+                </p>
+                <div className={styles.enableConfirmActions}>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmOpen(false)}
+                    className={styles.enableCancelButton}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmDisable}
+                    className={styles.enableDisableButton}
+                  >
+                    Disable
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
     </>
   );
 }

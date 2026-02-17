@@ -211,13 +211,13 @@
 }
 
 .enableControlCompactNoPlan {
-  grid-template-columns: minmax(116px, 116px);
-  justify-content: center;
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch;
 }
 
 .enableControlCompactNoPlanWithDetails {
-  grid-template-columns: repeat(2, minmax(116px, 116px));
-  justify-content: center;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  justify-content: stretch;
 }
 
 .enableField {
@@ -253,7 +253,8 @@
 .enableControlCompactNoPlan .enableStateDropdownButton,
 .enableControlCompactNoPlanWithDetails .enableStateDropdownButton,
 .enableControlCompactNoPlanWithDetails .enableCompactDetailsButton {
-  width: 116px;
+  width: 100%;
+  min-width: 0;
   min-height: 34px;
 }
 
