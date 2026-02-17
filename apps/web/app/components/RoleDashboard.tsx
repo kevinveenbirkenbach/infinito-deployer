@@ -1676,6 +1676,12 @@ export default function RoleDashboard({
                 roleServerCountByRole={roleServerCountByRole}
                 baseUrl={baseUrl}
                 onOpenVideo={(url, title) => setActiveVideo({ url, title })}
+                onOpenDetails={(role) =>
+                  setActiveDetails({
+                    role,
+                    alias: String(activeAlias || "").trim() || matrixAliases[0] || "server",
+                  })
+                }
               />
             ) : (
               <RoleGridView

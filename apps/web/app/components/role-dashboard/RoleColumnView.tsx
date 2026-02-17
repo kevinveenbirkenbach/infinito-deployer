@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { colorForStatus, displayTargets } from "./helpers";
+import { colorForStatus } from "./helpers";
 import EnableDropdown from "./EnableDropdown";
 import RoleLogoView from "./RoleLogoView";
 import RoleQuickLinks from "./RoleQuickLinks";
@@ -26,6 +26,7 @@ type RoleColumnViewProps = {
   selectedPlanByRole?: Record<string, string | null>;
   onSelectRolePlan?: (roleId: string, planId: string | null) => void;
   onOpenVideo: (url: string, title: string) => void;
+  onOpenDetails?: (role: Role) => void;
 };
 
 const DESELECTION_FADE_DURATION_MS = 3000;
@@ -48,6 +49,20 @@ function buildLanes(roles: Role[], laneCount: number): Role[][] {
   return lanes;
 }
 
+function formatMonthlyPrice(amount: number): string {
+  const normalizedAmount = Math.max(0, Number(amount) || 0);
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: "EUR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(normalizedAmount);
+  } catch {
+    return `€${normalizedAmount.toFixed(2)}`;
+  }
+}
+
 export default function RoleColumnView({
   baseUrl,
   roles,
@@ -63,6 +78,7 @@ export default function RoleColumnView({
   selectedPlanByRole,
   onSelectRolePlan,
   onOpenVideo,
+  onOpenDetails,
 }: RoleColumnViewProps) {
   const [deselectionFlashRoleIds, setDeselectionFlashRoleIds] = useState<Set<string>>(
     new Set()
@@ -198,6 +214,15 @@ export default function RoleColumnView({
                       0,
                       Math.floor(Number(roleServerCountByRole?.[role.id] || 0))
                     );
+                    const selectedPlanLabel =
+                      plans.find(
+                        (plan) =>
+                          plan.id ===
+                          (selectedPlanId ||
+                            plans.find((candidate) => candidate.id === "community")?.id ||
+                            plans[0]?.id)
+                      )?.label || "Community";
+                    const monthlyPriceLabel = formatMonthlyPrice(Math.max(1, roleServerCount));
                     const statusColors = colorForStatus(role.status);
                     const statusStyle = {
                       "--status-bg": statusColors.bg,
@@ -222,128 +247,45 @@ export default function RoleColumnView({
                           }`}
                         >
                           {variant === "row" ? (
-                            <>
-                              <div className={styles.columnRowPrimary}>
-                                <RoleLogoView role={role} size={Math.max(36, iconSize - 4)} />
-                                <span className={styles.statusBadge} style={statusStyle}>
-                                  {role.status}
-                                </span>
-                                <div className={styles.columnTargetRow}>
-                                  {displayTargets(role.deployment_targets ?? []).map((target) => (
-                                    <span
-                                      key={`${role.id}-${target}-${cardIndex}`}
-                                      className={styles.targetBadgeTiny}
-                                    >
-                                      {target}
-                                    </span>
-                                  ))}
+                            <div className={styles.columnRowShell}>
+                              <div className={styles.columnRowVisualPane}>
+                                <div className={styles.columnLogoFrame}>
+                                  <RoleLogoView role={role} size={Math.max(88, iconSize + 24)} />
                                 </div>
-                                <div className={styles.columnRoleId} title={role.id}>
-                                  {role.id}
+                                <div className={styles.columnBadgeRow}>
+                                  <span className={styles.detailPlanBadge} title={selectedPlanLabel}>
+                                    {selectedPlanLabel}
+                                  </span>
+                                  <span className={styles.statusBadge} style={statusStyle}>
+                                    {role.status}
+                                  </span>
                                 </div>
-                              </div>
-                              <div className={styles.columnRowSecondary}>
-                                <div className={styles.columnRowHead}>
-                                  <h3 className={styles.columnRoleName} title={role.display_name}>
-                                    {role.display_name}
-                                  </h3>
-                                  <p className={`text-body-secondary ${styles.columnDescription}`}>
-                                    {role.description || "No description provided."}
-                                  </p>
-                                </div>
-                                <div className={styles.columnRowFooter}>
-                                  <div className={styles.columnSecondaryMeta}>
-                                    <div className={styles.columnLinksRow}>
-                                      <RoleQuickLinks
-                                        role={role}
-                                        onOpenVideo={onOpenVideo}
-                                        adaptiveOverflow
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className={styles.columnActions}>
-                                    <EnableDropdown
-                                      enabled={selectedState}
-                                      compact
-                                      pricingModel="app"
-                                      plans={plans}
-                                      selectedPlanId={selectedPlanId}
-                                      onSelectPlan={(planId) => {
-                                        onSelectRolePlan?.(role.id, planId);
-                                        if (selectedState && !planId) {
-                                          triggerDeselectionFlash(role.id);
-                                          return;
-                                        }
-                                        if (planId) clearDeselectionFlash(role.id);
-                                      }}
-                                      roleId={role.id}
-                                      pricing={role.pricing || null}
-                                      pricingSummary={role.pricing_summary || null}
-                                      baseUrl={baseUrl}
-                                      serverCount={roleServerCount}
-                                      appCount={1}
-                                      onEnable={() => {
-                                        clearDeselectionFlash(role.id);
-                                        if (!selectedState) onToggleSelected(role.id);
-                                      }}
-                                      onDisable={() => {
-                                        if (selectedState) {
-                                          onToggleSelected(role.id);
-                                          triggerDeselectionFlash(role.id);
-                                        }
-                                      }}
-                                    />
-                                  </div>
+                                <div className={styles.columnLinksRow}>
+                                  <RoleQuickLinks
+                                    role={role}
+                                    onOpenVideo={onOpenVideo}
+                                    adaptiveOverflow
+                                  />
                                 </div>
                               </div>
-                            </>
-                          ) : (
-                            <>
-                              <div className={styles.columnPrimary}>
-                                <div className={styles.columnTitleRow}>
-                                  <RoleLogoView role={role} size={iconSize} />
-                                  <div className={styles.columnTitleMeta}>
-                                    <h3 className={styles.columnRoleName} title={role.display_name}>
-                                      {role.display_name}
-                                    </h3>
-                                    <div className={styles.columnBadgeRow}>
-                                      <span className={styles.statusBadge} style={statusStyle}>
-                                        {role.status}
-                                      </span>
-                                      <span className={styles.columnRoleId} title={role.id}>
-                                        {role.id}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className={styles.columnTargetRow}>
-                                  {displayTargets(role.deployment_targets ?? []).map((target) => (
-                                    <span
-                                      key={`${role.id}-${target}-${cardIndex}`}
-                                      className={styles.targetBadge}
-                                    >
-                                      {target}
-                                    </span>
-                                  ))}
-                                </div>
-                                <p className={`text-body-secondary ${styles.columnDescription}`}>
+                              <div className={styles.columnRowContentPane}>
+                                <h3 className={styles.columnRoleName} title={role.display_name}>
+                                  {role.display_name}
+                                </h3>
+                                <p
+                                  className={`text-body-secondary ${styles.columnDescription} ${styles.columnDescriptionTight}`}
+                                >
                                   {role.description || "No description provided."}
                                 </p>
-                              </div>
-                              <div className={styles.columnSecondary}>
-                                <div className={styles.columnSecondaryMeta}>
-                                  <div className={styles.columnLinksRow}>
-                                    <RoleQuickLinks
-                                      role={role}
-                                      onOpenVideo={onOpenVideo}
-                                      adaptiveOverflow
-                                    />
-                                  </div>
+                                <div className={styles.columnPricePanel}>
+                                  <span className={styles.columnPriceValue}>{monthlyPriceLabel}</span>
+                                  <span className={styles.columnPriceCaption}>per month</span>
                                 </div>
-                                <div className={styles.columnActions}>
+                                <div className={styles.columnActionRow}>
                                   <EnableDropdown
                                     enabled={selectedState}
                                     compact
+                                    showPlanField={false}
                                     pricingModel="app"
                                     plans={plans}
                                     selectedPlanId={selectedPlanId}
@@ -359,6 +301,9 @@ export default function RoleColumnView({
                                     pricing={role.pricing || null}
                                     pricingSummary={role.pricing_summary || null}
                                     baseUrl={baseUrl}
+                                    onOpenDetails={
+                                      onOpenDetails ? () => onOpenDetails(role) : undefined
+                                    }
                                     serverCount={roleServerCount}
                                     appCount={1}
                                     onEnable={() => {
@@ -374,7 +319,79 @@ export default function RoleColumnView({
                                   />
                                 </div>
                               </div>
-                            </>
+                            </div>
+                          ) : (
+                            <div className={styles.columnVerticalShell}>
+                              <header className={styles.columnVerticalHeader}>
+                                <h3 className={styles.columnRoleName} title={role.display_name}>
+                                  {role.display_name}
+                                </h3>
+                              </header>
+                              <div className={styles.columnLogoFrame}>
+                                <RoleLogoView role={role} size={Math.max(92, iconSize + 28)} />
+                              </div>
+                              <div className={styles.columnBadgeRow}>
+                                <span className={styles.detailPlanBadge} title={selectedPlanLabel}>
+                                  {selectedPlanLabel}
+                                </span>
+                                <span className={styles.statusBadge} style={statusStyle}>
+                                  {role.status}
+                                </span>
+                              </div>
+                              <p
+                                className={`text-body-secondary ${styles.columnDescription} ${styles.columnDescriptionMedium}`}
+                              >
+                                {role.description || "No description provided."}
+                              </p>
+                              <div className={styles.columnPricePanel}>
+                                <span className={styles.columnPriceValue}>{monthlyPriceLabel}</span>
+                                <span className={styles.columnPriceCaption}>per month</span>
+                              </div>
+                              <div className={styles.columnLinksRow}>
+                                <RoleQuickLinks
+                                  role={role}
+                                  onOpenVideo={onOpenVideo}
+                                  adaptiveOverflow
+                                />
+                              </div>
+                              <div className={styles.columnActionRow}>
+                                <EnableDropdown
+                                  enabled={selectedState}
+                                  compact
+                                  showPlanField={false}
+                                  pricingModel="app"
+                                  plans={plans}
+                                  selectedPlanId={selectedPlanId}
+                                  onSelectPlan={(planId) => {
+                                    onSelectRolePlan?.(role.id, planId);
+                                    if (selectedState && !planId) {
+                                      triggerDeselectionFlash(role.id);
+                                      return;
+                                    }
+                                    if (planId) clearDeselectionFlash(role.id);
+                                  }}
+                                  roleId={role.id}
+                                  pricing={role.pricing || null}
+                                  pricingSummary={role.pricing_summary || null}
+                                  baseUrl={baseUrl}
+                                  onOpenDetails={
+                                    onOpenDetails ? () => onOpenDetails(role) : undefined
+                                  }
+                                  serverCount={roleServerCount}
+                                  appCount={1}
+                                  onEnable={() => {
+                                    clearDeselectionFlash(role.id);
+                                    if (!selectedState) onToggleSelected(role.id);
+                                  }}
+                                  onDisable={() => {
+                                    if (selectedState) {
+                                      onToggleSelected(role.id);
+                                      triggerDeselectionFlash(role.id);
+                                    }
+                                  }}
+                                />
+                              </div>
+                            </div>
                           )}
                         </div>
                       </article>

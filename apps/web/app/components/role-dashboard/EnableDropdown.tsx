@@ -22,6 +22,7 @@ type EnableDropdownProps = {
   disabled?: boolean;
   compact?: boolean;
   variant?: EnableDropdownVariant;
+  showPlanField?: boolean;
   tileMeta?: ReactNode;
   pricingModel?: PricingModel;
   contextLabel?: string;
@@ -145,6 +146,7 @@ export default function EnableDropdown({
   disabled = false,
   compact = false,
   variant = "default",
+  showPlanField = true,
   tileMeta,
   pricingModel = "app",
   contextLabel,
@@ -380,25 +382,35 @@ export default function EnableDropdown({
           <div className={styles.enableTileMetaRow}>{tileMeta || null}</div>
         </div>
       ) : (
-        <div className={`${styles.enableControl} ${compact ? styles.enableControlCompact : ""}`}>
-          <div className={styles.enableField}>
-            {hasPlanOptions && planOptions.length > 1 ? (
-              <select
-                value={selectedPlanValue || ""}
-                disabled={disabled}
-                onChange={(event) => onSelectPlan?.(asTrimmedString(event.target.value) || null)}
-                className={styles.enablePlanSelect}
-              >
-                {planOptions.map((plan) => (
-                  <option key={plan.id} value={plan.id}>
-                    {plan.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <span className={styles.enablePlanStatic}>{selectedPlanLabel}</span>
-            )}
-          </div>
+        <div
+          className={`${styles.enableControl} ${compact ? styles.enableControlCompact : ""} ${
+            compact && onOpenDetails ? styles.enableControlCompactWithDetails : ""
+          } ${compact && !showPlanField ? styles.enableControlCompactNoPlan : ""} ${
+            compact && !showPlanField && onOpenDetails
+              ? styles.enableControlCompactNoPlanWithDetails
+              : ""
+          }`}
+        >
+          {showPlanField ? (
+            <div className={styles.enableField}>
+              {hasPlanOptions && planOptions.length > 1 ? (
+                <select
+                  value={selectedPlanValue || ""}
+                  disabled={disabled}
+                  onChange={(event) => onSelectPlan?.(asTrimmedString(event.target.value) || null)}
+                  className={styles.enablePlanSelect}
+                >
+                  {planOptions.map((plan) => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className={styles.enablePlanStatic}>{selectedPlanLabel}</span>
+              )}
+            </div>
+          ) : null}
 
           {!compact ? (
             <div className={styles.enableField}>
@@ -411,6 +423,20 @@ export default function EnableDropdown({
           <div className={`${styles.enableField} ${styles.enableFieldState}`}>
             {renderStateControl()}
           </div>
+
+          {compact && onOpenDetails ? (
+            <button
+              type="button"
+              onClick={onOpenDetails}
+              disabled={disabled}
+              className={styles.enableCompactDetailsButton}
+              aria-label="Open details"
+              title="Details"
+            >
+              <i className="fa-solid fa-circle-info" aria-hidden="true" />
+              <span>Details</span>
+            </button>
+          ) : null}
         </div>
       )}
 

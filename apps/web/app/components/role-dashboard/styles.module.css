@@ -206,6 +206,20 @@
   width: 100%;
 }
 
+.enableControlCompactWithDetails {
+  grid-template-columns: minmax(0, 1fr) minmax(104px, auto) minmax(90px, auto);
+}
+
+.enableControlCompactNoPlan {
+  grid-template-columns: minmax(116px, 116px);
+  justify-content: center;
+}
+
+.enableControlCompactNoPlanWithDetails {
+  grid-template-columns: repeat(2, minmax(116px, 116px));
+  justify-content: center;
+}
+
 .enableField {
   display: grid;
   gap: 4px;
@@ -214,6 +228,39 @@
 
 .enableFieldState {
   grid-column: auto;
+}
+
+.enableCompactDetailsButton {
+  min-height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-tertiary-bg);
+  color: var(--deployer-muted-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.enableCompactDetailsButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.enableControlCompactNoPlan .enableStateDropdownButton,
+.enableControlCompactNoPlanWithDetails .enableStateDropdownButton,
+.enableControlCompactNoPlanWithDetails .enableCompactDetailsButton {
+  width: 116px;
+  min-height: 34px;
+}
+
+.enableControlCompactNoPlan .enableStateDropdownButtonLabel,
+.enableControlCompactNoPlanWithDetails .enableStateDropdownButtonLabel {
+  width: 100%;
+  justify-content: center;
 }
 
 .enableFieldLabel {
@@ -1266,11 +1313,92 @@
 }
 
 .columnCardLayoutRow {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .columnCardLayoutColumn {
-  grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.columnRowShell {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(176px, 0.9fr) minmax(0, 1.25fr);
+  gap: 12px;
+  height: 100%;
+}
+
+.columnRowVisualPane {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  border-right: 1px solid var(--bs-border-color-translucent);
+  padding-right: 10px;
+}
+
+.columnRowContentPane {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 8px;
+}
+
+.columnVerticalShell {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto auto;
+  gap: 8px;
+  height: 100%;
+  justify-items: center;
+}
+
+.columnVerticalHeader {
+  min-width: 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--bs-border-color-translucent);
+}
+
+.columnLogoFrame {
+  min-height: 0;
+  width: 100%;
+  border: none;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 0;
+}
+
+.columnPricePanel {
+  width: max-content;
+  max-width: 100%;
+  border: none;
+  background: transparent;
+  display: grid;
+  gap: 1px;
+  padding: 0;
+}
+
+.columnPriceValue {
+  font-size: clamp(28px, 3.8vh, 48px);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.columnPriceCaption {
+  font-size: 14px;
+  line-height: 1.1;
+  color: var(--deployer-muted-ink);
+}
+
+.columnActionRow {
+  min-width: 0;
+  width: 100%;
+  margin-top: auto;
 }
 
 .columnRowPrimary {
@@ -1333,13 +1461,38 @@
   flex-wrap: wrap;
 }
 
-.columnRoleId {
+.columnInfoStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.columnInfoChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: color-mix(in srgb, var(--bs-tertiary-bg) 80%, transparent);
+  color: var(--deployer-muted-ink);
   font-size: 11px;
-  line-height: 1.3;
-  white-space: nowrap;
+  line-height: 1.2;
+  max-width: 100%;
+}
+
+.columnInfoChip i {
+  font-size: 10px;
+}
+
+.columnInfoChip span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
+  white-space: nowrap;
 }
 
 .columnRoleName {
@@ -1358,14 +1511,100 @@
   min-height: 22px;
 }
 
+.columnTopicRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 22px;
+}
+
+.columnTopicBadge {
+  font-size: 10px;
+  line-height: 1.2;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-info-border-subtle);
+  background: color-mix(in srgb, var(--bs-info-bg-subtle) 78%, transparent);
+  color: var(--bs-info-text-emphasis);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .columnDescription {
   margin: 0;
   font-size: 13px;
   line-height: 1.42;
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.columnDescriptionTight {
+  -webkit-line-clamp: 2;
+}
+
+.columnDescriptionMedium {
+  -webkit-line-clamp: 3;
+}
+
+.columnVerticalShell .columnVerticalHeader {
+  width: 100%;
+  text-align: center;
+}
+
+.columnVerticalShell .columnLogoFrame {
+  width: 100%;
+}
+
+.columnVerticalShell .logoRoot {
+  width: 66.6667%;
+  max-width: 66.6667%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  justify-self: center;
+}
+
+.columnVerticalShell .columnBadgeRow {
+  justify-content: center;
+}
+
+.columnVerticalShell .columnDescription {
+  width: 100%;
+  text-align: left;
+}
+
+.columnVerticalShell .columnPricePanel {
+  width: 100%;
+}
+
+.columnVerticalShell .columnPriceValue {
+  width: 100%;
+  text-align: center;
+}
+
+.columnVerticalShell .columnPriceCaption {
+  width: 100%;
+  text-align: right;
+}
+
+.columnVerticalShell .columnLinksRow {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.columnVerticalShell .columnActionRow {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.columnVerticalShell .columnActionRow .enableControl {
+  width: auto;
+  max-width: none;
 }
 
 .columnSecondary {
@@ -1400,6 +1639,17 @@
   .columnCardRow {
     width: min(640px, 92vw);
   }
+
+  .columnRowShell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .columnRowVisualPane {
+    border-right: none;
+    border-bottom: 1px solid var(--bs-border-color-translucent);
+    padding-right: 0;
+    padding-bottom: 8px;
+  }
 }
 
 @media (max-width: 900px) {
@@ -1425,7 +1675,7 @@
   width: var(--role-logo-size, 40px);
   height: var(--role-logo-size, 40px);
   border-radius: 16px;
-  background: var(--bs-secondary-bg);
+  background: transparent;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -1456,6 +1706,7 @@
 
 .logoMetaIcon {
   font-size: var(--role-logo-meta-size, 18px);
+  line-height: 1;
 }
 
 .logoInitials {
@@ -1465,8 +1716,8 @@
   place-items: center;
   font-size: var(--role-logo-initial-size, 14px);
   font-weight: 700;
-  background: var(--bs-body-color);
-  color: var(--bs-body-bg);
+  background: transparent;
+  color: var(--bs-body-color);
 }
 
 .quickLinkControl {

@@ -72,7 +72,7 @@ export default function RoleLogoView({
 
   const logoSizeStyle = {
     "--role-logo-size": `${size}px`,
-    "--role-logo-meta-size": `${Math.max(16, Math.floor(size * 0.45))}px`,
+    "--role-logo-meta-size": `${Math.max(20, Math.floor(size * 0.82))}px`,
     "--role-logo-initial-size": `${Math.max(14, Math.floor(size * 0.32))}px`,
   } as CSSProperties;
 
