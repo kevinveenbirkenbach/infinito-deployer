@@ -31,6 +31,8 @@ type RoleAppConfigPayload = {
 };
 
 const ROW_FILTER_OPTIONS: number[] = [1, 2, 3, 5, 10, 20, 100, 500, 1000];
+const DEFAULT_VIEW_MODES: ViewMode[] = ["detail", "list", "mini", "matrix"];
+const ANIMATED_VIEW_MODES: ViewMode[] = ["row", "column"];
 
 function formatViewLabel(mode: ViewMode): string {
   return mode.charAt(0).toUpperCase() + mode.slice(1);
@@ -1469,7 +1471,32 @@ export default function RoleDashboard({
                       className={styles.viewModeMenu}
                       role="menu"
                     >
-                      {VIEW_MODES.map((mode) => {
+                      {DEFAULT_VIEW_MODES.map((mode) => {
+                        const active = viewMode === mode;
+                        return (
+                          <button
+                            key={mode}
+                            onClick={() => {
+                              setViewMode(mode);
+                              setViewMenuOpen(false);
+                            }}
+                            className={`${styles.viewModeMenuItem} ${
+                              active ? styles.viewModeMenuItemActive : ""
+                            }`}
+                          >
+                            <i className={VIEW_MODE_ICONS[mode]} aria-hidden="true" />
+                            <span>{formatViewLabel(mode)}</span>
+                          </button>
+                        );
+                      })}
+                      <div
+                        key="view-mode-group-animated"
+                        className={styles.viewModeMenuSectionLabel}
+                        role="presentation"
+                      >
+                        Animated
+                      </div>
+                      {ANIMATED_VIEW_MODES.map((mode) => {
                         const active = viewMode === mode;
                         return (
                           <button

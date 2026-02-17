@@ -172,6 +172,14 @@
   gap: 4px;
 }
 
+.viewModeMenuSectionLabel {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--deployer-muted-ink);
+  padding: 6px 10px 2px;
+}
+
 .viewModeMenuItem {
   display: inline-flex;
   align-items: center;
