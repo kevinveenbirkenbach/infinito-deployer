@@ -163,7 +163,7 @@ export default function RoleDashboard({
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useState<ViewMode>("detail");
   const [columnAnimationRunning, setColumnAnimationRunning] = useState(true);
-  const [columnSpeedOffsetSeconds, setColumnSpeedOffsetSeconds] = useState(0);
+  const [animatedRoleOffset, setAnimatedRoleOffset] = useState(0);
   const [rowsOverride, setRowsOverride] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef<HTMLDivElement | null>(null);
@@ -677,11 +677,21 @@ export default function RoleDashboard({
 
   const pageCount = isLaneAnimatedView ? 1 : Math.max(1, Math.ceil(activeItemCount / pageSize));
   const currentPage = isLaneAnimatedView ? 1 : Math.min(page, pageCount);
+  const animatedRoles = useMemo(() => {
+    if (!isLaneAnimatedView || filteredRoles.length === 0) return filteredRoles;
+    const total = filteredRoles.length;
+    const normalizedOffset = ((animatedRoleOffset % total) + total) % total;
+    if (normalizedOffset === 0) return filteredRoles;
+    return [
+      ...filteredRoles.slice(normalizedOffset),
+      ...filteredRoles.slice(0, normalizedOffset),
+    ];
+  }, [filteredRoles, animatedRoleOffset, isLaneAnimatedView]);
   const paginatedRoles = useMemo(() => {
-    if (isLaneAnimatedView) return filteredRoles;
+    if (isLaneAnimatedView) return animatedRoles;
     const start = (currentPage - 1) * pageSize;
     return filteredRoles.slice(start, start + pageSize);
-  }, [filteredRoles, currentPage, pageSize, isLaneAnimatedView]);
+  }, [filteredRoles, currentPage, pageSize, isLaneAnimatedView, animatedRoles]);
   const paginatedBundles = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredBundles.slice(start, start + pageSize);
@@ -914,6 +924,7 @@ export default function RoleDashboard({
 
   useEffect(() => {
     setPage(1);
+    setAnimatedRoleOffset(0);
   }, [
     query,
     statusFilter,
@@ -1656,7 +1667,6 @@ export default function RoleDashboard({
                 laneCount={rows}
                 laneSize={viewMode === "row" ? rowLaneSize : columnLaneSize}
                 animationRunning={columnAnimationRunning}
-                speedOffsetSeconds={columnSpeedOffsetSeconds}
                 onToggleSelected={onToggleSelected}
                 rolePlans={rolePlanOptions}
                 selectedPlanByRole={activeSelectedPlanByRole}
@@ -1700,27 +1710,34 @@ export default function RoleDashboard({
             type="button"
             onClick={() => {
               if (isLaneAnimatedView) {
-                setColumnAnimationRunning(true);
-                setColumnSpeedOffsetSeconds((prev) => prev + 1);
+                if (filteredRoles.length === 0) return;
+                const animatedStep = Math.max(1, laneCount);
+                setAnimatedRoleOffset((prev) => prev - animatedStep);
                 return;
               }
               setPage((prev) => Math.max(1, prev - 1));
             }}
-            disabled={isLaneAnimatedView ? false : currentPage <= 1}
+            disabled={isLaneAnimatedView ? filteredRoles.length <= 1 : currentPage <= 1}
             className={`${styles.pageButton} ${
               isLaneAnimatedView
-                ? `${styles.pageButtonEnabled} ${styles.columnTransportButton}`
-                : currentPage <= 1
+                ? filteredRoles.length <= 1
                   ? styles.pageButtonDisabled
+                  : `${styles.pageButtonEnabled} ${styles.columnTransportButton}`
+                : currentPage <= 1
+                ? styles.pageButtonDisabled
                   : styles.pageButtonEnabled
             }`}
-            aria-label={isLaneAnimatedView ? "Animation slower" : "Previous page"}
-            title={isLaneAnimatedView ? "Langsamer" : "Previous page"}
+            aria-label={
+              isLaneAnimatedView
+                ? "Skip backward"
+                : "Previous page"
+            }
+            title={isLaneAnimatedView ? "Zurückspringen" : "Previous page"}
           >
             {isLaneAnimatedView ? (
               <>
-                <i className="fa-solid fa-minus" aria-hidden="true" />
-                <span className="visually-hidden">Langsamer</span>
+                <i className="fa-solid fa-backward-step" aria-hidden="true" />
+                <span className="visually-hidden">Zurückspringen</span>
               </>
             ) : (
               "Prev"
@@ -1755,27 +1772,30 @@ export default function RoleDashboard({
             type="button"
             onClick={() => {
               if (isLaneAnimatedView) {
-                setColumnAnimationRunning(true);
-                setColumnSpeedOffsetSeconds((prev) => prev - 1);
+                if (filteredRoles.length === 0) return;
+                const animatedStep = Math.max(1, laneCount);
+                setAnimatedRoleOffset((prev) => prev + animatedStep);
                 return;
               }
               setPage((prev) => Math.min(pageCount, prev + 1));
             }}
-            disabled={isLaneAnimatedView ? false : currentPage >= pageCount}
+            disabled={isLaneAnimatedView ? filteredRoles.length <= 1 : currentPage >= pageCount}
             className={`${styles.pageButton} ${
               isLaneAnimatedView
-                ? `${styles.pageButtonEnabled} ${styles.columnTransportButton}`
-                : currentPage >= pageCount
+                ? filteredRoles.length <= 1
                   ? styles.pageButtonDisabled
+                  : `${styles.pageButtonEnabled} ${styles.columnTransportButton}`
+                : currentPage >= pageCount
+                ? styles.pageButtonDisabled
                   : styles.pageButtonEnabled
             }`}
-            aria-label={isLaneAnimatedView ? "Animation faster" : "Next page"}
-            title={isLaneAnimatedView ? "Schneller" : "Next page"}
+            aria-label={isLaneAnimatedView ? "Skip forward" : "Next page"}
+            title={isLaneAnimatedView ? "Vorspringen" : "Next page"}
           >
             {isLaneAnimatedView ? (
               <>
-                <i className="fa-solid fa-plus" aria-hidden="true" />
-                <span className="visually-hidden">Schneller</span>
+                <i className="fa-solid fa-forward-step" aria-hidden="true" />
+                <span className="visually-hidden">Vorspringen</span>
               </>
             ) : (
               "Next"

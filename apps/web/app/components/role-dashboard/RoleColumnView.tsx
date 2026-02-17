@@ -20,7 +20,6 @@ type RoleColumnViewProps = {
   laneCount: number;
   laneSize: number;
   animationRunning: boolean;
-  speedOffsetSeconds: number;
   onToggleSelected: (id: string) => void;
   roleServerCountByRole?: Record<string, number>;
   rolePlans?: Record<string, { id: string; label: string }[]>;
@@ -49,10 +48,6 @@ function buildLanes(roles: Role[], laneCount: number): Role[][] {
   return lanes;
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
 export default function RoleColumnView({
   baseUrl,
   roles,
@@ -62,7 +57,6 @@ export default function RoleColumnView({
   laneCount,
   laneSize,
   animationRunning,
-  speedOffsetSeconds,
   onToggleSelected,
   roleServerCountByRole,
   rolePlans,
@@ -163,13 +157,8 @@ export default function RoleColumnView({
           const basePerItemSeconds =
             laneRandomPerItemSeconds[laneIndex] ??
             (PER_ITEM_DURATION_MIN_SECONDS + PER_ITEM_DURATION_MAX_SECONDS) / 2;
-          const adjustedPerItemSeconds = clamp(
-            basePerItemSeconds + speedOffsetSeconds,
-            PER_ITEM_DURATION_MIN_SECONDS,
-            PER_ITEM_DURATION_MAX_SECONDS
-          );
           const itemsPerLoop = Math.max(1, laneRoles.length);
-          const duration = Number((adjustedPerItemSeconds * itemsPerLoop).toFixed(2));
+          const duration = Number((basePerItemSeconds * itemsPerLoop).toFixed(2));
           const laneStyle = {
             "--column-scroll-duration": `${duration}s`,
           } as CSSProperties;
