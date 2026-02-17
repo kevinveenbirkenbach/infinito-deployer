@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
+import BundleAppList, { type BundleAppListRow } from "./BundleAppList";
+import BundleDetailsModal from "./BundleDetailsModal";
 import EnableDropdown from "./EnableDropdown";
 import styles from "./styles.module.css";
-import type { Bundle, ViewConfig, ViewMode } from "./types";
+import type { Bundle, Role, ViewConfig, ViewMode } from "./types";
 
 type BundleState = {
   enabled: boolean;
@@ -15,10 +17,12 @@ type BundleState = {
 type BundleEntry = {
   bundle: Bundle;
   roleIds: string[];
-  visibleRoles: string[];
-  hiddenRoles: number;
+  roleRows: BundleRoleRow[];
+  totalPriceLabel: string;
   state: BundleState;
 };
+
+type BundleRoleRow = BundleAppListRow;
 
 type BundleGridViewProps = {
   bundles: Bundle[];
@@ -29,13 +33,30 @@ type BundleGridViewProps = {
   minHeight: number;
   activeAlias: string;
   bundleStates: Record<string, BundleState>;
+  roleById: Record<string, Role>;
+  roleServerCountByRole?: Record<string, number>;
+  onOpenRoleDetails?: (role: Role) => void;
   onEnableBundle: (bundle: Bundle) => void;
   onDisableBundle: (bundle: Bundle) => void;
 };
 
 const DESELECTION_FADE_DURATION_MS = 3000;
 const LIST_GRID_TEMPLATE =
-  "minmax(210px, 1.8fr) minmax(100px, 0.75fr) minmax(220px, 1.9fr) minmax(180px, 1.15fr) minmax(116px, 0.8fr)";
+  "minmax(210px, 1.5fr) minmax(100px, 0.7fr) minmax(220px, 1.5fr) minmax(240px, 2fr) minmax(140px, 0.9fr)";
+
+function formatMonthlyPrice(amount: number): string {
+  const normalizedAmount = Math.max(0, Number(amount) || 0);
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: "EUR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(normalizedAmount);
+  } catch {
+    return `€${normalizedAmount.toFixed(2)}`;
+  }
+}
 
 function bundleIconClass(bundle: Bundle): string {
   const raw = String(bundle.logo_class || "").trim();
@@ -88,6 +109,9 @@ export default function BundleGridView({
   minHeight,
   activeAlias,
   bundleStates,
+  roleById,
+  roleServerCountByRole,
+  onOpenRoleDetails,
   onEnableBundle,
   onDisableBundle,
 }: BundleGridViewProps) {
@@ -95,6 +119,7 @@ export default function BundleGridView({
     new Set()
   );
   const [hoveredBundleId, setHoveredBundleId] = useState<string | null>(null);
+  const [activeBundleDetailsId, setActiveBundleDetailsId] = useState<string | null>(null);
   const deselectionTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const gridStyle = {
@@ -112,22 +137,44 @@ export default function BundleGridView({
         const roleIds = (Array.isArray(bundle.role_ids) ? bundle.role_ids : [])
           .map((roleId) => String(roleId || "").trim())
           .filter(Boolean);
-        const visibleRoles = roleIds.slice(0, 2);
-        const hiddenRoles = Math.max(0, roleIds.length - visibleRoles.length);
+        const roleRows = roleIds.map((roleId) => {
+          const role = roleById[roleId] || null;
+          const rawServerCount = Math.max(
+            0,
+            Math.floor(Number(roleServerCountByRole?.[roleId] || 0))
+          );
+          const monthlyPriceAmount = Math.max(
+            1,
+            rawServerCount
+          );
+          return {
+            roleId,
+            role,
+            label: String(role?.display_name || roleId).trim(),
+            monthlyPriceAmount,
+            monthlyPriceLabel: formatMonthlyPrice(monthlyPriceAmount),
+            isActive: rawServerCount > 0,
+          };
+        });
         const state = bundleStates[bundle.id] || {
           enabled: false,
           selectedCount: 0,
           totalCount: roleIds.length,
         };
+        const totalPriceAmount = roleRows.reduce((sum, row) => sum + row.monthlyPriceAmount, 0);
         return {
           bundle,
           roleIds,
-          visibleRoles,
-          hiddenRoles,
+          roleRows,
+          totalPriceLabel: formatMonthlyPrice(totalPriceAmount),
           state,
         };
       }),
-    [bundles, bundleStates]
+    [bundles, bundleStates, roleById, roleServerCountByRole]
+  );
+  const activeBundleDetails = useMemo(
+    () => entries.find((entry) => entry.bundle.id === activeBundleDetailsId) || null,
+    [entries, activeBundleDetailsId]
   );
 
   const clearDeselectionFlash = (bundleId: string) => {
@@ -172,20 +219,13 @@ export default function BundleGridView({
     onEnableBundle(entry.bundle);
   };
 
-  const renderBundleSummary = (entry: BundleEntry) => (
-    <div className={styles.detailLinks}>
-      <span className={styles.bundleRoleCount}>
-        {entry.state.selectedCount}/{entry.state.totalCount} apps
-      </span>
-      {entry.visibleRoles.map((roleId) => (
-        <span key={`${entry.bundle.id}:${roleId}`} className={styles.bundleBadgeTiny}>
-          {roleId}
-        </span>
-      ))}
-      {entry.hiddenRoles > 0 ? (
-        <span className={styles.quickLinkOverflow}>...</span>
-      ) : null}
-    </div>
+  const renderBundleRoleList = (entry: BundleEntry, pageSize: number) => (
+    <BundleAppList
+      bundleId={`${viewMode}:${entry.bundle.id}`}
+      rows={entry.roleRows}
+      pageSize={pageSize}
+      onOpenRoleDetails={onOpenRoleDetails}
+    />
   );
 
   useEffect(() => {
@@ -195,76 +235,103 @@ export default function BundleGridView({
     };
   }, []);
 
+  useEffect(() => {
+    if (!activeBundleDetailsId) return;
+    const exists = entries.some((entry) => entry.bundle.id === activeBundleDetailsId);
+    if (!exists) setActiveBundleDetailsId(null);
+  }, [entries, activeBundleDetailsId]);
+
   if (entries.length === 0) {
     return <div className={`text-body-secondary ${styles.columnEmpty}`}>No bundles match the filters.</div>;
   }
 
   if (viewMode === "list" || viewMode === "matrix") {
     return (
-      <div className={styles.listRoot}>
-        <div className={`${styles.listGrid} ${styles.listHeader}`} style={listGridStyle}>
-          <span className={styles.listHeaderCell}>Bundle</span>
-          <span className={styles.listHeaderCell}>Target</span>
-          <span className={styles.listHeaderCell}>Description</span>
-          <span className={styles.listHeaderCell}>Apps</span>
-          <span className={styles.listHeaderCell}>
-            Enabled
-            <i className="fa-solid fa-lock" aria-hidden="true" />
-          </span>
-        </div>
-        {entries.map((entry) => {
-          const { bundle, roleIds, state } = entry;
-          const isDeselectionFlashing = deselectionFlashBundleIds.has(bundle.id);
-          return (
-            <div
-              key={bundle.id}
-              className={`${styles.listGrid} ${styles.listRow} ${
-                state.enabled ? styles.listRowSelected : styles.listRowDefault
-              } ${isDeselectionFlashing ? styles.listRowDeselectedFlash : ""}`}
-              style={listGridStyle}
-            >
-              <div className={styles.listRoleCell}>
-                {bundleLogo(bundle, Math.max(28, viewConfig.iconSize - 8))}
-                <div className={styles.listRoleText}>
-                  <div className={styles.listRoleName}>{bundle.title}</div>
-                  <div className={`text-body-secondary ${styles.listRoleId}`}>{bundle.id}</div>
+      <>
+        <div className={styles.listRoot}>
+          <div className={`${styles.listGrid} ${styles.listHeader}`} style={listGridStyle}>
+            <span className={styles.listHeaderCell}>Bundle</span>
+            <span className={styles.listHeaderCell}>Target</span>
+            <span className={styles.listHeaderCell}>Description</span>
+            <span className={styles.listHeaderCell}>Apps</span>
+            <span className={styles.listHeaderCell}>
+              Enabled
+              <i className="fa-solid fa-lock" aria-hidden="true" />
+            </span>
+          </div>
+          {entries.map((entry) => {
+            const { bundle, roleIds, state } = entry;
+            const isDeselectionFlashing = deselectionFlashBundleIds.has(bundle.id);
+            return (
+              <div
+                key={bundle.id}
+                className={`${styles.listGrid} ${styles.listRow} ${
+                  state.enabled ? styles.listRowSelected : styles.listRowDefault
+                } ${isDeselectionFlashing ? styles.listRowDeselectedFlash : ""}`}
+                style={listGridStyle}
+              >
+                <div className={styles.listRoleCell}>
+                  {bundleLogo(bundle, Math.max(28, viewConfig.iconSize - 8))}
+                  <div className={styles.listRoleText}>
+                    <div className={styles.listRoleName}>{bundle.title}</div>
+                    <div className={`text-body-secondary ${styles.listRoleId}`}>{bundle.id}</div>
+                  </div>
+                </div>
+                <span
+                  className={`${styles.statusBadge} ${styles.listStatusBadge}`}
+                  style={targetStatusStyle(bundle.deploy_target)}
+                >
+                  {bundle.deploy_target || "bundle"}
+                </span>
+                <div className={`text-body-secondary ${styles.listDescription}`}>
+                  {bundle.description || "No description provided."}
+                </div>
+                <div className={styles.listPriceCell}>
+                  <span className={styles.listPriceValue}>{entry.totalPriceLabel}</span>
+                  <span className={`${styles.listPriceCaption} ${styles.bundlePerMonthCaption}`}>
+                    per month
+                  </span>
+                  {renderBundleRoleList(entry, 2)}
+                </div>
+                <div className={styles.listPickActions}>
+                  <EnableDropdown
+                    enabled={state.enabled}
+                    compact
+                    showPlanField={false}
+                    pricingModel="bundle"
+                    plans={[{ id: "community", label: "Community" }]}
+                    selectedPlanId="community"
+                    appCount={Math.max(1, roleIds.length)}
+                    contextLabel={`device "${activeAlias}" for bundle "${bundle.title}"`}
+                    onOpenDetails={() => setActiveBundleDetailsId(bundle.id)}
+                    onEnable={() => {
+                      clearDeselectionFlash(bundle.id);
+                      onEnableBundle(bundle);
+                    }}
+                    onDisable={() => {
+                      if (!state.enabled) return;
+                      onDisableBundle(bundle);
+                      triggerDeselectionFlash(bundle.id);
+                    }}
+                  />
                 </div>
               </div>
-              <span
-                className={`${styles.statusBadge} ${styles.listStatusBadge}`}
-                style={targetStatusStyle(bundle.deploy_target)}
-              >
-                {bundle.deploy_target || "bundle"}
-              </span>
-              <div className={`text-body-secondary ${styles.listDescription}`}>
-                {bundle.description || "No description provided."}
-              </div>
-              {renderBundleSummary(entry)}
-              <div className={styles.listPickActions}>
-                <EnableDropdown
-                  enabled={state.enabled}
-                  compact
-                  showPlanField={false}
-                  pricingModel="bundle"
-                  plans={[{ id: "community", label: "Community" }]}
-                  selectedPlanId="community"
-                  appCount={Math.max(1, roleIds.length)}
-                  contextLabel={`device "${activeAlias}" for bundle "${bundle.title}"`}
-                  onEnable={() => {
-                    clearDeselectionFlash(bundle.id);
-                    onEnableBundle(bundle);
-                  }}
-                  onDisable={() => {
-                    if (!state.enabled) return;
-                    onDisableBundle(bundle);
-                    triggerDeselectionFlash(bundle.id);
-                  }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+        <BundleDetailsModal
+          bundle={activeBundleDetails?.bundle || null}
+          roleRows={activeBundleDetails?.roleRows || []}
+          totalPriceLabel={activeBundleDetails?.totalPriceLabel || "€0.00"}
+          appsCaption={
+            activeBundleDetails
+              ? `${activeBundleDetails.state.selectedCount}/${activeBundleDetails.state.totalCount}`
+              : "0/0"
+          }
+          onOpenRoleDetails={onOpenRoleDetails}
+          onClose={() => setActiveBundleDetailsId(null)}
+        />
+      </>
     );
   }
 
@@ -272,8 +339,9 @@ export default function BundleGridView({
   const isHorizontalView = viewMode === "row" || viewMode === "column";
 
   return (
-    <div className={styles.gridRoot} style={gridStyle}>
-      {entries.map((entry) => {
+    <>
+      <div className={styles.gridRoot} style={gridStyle}>
+        {entries.map((entry) => {
         const { bundle, roleIds, state } = entry;
         const isDeselectionFlashing = deselectionFlashBundleIds.has(bundle.id);
         const cardHeightStyle = {
@@ -353,6 +421,14 @@ export default function BundleGridView({
                   <p className={`text-body-secondary ${styles.roleDescriptionShort}`}>
                     {bundle.description || "No description provided."}
                   </p>
+                  <div className={styles.listPriceCell}>
+                    <span className={styles.listPriceValue}>{entry.totalPriceLabel}</span>
+                    <span
+                      className={`${styles.listPriceCaption} ${styles.bundlePerMonthCaption}`}
+                    >
+                      per month
+                    </span>
+                  </div>
                 </div>
                 <div className={styles.roleActionButtons}>
                   <EnableDropdown
@@ -364,6 +440,7 @@ export default function BundleGridView({
                     selectedPlanId="community"
                     appCount={Math.max(1, roleIds.length)}
                     contextLabel={`device "${activeAlias}" for bundle "${bundle.title}"`}
+                    onOpenDetails={() => setActiveBundleDetailsId(bundle.id)}
                     onEnable={() => {
                       clearDeselectionFlash(bundle.id);
                       onEnableBundle(bundle);
@@ -376,7 +453,7 @@ export default function BundleGridView({
                   />
                 </div>
               </div>
-              <div className={styles.horizontalLinks}>{renderBundleSummary(entry)}</div>
+              <div className={styles.horizontalLinks}>{renderBundleRoleList(entry, 3)}</div>
             </article>
           );
         }
@@ -409,19 +486,26 @@ export default function BundleGridView({
             <p className={styles.roleDescriptionOneLine}>
               {bundle.description || "No description provided."}
             </p>
+            <div className={styles.listPriceCell}>
+              <span className={styles.listPriceValue}>{entry.totalPriceLabel}</span>
+              <span className={`${styles.listPriceCaption} ${styles.bundlePerMonthCaption}`}>
+                per month
+              </span>
+            </div>
+            <div className={styles.detailLinksRow}>{renderBundleRoleList(entry, 3)}</div>
 
             <div className={styles.detailFooterRow}>
               <div className={styles.detailControlRow}>
                 <EnableDropdown
                   enabled={state.enabled}
-                  variant="tile"
+                  compact
                   showPlanField={false}
                   pricingModel="bundle"
                   plans={[{ id: "community", label: "Community" }]}
                   selectedPlanId="community"
-                  tileMeta={renderBundleSummary(entry)}
                   appCount={Math.max(1, roleIds.length)}
                   contextLabel={`device "${activeAlias}" for bundle "${bundle.title}"`}
+                  onOpenDetails={() => setActiveBundleDetailsId(bundle.id)}
                   onEnable={() => {
                     clearDeselectionFlash(bundle.id);
                     onEnableBundle(bundle);
@@ -436,7 +520,20 @@ export default function BundleGridView({
             </div>
           </article>
         );
-      })}
-    </div>
+        })}
+      </div>
+      <BundleDetailsModal
+        bundle={activeBundleDetails?.bundle || null}
+        roleRows={activeBundleDetails?.roleRows || []}
+        totalPriceLabel={activeBundleDetails?.totalPriceLabel || "€0.00"}
+        appsCaption={
+          activeBundleDetails
+            ? `${activeBundleDetails.state.selectedCount}/${activeBundleDetails.state.totalCount}`
+            : "0/0"
+        }
+        onOpenRoleDetails={onOpenRoleDetails}
+        onClose={() => setActiveBundleDetailsId(null)}
+      />
+    </>
   );
 }

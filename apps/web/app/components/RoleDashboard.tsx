@@ -552,6 +552,16 @@ export default function RoleDashboard({
     return counts;
   }, [roles, matrixAliases, selectedLookup]);
 
+  const roleById = useMemo(() => {
+    const out: Record<string, Role> = {};
+    roles.forEach((role) => {
+      const roleId = String(role.id || "").trim();
+      if (!roleId) return;
+      out[roleId] = role;
+    });
+    return out;
+  }, [roles]);
+
   const rolePlanOptions = useMemo(() => {
     const out: Record<string, { id: string; label: string }[]> = {};
     roles.forEach((role) => {
@@ -1624,6 +1634,14 @@ export default function RoleDashboard({
                   animationRunning={columnAnimationRunning}
                   activeAlias={String(activeAlias || "").trim() || matrixAliases[0] || "server"}
                   bundleStates={bundleStateById}
+                  roleById={roleById}
+                  roleServerCountByRole={roleServerCountByRole}
+                  onOpenRoleDetails={(role) =>
+                    setActiveDetails({
+                      role,
+                      alias: String(activeAlias || "").trim() || matrixAliases[0] || "server",
+                    })
+                  }
                   onEnableBundle={requestEnableBundle}
                   onDisableBundle={disableBundle}
                 />
@@ -1637,6 +1655,14 @@ export default function RoleDashboard({
                   minHeight={viewConfig.minHeight}
                   activeAlias={String(activeAlias || "").trim() || matrixAliases[0] || "server"}
                   bundleStates={bundleStateById}
+                  roleById={roleById}
+                  roleServerCountByRole={roleServerCountByRole}
+                  onOpenRoleDetails={(role) =>
+                    setActiveDetails({
+                      role,
+                      alias: String(activeAlias || "").trim() || matrixAliases[0] || "server",
+                    })
+                  }
                   onEnableBundle={requestEnableBundle}
                   onDisableBundle={disableBundle}
                 />
