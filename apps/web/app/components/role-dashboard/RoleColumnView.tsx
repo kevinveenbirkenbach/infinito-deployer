@@ -73,6 +73,7 @@ export default function RoleColumnView({
   const [deselectionFlashRoleIds, setDeselectionFlashRoleIds] = useState<Set<string>>(
     new Set()
   );
+  const [hoveredLaneIndex, setHoveredLaneIndex] = useState<number | null>(null);
   const deselectionTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const lanes = useMemo(() => buildLanes(roles, laneCount), [roles, laneCount]);
   const safeLaneCount = Math.max(1, lanes.length);
@@ -172,6 +173,7 @@ export default function RoleColumnView({
           const laneStyle = {
             "--column-scroll-duration": `${duration}s`,
           } as CSSProperties;
+          const lanePaused = !animationRunning || hoveredLaneIndex === laneIndex;
           return (
             <div
               key={`lane-${laneIndex}`}
@@ -179,13 +181,19 @@ export default function RoleColumnView({
                 variant === "row" ? styles.columnLaneRow : styles.columnLaneColumn
               }`}
             >
-              <div className={styles.columnViewport}>
+              <div
+                className={styles.columnViewport}
+                onMouseEnter={() => setHoveredLaneIndex(laneIndex)}
+                onMouseLeave={() =>
+                  setHoveredLaneIndex((prev) => (prev === laneIndex ? null : prev))
+                }
+              >
                 <div
                   className={`${styles.columnTrack} ${
                     variant === "row"
                       ? styles.columnTrackHorizontal
                       : styles.columnTrackVertical
-                  } ${!animationRunning ? styles.columnTrackPaused : ""}`}
+                  } ${lanePaused ? styles.columnTrackPaused : ""}`}
                   style={laneStyle}
                 >
                   {displayRoles.map((role, cardIndex) => {

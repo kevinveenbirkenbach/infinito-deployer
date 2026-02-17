@@ -1184,10 +1184,6 @@
   width: 100%;
 }
 
-.columnRoot:hover .columnTrack {
-  animation-play-state: paused;
-}
-
 .columnTrack {
   display: flex;
   gap: 16px;
