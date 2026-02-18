@@ -104,24 +104,47 @@ function encodeWorkspacePath(path: string): string {
     .join("/");
 }
 
-const PANEL_QUERY_TO_KEY: Record<
-  string,
-  "store" | "server" | "inventory" | "deploy"
-> = {
+type PanelKey =
+  | "intro"
+  | "store"
+  | "server"
+  | "inventory"
+  | "deploy"
+  | "billing"
+  | "support";
+
+const PANEL_QUERY_TO_KEY: Record<string, PanelKey> = {
+  intro: "intro",
   software: "store",
+  hardware: "server",
   device: "server",
   inventory: "inventory",
   setup: "deploy",
+  billing: "billing",
+  support: "support",
 };
 
 const PANEL_KEY_TO_QUERY: Record<
-  "store" | "server" | "inventory" | "deploy",
-  "software" | "device" | "inventory" | "setup"
+  PanelKey,
+  "intro" | "software" | "hardware" | "inventory" | "setup" | "billing" | "support"
 > = {
+  intro: "intro",
   store: "software",
-  server: "device",
+  server: "hardware",
   inventory: "inventory",
   deploy: "setup",
+  billing: "billing",
+  support: "support",
+};
+
+const PANEL_ICON_BY_KEY: Record<PanelKey, string> = {
+  intro: "fa-circle-info",
+  store: "fa-cubes",
+  server: "fa-server",
+  inventory: "fa-box-archive",
+  deploy: "fa-screwdriver-wrench",
+  billing: "fa-file-invoice",
+  support: "fa-life-ring",
 };
 
 export default function DeploymentWorkspace({
@@ -199,9 +222,7 @@ export default function DeploymentWorkspace({
   );
   const [deviceMode, setDeviceMode] = useState<"customer" | "expert">("customer");
   const [expertConfirmOpen, setExpertConfirmOpen] = useState(false);
-  const [activePanel, setActivePanel] = useState<
-    "store" | "server" | "inventory" | "deploy"
-  >("store");
+  const [activePanel, setActivePanel] = useState<PanelKey>("intro");
   const handleModeChange = useCallback(
     (mode: "customer" | "expert") => {
       if (mode === deviceMode) return;
@@ -1456,13 +1477,68 @@ export default function DeploymentWorkspace({
     [servers]
   );
 
+  const billingMatrixRows = useMemo(() => {
+    const hardwareCount = servers.length;
+    const selectedAppsCount = Object.values(selectedRolesByAlias || {}).reduce(
+      (sum, roles) => sum + (Array.isArray(roles) ? roles.length : 0),
+      0
+    );
+    const supportSeats = hardwareCount > 0 ? 1 : 0;
+    return [
+      {
+        item: "Hardware management",
+        quantity: hardwareCount,
+        unit: 9,
+        recurring: hardwareCount * 9,
+        setup: hardwareCount * 29,
+      },
+      {
+        item: "Software workload",
+        quantity: selectedAppsCount,
+        unit: 3,
+        recurring: selectedAppsCount * 3,
+        setup: 0,
+      },
+      {
+        item: "Support baseline",
+        quantity: supportSeats,
+        unit: 19,
+        recurring: supportSeats * 19,
+        setup: 0,
+      },
+    ];
+  }, [servers, selectedRolesByAlias]);
+
+  const billingRecurringTotal = billingMatrixRows.reduce(
+    (sum, row) => sum + row.recurring,
+    0
+  );
+  const billingSetupTotal = billingMatrixRows.reduce((sum, row) => sum + row.setup, 0);
+
   const panels: {
-    key: "store" | "server" | "inventory" | "deploy";
+    key: PanelKey;
     title: string;
     content: ReactNode;
     disabled?: boolean;
     disabledReason?: string;
   }[] = [
+    {
+      key: "intro",
+      title: "Intro",
+      content: (
+        <div className={styles.introPanel}>
+          <h3 className={styles.placeholderTitle}>Welcome to your deployment workspace</h3>
+          <p className={styles.placeholderCopy}>
+            Placeholder: Hier kommt eine kurze Einfuehrung zum Ablauf von
+            Software-Auswahl, Hardware-Konfiguration, Inventory und Setup hinein.
+          </p>
+          <p className={styles.placeholderCopy}>
+            Placeholder: In einem naechsten Schritt koennen wir hier auch eine
+            Checkliste mit den wichtigsten ersten Schritten ergaenzen.
+          </p>
+        </div>
+      ),
+    },
     {
       key: "store",
       title: "Software",
@@ -1494,7 +1570,7 @@ export default function DeploymentWorkspace({
     },
     {
       key: "server",
-      title: "Devices",
+      title: "Hardware",
       content: (
         <div className={styles.serverPanelStack}>
           <ProviderOrderPanel
@@ -1908,6 +1984,63 @@ export default function DeploymentWorkspace({
         </div>
       ),
     },
+    {
+      key: "billing",
+      title: "Billing",
+      content: (
+        <div className={styles.billingPanel}>
+          <div className={styles.billingTableWrap}>
+            <table className={styles.billingTable}>
+              <thead>
+                <tr>
+                  <th>Position</th>
+                  <th>Menge</th>
+                  <th>Einzelpreis (EUR/Monat)</th>
+                  <th>Laufend (EUR/Monat)</th>
+                  <th>Einmalig (EUR)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {billingMatrixRows.map((row) => (
+                  <tr key={row.item}>
+                    <td>{row.item}</td>
+                    <td>{row.quantity}</td>
+                    <td>{row.unit.toFixed(2)}</td>
+                    <td>{row.recurring.toFixed(2)}</td>
+                    <td>{row.setup.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td>Summe</td>
+                  <td />
+                  <td />
+                  <td>{billingRecurringTotal.toFixed(2)}</td>
+                  <td>{billingSetupTotal.toFixed(2)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p className={styles.billingHint}>
+            Placeholder-Matrix fuer den ersten Billing-Ueberblick.
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "support",
+      title: "Support",
+      content: (
+        <div className={styles.placeholderPanel}>
+          <h3 className={styles.placeholderTitle}>Support wird vorbereitet</h3>
+          <p className={styles.placeholderCopy}>
+            Hier folgt ein Bereich fuer Supportkanaele, SLA-Optionen und offene
+            Vorgangstickets.
+          </p>
+        </div>
+      ),
+    },
   ];
 
   const enabledPanels = panels.filter((panel) => !panel.disabled);
@@ -1925,46 +2058,62 @@ export default function DeploymentWorkspace({
   return (
     <div className={styles.root}>
       <div className={styles.panels}>
-        {panels.map((panel) => {
-          const isDisabled = Boolean(panel.disabled);
-          const isOpen = !isDisabled && activePanel === panel.key;
-          const keepMounted = panel.key === "inventory";
-          const mountContent = isOpen || keepMounted;
-          return (
-            <div
-              key={panel.key}
-              className={`${styles.panelItem} ${isOpen ? styles.panelItemOpen : ""}`}
-            >
+        <div
+          className={styles.tabList}
+          role="tablist"
+          aria-label="Workspace sections"
+        >
+          {panels.map((panel) => {
+            const isDisabled = Boolean(panel.disabled);
+            const isActive = !isDisabled && activePanel === panel.key;
+            return (
               <button
+                key={panel.key}
+                type="button"
                 onClick={() => {
                   if (isDisabled) return;
                   setActivePanel(panel.key);
                 }}
                 disabled={isDisabled}
                 title={isDisabled ? panel.disabledReason : undefined}
-                aria-expanded={isOpen}
-                className={`${styles.panelHeader} ${
-                  isOpen ? styles.panelHeaderOpen : ""
-                } ${isDisabled ? styles.panelHeaderDisabled : ""}`}
+                role="tab"
+                id={`tab-${panel.key}`}
+                aria-controls={`panel-${panel.key}`}
+                aria-selected={isActive}
+                className={`${styles.tabButton} ${
+                  isActive ? styles.tabButtonActive : ""
+                } ${isDisabled ? styles.tabButtonDisabled : ""}`}
               >
-                <span>{panel.title}</span>
-                <span className={styles.panelIcon}>
-                  {isDisabled ? "🔒" : isOpen ? "–" : "+"}
-                </span>
+                <i
+                  className={`fa-solid ${PANEL_ICON_BY_KEY[panel.key]} ${styles.tabIcon}`}
+                  aria-hidden="true"
+                />
+                <span className={styles.tabTitle}>{panel.title}</span>
+                {isDisabled ? <span className={styles.tabLock}>🔒</span> : null}
               </button>
-              {mountContent ? (
-                <div
-                  className={`${styles.panelBody} ${
-                    isOpen ? styles.panelBodyOpen : ""
-                  }`}
-                  aria-hidden={!isOpen}
-                >
-                  {panel.content}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+        <div className={styles.tabFrame}>
+          {panels.map((panel) => {
+            const isDisabled = Boolean(panel.disabled);
+            const isActive = !isDisabled && activePanel === panel.key;
+            const keepMounted = panel.key === "inventory";
+            if (!isActive && !keepMounted) return null;
+            return (
+              <section
+                key={panel.key}
+                id={`panel-${panel.key}`}
+                role="tabpanel"
+                aria-labelledby={`tab-${panel.key}`}
+                aria-hidden={!isActive}
+                className={`${styles.tabPanel} ${isActive ? styles.tabPanelActive : ""}`}
+              >
+                {panel.content}
+              </section>
+            );
+          })}
+        </div>
       </div>
       {deployRolePickerOpen ? (
         <div
