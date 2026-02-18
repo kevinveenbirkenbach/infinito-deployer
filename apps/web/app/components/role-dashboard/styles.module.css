@@ -1250,6 +1250,7 @@
 }
 
 .columnRoot {
+  --column-card-gap: 16px;
   display: grid;
   min-height: 0;
   height: 100%;
@@ -1270,7 +1271,7 @@
   display: grid;
   min-height: 0;
   height: 100%;
-  gap: 14px;
+  gap: var(--column-card-gap, 16px);
   width: 100%;
   align-content: stretch;
 }
@@ -1347,19 +1348,23 @@
 
 .columnTrackSegment {
   display: flex;
+  flex: 0 0 auto;
+  box-sizing: border-box;
   min-width: 0;
   min-height: 0;
 }
 
 .columnTrackSegmentRow {
   align-items: stretch;
-  gap: 16px;
+  gap: var(--column-card-gap, 16px);
+  padding-right: var(--column-card-gap, 16px);
 }
 
 .columnTrackSegmentColumn {
   flex-direction: column;
   align-items: stretch;
-  gap: 16px;
+  gap: var(--column-card-gap, 16px);
+  padding-bottom: var(--column-card-gap, 16px);
 }
 
 .columnTrackPaused {
@@ -1452,6 +1457,75 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   gap: 8px;
+}
+
+.bundleRowShell {
+  grid-template-columns: minmax(210px, 1fr) minmax(0, 1fr);
+}
+
+.bundleRowVisualPane {
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-content: stretch;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.bundleRowContentPane {
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  align-content: stretch;
+  gap: 6px;
+}
+
+.bundleRowLogoFrame {
+  padding-top: 2px;
+  padding-bottom: 2px;
+  align-self: center;
+}
+
+.bundleRowLinksRow {
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.bundleRowDescription {
+  margin: 0;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bundleRowContentPane .columnPriceValue {
+  font-size: clamp(24px, 3.1vh, 40px);
+}
+
+.bundleRowContentPane .columnPriceCaption {
+  font-size: 12px;
+}
+
+.bundleRowContentPane .enableControl {
+  gap: 6px;
+}
+
+.bundleRowContentPane .enableControlCompactNoPlan .enableStateDropdownButton,
+.bundleRowContentPane .enableControlCompactNoPlanWithDetails .enableStateDropdownButton,
+.bundleRowContentPane .enableControlCompactNoPlanWithDetails .enableCompactDetailsButton {
+  min-height: 28px;
+}
+
+.bundleRowContentPane .enableStateDropdownButtonSizeCompact {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.bundleRowContentSpacer {
+  min-height: 2px;
 }
 
 .columnVerticalShell {
@@ -1764,6 +1838,10 @@
   gap: 8px;
 }
 
+.bundleAppListShellCompact {
+  gap: 6px;
+}
+
 .bundleAppListStatus {
   width: 100%;
   text-align: center;
@@ -1814,9 +1892,17 @@
   gap: 6px;
 }
 
+.bundleAppListShellCompact .bundleAppListViewport {
+  gap: 4px;
+}
+
 .bundleAppListTrack {
   display: grid;
   gap: 6px;
+}
+
+.bundleAppListShellCompact .bundleAppListTrack {
+  gap: 4px;
 }
 
 .bundleAppListItem {
@@ -1836,6 +1922,14 @@
   text-align: left;
 }
 
+.bundleAppListShellCompact .bundleAppListItem {
+  min-height: 24px;
+  gap: 10px;
+  padding: 3px 7px;
+  font-size: 10px;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(64px, auto);
+}
+
 .bundleAppListLogo {
   width: 20px;
   height: 20px;
@@ -1846,9 +1940,19 @@
   color: var(--deployer-muted-ink);
 }
 
+.bundleAppListShellCompact .bundleAppListLogo {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+}
+
 .bundleAppListLogo i {
   font-size: 11px;
   line-height: 1;
+}
+
+.bundleAppListShellCompact .bundleAppListLogo i {
+  font-size: 9px;
 }
 
 .bundleAppListItem:hover {
@@ -1884,6 +1988,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.bundleAppListShellCompact .bundleAppListPrice {
+  font-size: 10px;
+}
+
 .bundleAppListDetailsButton {
   min-height: 22px;
   min-width: 70px;
@@ -1901,6 +2009,13 @@
   justify-self: end;
 }
 
+.bundleAppListShellCompact .bundleAppListDetailsButton {
+  min-height: 20px;
+  min-width: 64px;
+  padding: 0 6px;
+  font-size: 10px;
+}
+
 .bundleAppListDetailsButton:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -1909,6 +2024,20 @@
 .bundleAppListDetailsButton:not(:disabled):hover {
   border-color: var(--bs-info-border-subtle);
   color: var(--bs-info-text-emphasis);
+}
+
+.bundleAppListShellCompact .bundleAppListMenu {
+  gap: 5px;
+}
+
+.bundleAppListShellCompact .bundleAppListNavButton {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+}
+
+.bundleAppListShellCompact .bundleAppListNavLabel {
+  font-size: 10px;
 }
 
 .bundlePerMonthCaption {

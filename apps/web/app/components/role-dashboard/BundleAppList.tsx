@@ -19,6 +19,7 @@ type BundleAppListProps = {
   rows: BundleAppListRow[];
   pageSize?: number;
   emptyLabel?: string;
+  compact?: boolean;
   onOpenRoleDetails?: (role: Role) => void;
 };
 
@@ -32,6 +33,7 @@ export default function BundleAppList({
   rows,
   pageSize = 3,
   emptyLabel = "No apps in this bundle.",
+  compact = false,
   onOpenRoleDetails,
 }: BundleAppListProps) {
   const safePageSize = Math.max(1, Math.floor(Number(pageSize) || 3));
@@ -54,7 +56,11 @@ export default function BundleAppList({
   }, [rows, page, safePageSize, totalPages]);
 
   return (
-    <div className={styles.bundleAppListShell}>
+    <div
+      className={`${styles.bundleAppListShell} ${
+        compact ? styles.bundleAppListShellCompact : ""
+      }`}
+    >
       {rows.length === 0 ? (
         <span className={`text-body-secondary ${styles.listPriceCaption}`}>{emptyLabel}</span>
       ) : (
@@ -75,7 +81,7 @@ export default function BundleAppList({
                   >
                     <span className={styles.bundleAppListLogo}>
                       {row.role ? (
-                        <RoleLogoView role={row.role} size={18} />
+                        <RoleLogoView role={row.role} size={compact ? 14 : 18} />
                       ) : (
                         <i className="fa-solid fa-cube" aria-hidden="true" />
                       )}

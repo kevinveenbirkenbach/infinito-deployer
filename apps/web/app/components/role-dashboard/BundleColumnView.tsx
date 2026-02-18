@@ -362,11 +362,16 @@ export default function BundleColumnView({
     wrapLaneScroll(viewport);
   };
 
-  const renderBundleRoleList = (entry: BundleEntry, pageSize: number) => (
+  const renderBundleRoleList = (
+    entry: BundleEntry,
+    pageSize: number,
+    compact = false
+  ) => (
     <BundleAppList
       bundleId={`${variant}:${entry.bundle.id}`}
       rows={entry.roleRows}
       pageSize={pageSize}
+      compact={compact}
       onOpenRoleDetails={onOpenRoleDetails}
     />
   );
@@ -498,27 +503,33 @@ export default function BundleColumnView({
                                 }`}
                               >
                                 {variant === "row" ? (
-                                  <div className={styles.columnRowShell}>
-                                    <div className={styles.columnRowVisualPane}>
-                                      <div className={styles.columnLogoFrame}>
-                                        {bundleLogo(bundle, Math.max(88, iconSize + 24))}
+                                  <div className={`${styles.columnRowShell} ${styles.bundleRowShell}`}>
+                                    <div
+                                      className={`${styles.columnRowVisualPane} ${styles.bundleRowVisualPane}`}
+                                    >
+                                      <div
+                                        className={`${styles.columnLogoFrame} ${styles.bundleRowLogoFrame}`}
+                                      >
+                                        {bundleLogo(bundle, Math.max(60, iconSize + 2))}
                                       </div>
-                                      <div className={styles.columnBadgeRow}>
-                                        <p
-                                          className={`text-body-secondary ${styles.bundleInlineDescription}`}
-                                          title={bundle.description || "No description provided."}
-                                        >
-                                          {bundle.description || "No description provided."}
-                                        </p>
-                                      </div>
-                                      <div className={styles.columnLinksRow}>
-                                        {renderBundleRoleList(entry, 2)}
+                                      <div
+                                        className={`${styles.columnLinksRow} ${styles.bundleRowLinksRow}`}
+                                      >
+                                        {renderBundleRoleList(entry, 2, true)}
                                       </div>
                                     </div>
-                                    <div className={styles.columnRowContentPane}>
+                                    <div
+                                      className={`${styles.columnRowContentPane} ${styles.bundleRowContentPane}`}
+                                    >
                                       <h3 className={styles.columnRoleName} title={bundle.title}>
                                         {bundle.title}
                                       </h3>
+                                      <p
+                                        className={`text-body-secondary ${styles.bundleRowDescription}`}
+                                        title={bundle.description || "No description provided."}
+                                      >
+                                        {bundle.description || "No description provided."}
+                                      </p>
                                       <div className={styles.columnPricePanel}>
                                         <span className={styles.columnPriceValue}>
                                           {entry.totalPriceLabel}
@@ -529,6 +540,7 @@ export default function BundleColumnView({
                                           per month
                                         </span>
                                       </div>
+                                      <div className={styles.bundleRowContentSpacer} aria-hidden="true" />
                                       <div className={styles.columnActionRow}>
                                         <EnableDropdown
                                           enabled={state.enabled}
