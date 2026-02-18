@@ -35,14 +35,76 @@ type BundleGridViewProps = {
   bundleStates: Record<string, BundleState>;
   roleById: Record<string, Role>;
   roleServerCountByRole?: Record<string, number>;
+  forcedOpenColumns: BundleOptionalListColumnKey[];
+  forcedClosedColumns: BundleOptionalListColumnKey[];
+  onListColumnsChange: (payload: {
+    open: BundleOptionalListColumnKey[];
+    closed: BundleOptionalListColumnKey[];
+  }) => void;
   onOpenRoleDetails?: (role: Role) => void;
   onEnableBundle: (bundle: Bundle) => void;
   onDisableBundle: (bundle: Bundle) => void;
 };
 
 const DESELECTION_FADE_DURATION_MS = 3000;
-const LIST_GRID_TEMPLATE =
-  "minmax(210px, 1.5fr) minmax(100px, 0.7fr) minmax(220px, 1.5fr) minmax(240px, 2fr) minmax(140px, 0.9fr)";
+const LIST_COLUMN_GAP_PX = 12;
+
+export type BundleOptionalListColumnKey =
+  | "target"
+  | "description"
+  | "apps"
+  | "price"
+  | "details";
+
+type BundleListColumnKey = "bundle" | BundleOptionalListColumnKey | "enabled";
+
+const BUNDLE_LIST_COLUMN_ORDER: BundleListColumnKey[] = [
+  "bundle",
+  "target",
+  "description",
+  "apps",
+  "price",
+  "details",
+  "enabled",
+];
+
+export const BUNDLE_OPTIONAL_LIST_COLUMNS: BundleOptionalListColumnKey[] = [
+  "target",
+  "description",
+  "apps",
+  "price",
+  "details",
+];
+
+const BUNDLE_LIST_COLUMN_LABEL: Record<BundleListColumnKey, string> = {
+  bundle: "Bundle",
+  target: "Target",
+  description: "Description",
+  apps: "Apps",
+  price: "Price",
+  details: "Details",
+  enabled: "Enabled",
+};
+
+const BUNDLE_LIST_COLUMN_TEMPLATE: Record<BundleListColumnKey, string> = {
+  bundle: "minmax(210px, 1.35fr)",
+  target: "minmax(94px, 0.72fr)",
+  description: "minmax(200px, 1.45fr)",
+  apps: "minmax(258px, 1.9fr)",
+  price: "minmax(94px, 0.68fr)",
+  details: "minmax(108px, 0.72fr)",
+  enabled: "minmax(132px, 0.95fr)",
+};
+
+const BUNDLE_LIST_COLUMN_MIN_WIDTH: Record<BundleListColumnKey, number> = {
+  bundle: 210,
+  target: 94,
+  description: 200,
+  apps: 258,
+  price: 94,
+  details: 108,
+  enabled: 132,
+};
 
 function formatMonthlyPrice(amount: number): string {
   const normalizedAmount = Math.max(0, Number(amount) || 0);
@@ -111,6 +173,9 @@ export default function BundleGridView({
   bundleStates,
   roleById,
   roleServerCountByRole,
+  forcedOpenColumns,
+  forcedClosedColumns,
+  onListColumnsChange,
   onOpenRoleDetails,
   onEnableBundle,
   onDisableBundle,
@@ -121,14 +186,40 @@ export default function BundleGridView({
   const [hoveredBundleId, setHoveredBundleId] = useState<string | null>(null);
   const [activeBundleDetailsId, setActiveBundleDetailsId] = useState<string | null>(null);
   const deselectionTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const listTopScrollRef = useRef<HTMLDivElement | null>(null);
+  const listTopScrollInnerRef = useRef<HTMLDivElement | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [showTopScrollbar, setShowTopScrollbar] = useState(false);
+  const forcedOpenColumnSet = useMemo(
+    () => new Set<BundleOptionalListColumnKey>(forcedOpenColumns),
+    [forcedOpenColumns]
+  );
+  const forcedClosedColumnSet = useMemo(
+    () => new Set<BundleOptionalListColumnKey>(forcedClosedColumns),
+    [forcedClosedColumns]
+  );
+
+  const syncTopScrollbarMetrics = () => {
+    const listNode = listScrollRef.current;
+    const topNode = listTopScrollRef.current;
+    const topInnerNode = listTopScrollInnerRef.current;
+    if (!listNode || !topNode || !topInnerNode) return;
+    const requiredWidth = Math.max(listNode.scrollWidth, listNode.clientWidth);
+    topInnerNode.style.width = `${requiredWidth}px`;
+    const needsScrollbar = listNode.scrollWidth - listNode.clientWidth > 1;
+    setShowTopScrollbar(needsScrollbar);
+    if (!needsScrollbar) {
+      topNode.scrollLeft = 0;
+      return;
+    }
+    topNode.scrollLeft = listNode.scrollLeft;
+  };
 
   const gridStyle = {
     "--role-grid-columns": computedColumns,
     "--role-grid-row-height": `${minHeight}px`,
     "--role-grid-gap": `${gridGap}px`,
-  } as CSSProperties;
-  const listGridStyle = {
-    gridTemplateColumns: LIST_GRID_TEMPLATE,
   } as CSSProperties;
 
   const entries = useMemo<BundleEntry[]>(
@@ -219,11 +310,16 @@ export default function BundleGridView({
     onEnableBundle(entry.bundle);
   };
 
-  const renderBundleRoleList = (entry: BundleEntry, pageSize: number) => (
+  const renderBundleRoleList = (
+    entry: BundleEntry,
+    pageSize: number,
+    compact = false
+  ) => (
     <BundleAppList
       bundleId={`${viewMode}:${entry.bundle.id}`}
       rows={entry.roleRows}
       pageSize={pageSize}
+      compact={compact}
       onOpenRoleDetails={onOpenRoleDetails}
     />
   );
@@ -241,6 +337,118 @@ export default function BundleGridView({
     if (!exists) setActiveBundleDetailsId(null);
   }, [entries, activeBundleDetailsId]);
 
+  useEffect(() => {
+    const node = listScrollRef.current;
+    if (!node) return;
+
+    const measure = () => {
+      setContainerWidth(Math.max(0, node.clientWidth));
+      syncTopScrollbarMetrics();
+    };
+    measure();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const visibleColumns = useMemo(() => {
+    const visible = new Set<BundleListColumnKey>(["bundle", "enabled"]);
+    let usedWidth =
+      BUNDLE_LIST_COLUMN_MIN_WIDTH.bundle +
+      BUNDLE_LIST_COLUMN_MIN_WIDTH.enabled +
+      LIST_COLUMN_GAP_PX;
+
+    BUNDLE_OPTIONAL_LIST_COLUMNS.forEach((column) => {
+      if (forcedClosedColumnSet.has(column)) return;
+
+      const minWidth = BUNDLE_LIST_COLUMN_MIN_WIDTH[column];
+      const isForcedOpen = forcedOpenColumnSet.has(column);
+      const fitsByDefault =
+        containerWidth > 0
+          ? usedWidth + LIST_COLUMN_GAP_PX + minWidth <= containerWidth
+          : false;
+
+      if (!isForcedOpen && !fitsByDefault) return;
+
+      visible.add(column);
+      usedWidth += LIST_COLUMN_GAP_PX + minWidth;
+    });
+
+    return BUNDLE_LIST_COLUMN_ORDER.filter((column) => visible.has(column));
+  }, [containerWidth, forcedOpenColumnSet, forcedClosedColumnSet]);
+
+  const listGridStyle = useMemo(
+    () => {
+      const minWidth =
+        visibleColumns.reduce((sum, column) => sum + BUNDLE_LIST_COLUMN_MIN_WIDTH[column], 0) +
+        Math.max(0, visibleColumns.length - 1) * LIST_COLUMN_GAP_PX;
+      return {
+        gridTemplateColumns: visibleColumns
+          .map((column) => BUNDLE_LIST_COLUMN_TEMPLATE[column])
+          .join(" "),
+        width: "100%",
+        minWidth: `max(100%, ${minWidth}px)`,
+      } as CSSProperties;
+    },
+    [visibleColumns]
+  );
+
+  useEffect(() => {
+    syncTopScrollbarMetrics();
+  }, [visibleColumns, entries.length]);
+
+  useEffect(() => {
+    const listNode = listScrollRef.current;
+    const topNode = listTopScrollRef.current;
+    if (!listNode || !topNode) return;
+    let syncing = false;
+
+    const syncToTop = () => {
+      if (syncing) return;
+      syncing = true;
+      topNode.scrollLeft = listNode.scrollLeft;
+      syncing = false;
+    };
+
+    const syncToList = () => {
+      if (syncing) return;
+      syncing = true;
+      listNode.scrollLeft = topNode.scrollLeft;
+      syncing = false;
+    };
+
+    listNode.addEventListener("scroll", syncToTop, { passive: true });
+    topNode.addEventListener("scroll", syncToList, { passive: true });
+    return () => {
+      listNode.removeEventListener("scroll", syncToTop);
+      topNode.removeEventListener("scroll", syncToList);
+    };
+  }, [showTopScrollbar]);
+
+  const toggleColumn = (column: BundleOptionalListColumnKey) => {
+    const isCurrentlyVisible = visibleColumns.includes(column);
+    const nextOpen = new Set(forcedOpenColumnSet);
+    const nextClosed = new Set(forcedClosedColumnSet);
+    if (isCurrentlyVisible) {
+      nextOpen.delete(column);
+      nextClosed.add(column);
+    } else {
+      nextClosed.delete(column);
+      nextOpen.add(column);
+    }
+
+    onListColumnsChange({
+      open: BUNDLE_OPTIONAL_LIST_COLUMNS.filter((entry) => nextOpen.has(entry)),
+      closed: BUNDLE_OPTIONAL_LIST_COLUMNS.filter((entry) => nextClosed.has(entry)),
+    });
+  };
+
   if (entries.length === 0) {
     return <div className={`text-body-secondary ${styles.columnEmpty}`}>No bundles match the filters.</div>;
   }
@@ -249,75 +457,171 @@ export default function BundleGridView({
     return (
       <>
         <div className={styles.listRoot}>
-          <div className={`${styles.listGrid} ${styles.listHeader}`} style={listGridStyle}>
-            <span className={styles.listHeaderCell}>Bundle</span>
-            <span className={styles.listHeaderCell}>Target</span>
-            <span className={styles.listHeaderCell}>Description</span>
-            <span className={styles.listHeaderCell}>Apps</span>
-            <span className={styles.listHeaderCell}>
-              Enabled
-              <i className="fa-solid fa-lock" aria-hidden="true" />
-            </span>
+          <div className={styles.listStickyBar}>
+            <div className={styles.listColumnToolbar}>
+              <span className={styles.listColumnToolbarLabel}>Columns</span>
+              {BUNDLE_OPTIONAL_LIST_COLUMNS.map((column) => {
+                const visible = visibleColumns.includes(column);
+                return (
+                  <button
+                    key={column}
+                    type="button"
+                    onClick={() => toggleColumn(column)}
+                    className={`${styles.listColumnToggle} ${
+                      visible ? styles.listColumnToggleActive : styles.listColumnToggleCollapsed
+                    }`}
+                    aria-pressed={visible}
+                    title={
+                      visible
+                        ? `Collapse ${BUNDLE_LIST_COLUMN_LABEL[column]}`
+                        : `Expand ${BUNDLE_LIST_COLUMN_LABEL[column]}`
+                    }
+                  >
+                    <span>{BUNDLE_LIST_COLUMN_LABEL[column]}</span>
+                    <i
+                      className={visible ? "fa-solid fa-minus" : "fa-solid fa-plus"}
+                      aria-hidden="true"
+                    />
+                  </button>
+                );
+              })}
+            </div>
+            <div
+              ref={listTopScrollRef}
+              className={`${styles.listTopScrollbar} ${
+                showTopScrollbar ? styles.listTopScrollbarVisible : styles.listTopScrollbarHidden
+              }`}
+              aria-hidden="true"
+            >
+              <div ref={listTopScrollInnerRef} className={styles.listTopScrollbarInner} />
+            </div>
           </div>
-          {entries.map((entry) => {
-            const { bundle, roleIds, state } = entry;
-            const isDeselectionFlashing = deselectionFlashBundleIds.has(bundle.id);
-            return (
-              <div
-                key={bundle.id}
-                className={`${styles.listGrid} ${styles.listRow} ${
-                  state.enabled ? styles.listRowSelected : styles.listRowDefault
-                } ${isDeselectionFlashing ? styles.listRowDeselectedFlash : ""}`}
-                style={listGridStyle}
-              >
-                <div className={styles.listRoleCell}>
-                  {bundleLogo(bundle, Math.max(28, viewConfig.iconSize - 8))}
-                  <div className={styles.listRoleText}>
-                    <div className={styles.listRoleName}>{bundle.title}</div>
-                    <div className={`text-body-secondary ${styles.listRoleId}`}>{bundle.id}</div>
-                  </div>
-                </div>
-                <span
-                  className={`${styles.statusBadge} ${styles.listStatusBadge}`}
-                  style={targetStatusStyle(bundle.deploy_target)}
-                >
-                  {bundle.deploy_target || "bundle"}
+
+          <div ref={listScrollRef} className={styles.listScrollPane}>
+            <div className={`${styles.listGrid} ${styles.listHeader}`} style={listGridStyle}>
+              {visibleColumns.map((column) => (
+                <span key={`header-${column}`} className={styles.listHeaderCell}>
+                  {BUNDLE_LIST_COLUMN_LABEL[column]}
+                  {column === "bundle" || column === "enabled" ? (
+                    <i className="fa-solid fa-lock" aria-hidden="true" />
+                  ) : null}
                 </span>
-                <div className={`text-body-secondary ${styles.listDescription}`}>
-                  {bundle.description || "No description provided."}
+              ))}
+            </div>
+            {entries.map((entry) => {
+              const { bundle, roleIds, state } = entry;
+              const isDeselectionFlashing = deselectionFlashBundleIds.has(bundle.id);
+              return (
+                <div
+                  key={bundle.id}
+                  className={`${styles.listGrid} ${styles.listRow} ${
+                    state.enabled ? styles.listRowSelected : styles.listRowDefault
+                  } ${isDeselectionFlashing ? styles.listRowDeselectedFlash : ""}`}
+                  style={listGridStyle}
+                >
+                  {visibleColumns.map((column) => {
+                    if (column === "bundle") {
+                      return (
+                        <div key={`${bundle.id}:bundle`} className={styles.listRoleCell}>
+                          {bundleLogo(bundle, Math.max(28, viewConfig.iconSize - 8))}
+                          <div className={styles.listRoleText}>
+                            <div className={styles.listRoleName}>{bundle.title}</div>
+                            <div className={`text-body-secondary ${styles.listRoleId}`}>
+                              {bundle.id}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    if (column === "target") {
+                      return (
+                        <span
+                          key={`${bundle.id}:target`}
+                          className={`${styles.statusBadge} ${styles.listStatusBadge}`}
+                          style={targetStatusStyle(bundle.deploy_target)}
+                        >
+                          {bundle.deploy_target || "bundle"}
+                        </span>
+                      );
+                    }
+
+                    if (column === "description") {
+                      return (
+                        <div
+                          key={`${bundle.id}:description`}
+                          className={`text-body-secondary ${styles.listDescription}`}
+                        >
+                          {bundle.description || "No description provided."}
+                        </div>
+                      );
+                    }
+
+                    if (column === "apps") {
+                      return (
+                        <div key={`${bundle.id}:apps`} className={styles.bundleListAppsCell}>
+                          {renderBundleRoleList(entry, 2, true)}
+                        </div>
+                      );
+                    }
+
+                    if (column === "price") {
+                      return (
+                        <div key={`${bundle.id}:price`} className={styles.listPriceCell}>
+                          <span className={styles.listPriceValue}>{entry.totalPriceLabel}</span>
+                          <span
+                            className={`${styles.listPriceCaption} ${styles.bundlePerMonthCaption}`}
+                          >
+                            per month
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    if (column === "details") {
+                      return (
+                        <div key={`${bundle.id}:details`} className={styles.bundleListDetailsCell}>
+                          <button
+                            type="button"
+                            className={styles.bundleListDetailsButton}
+                            onClick={() => setActiveBundleDetailsId(bundle.id)}
+                            title={`Open details for ${bundle.title}`}
+                          >
+                            <i className="fa-solid fa-circle-info" aria-hidden="true" />
+                            <span>Details</span>
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div key={`${bundle.id}:enabled`} className={styles.listPickActions}>
+                        <EnableDropdown
+                          enabled={state.enabled}
+                          compact
+                          showPlanField={false}
+                          pricingModel="bundle"
+                          plans={[{ id: "community", label: "Community" }]}
+                          selectedPlanId="community"
+                          appCount={Math.max(1, roleIds.length)}
+                          contextLabel={`device "${activeAlias}" for bundle "${bundle.title}"`}
+                          onEnable={() => {
+                            clearDeselectionFlash(bundle.id);
+                            onEnableBundle(bundle);
+                          }}
+                          onDisable={() => {
+                            if (!state.enabled) return;
+                            onDisableBundle(bundle);
+                            triggerDeselectionFlash(bundle.id);
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className={styles.listPriceCell}>
-                  <span className={styles.listPriceValue}>{entry.totalPriceLabel}</span>
-                  <span className={`${styles.listPriceCaption} ${styles.bundlePerMonthCaption}`}>
-                    per month
-                  </span>
-                  {renderBundleRoleList(entry, 2)}
-                </div>
-                <div className={styles.listPickActions}>
-                  <EnableDropdown
-                    enabled={state.enabled}
-                    compact
-                    showPlanField={false}
-                    pricingModel="bundle"
-                    plans={[{ id: "community", label: "Community" }]}
-                    selectedPlanId="community"
-                    appCount={Math.max(1, roleIds.length)}
-                    contextLabel={`device "${activeAlias}" for bundle "${bundle.title}"`}
-                    onOpenDetails={() => setActiveBundleDetailsId(bundle.id)}
-                    onEnable={() => {
-                      clearDeselectionFlash(bundle.id);
-                      onEnableBundle(bundle);
-                    }}
-                    onDisable={() => {
-                      if (!state.enabled) return;
-                      onDisableBundle(bundle);
-                      triggerDeselectionFlash(bundle.id);
-                    }}
-                  />
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
         <BundleDetailsModal
           bundle={activeBundleDetails?.bundle || null}

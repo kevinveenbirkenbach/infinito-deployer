@@ -10,7 +10,10 @@ import { VIEW_CONFIG, VIEW_MODE_ICONS } from "./role-dashboard/constants";
 import { sortStatuses } from "./role-dashboard/helpers";
 import { hexToRgba } from "./deployment-credentials/device-visuals";
 import BundleColumnView from "./role-dashboard/BundleColumnView";
-import BundleGridView from "./role-dashboard/BundleGridView";
+import BundleGridView, {
+  BUNDLE_OPTIONAL_LIST_COLUMNS,
+  type BundleOptionalListColumnKey,
+} from "./role-dashboard/BundleGridView";
 import RoleColumnView from "./role-dashboard/RoleColumnView";
 import EnableDropdown from "./role-dashboard/EnableDropdown";
 import RoleDetailsModal from "./role-dashboard/RoleDetailsModal";
@@ -56,6 +59,8 @@ const SW_QUERY_KEYS = {
   rows: "sw_rows",
   listOpen: "sw_list_open",
   listClosed: "sw_list_closed",
+  bundleListOpen: "sw_bundle_list_open",
+  bundleListClosed: "sw_bundle_list_closed",
 } as const;
 
 function normalizeFacet(value: string): string {
@@ -76,37 +81,40 @@ function parseFacetCsvParam(value: string | null): string[] {
     .filter(Boolean);
 }
 
-const OPTIONAL_LIST_COLUMN_SET = new Set<string>(OPTIONAL_LIST_COLUMNS);
-
-function parseListColumnCsvParam(value: string | null): OptionalListColumnKey[] {
-  const seen = new Set<OptionalListColumnKey>();
+function parseListColumnCsvParam<T extends string>(
+  value: string | null,
+  allowedColumns: readonly T[]
+): T[] {
+  const allowedSet = new Set<string>(allowedColumns);
+  const seen = new Set<T>();
   String(value || "")
     .split(",")
     .map((entry) => String(entry || "").trim().toLowerCase())
     .forEach((entry) => {
-      if (!OPTIONAL_LIST_COLUMN_SET.has(entry)) return;
-      seen.add(entry as OptionalListColumnKey);
+      if (!allowedSet.has(entry)) return;
+      seen.add(entry as T);
     });
-  return OPTIONAL_LIST_COLUMNS.filter((entry) => seen.has(entry));
+  return allowedColumns.filter((entry) => seen.has(entry));
 }
 
-function normalizeListColumnState(
-  openColumns: OptionalListColumnKey[],
-  closedColumns: OptionalListColumnKey[]
+function normalizeListColumnState<T extends string>(
+  openColumns: T[],
+  closedColumns: T[],
+  allColumns: readonly T[]
 ): {
-  open: OptionalListColumnKey[];
-  closed: OptionalListColumnKey[];
+  open: T[];
+  closed: T[];
 } {
-  const openSet = new Set<OptionalListColumnKey>(openColumns);
-  const closedSet = new Set<OptionalListColumnKey>(closedColumns);
-  OPTIONAL_LIST_COLUMNS.forEach((column) => {
+  const openSet = new Set<T>(openColumns);
+  const closedSet = new Set<T>(closedColumns);
+  allColumns.forEach((column) => {
     if (openSet.has(column) && closedSet.has(column)) {
       openSet.delete(column);
     }
   });
   return {
-    open: OPTIONAL_LIST_COLUMNS.filter((column) => openSet.has(column)),
-    closed: OPTIONAL_LIST_COLUMNS.filter((column) => closedSet.has(column)),
+    open: allColumns.filter((column) => openSet.has(column)),
+    closed: allColumns.filter((column) => closedSet.has(column)),
   };
 }
 
@@ -211,6 +219,12 @@ export default function RoleDashboard({
   >([]);
   const [listForcedClosedColumns, setListForcedClosedColumns] = useState<
     OptionalListColumnKey[]
+  >([]);
+  const [bundleListForcedOpenColumns, setBundleListForcedOpenColumns] = useState<
+    BundleOptionalListColumnKey[]
+  >([]);
+  const [bundleListForcedClosedColumns, setBundleListForcedClosedColumns] = useState<
+    BundleOptionalListColumnKey[]
   >([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef<HTMLDivElement | null>(null);
@@ -320,11 +334,24 @@ export default function RoleDashboard({
     const listClosedParam = params.get(SW_QUERY_KEYS.listClosed);
     if (listOpenParam !== null || listClosedParam !== null) {
       const normalized = normalizeListColumnState(
-        parseListColumnCsvParam(listOpenParam),
-        parseListColumnCsvParam(listClosedParam)
+        parseListColumnCsvParam(listOpenParam, OPTIONAL_LIST_COLUMNS),
+        parseListColumnCsvParam(listClosedParam, OPTIONAL_LIST_COLUMNS),
+        OPTIONAL_LIST_COLUMNS
       );
       setListForcedOpenColumns(normalized.open);
       setListForcedClosedColumns(normalized.closed);
+    }
+
+    const bundleListOpenParam = params.get(SW_QUERY_KEYS.bundleListOpen);
+    const bundleListClosedParam = params.get(SW_QUERY_KEYS.bundleListClosed);
+    if (bundleListOpenParam !== null || bundleListClosedParam !== null) {
+      const normalized = normalizeListColumnState(
+        parseListColumnCsvParam(bundleListOpenParam, BUNDLE_OPTIONAL_LIST_COLUMNS),
+        parseListColumnCsvParam(bundleListClosedParam, BUNDLE_OPTIONAL_LIST_COLUMNS),
+        BUNDLE_OPTIONAL_LIST_COLUMNS
+      );
+      setBundleListForcedOpenColumns(normalized.open);
+      setBundleListForcedClosedColumns(normalized.closed);
     }
 
     querySyncReadyRef.current = true;
@@ -1124,6 +1151,8 @@ export default function RoleDashboard({
     params.set(SW_QUERY_KEYS.rows, rowsOverride ? String(rowsOverride) : "auto");
     params.set(SW_QUERY_KEYS.listOpen, listForcedOpenColumns.join(","));
     params.set(SW_QUERY_KEYS.listClosed, listForcedClosedColumns.join(","));
+    params.set(SW_QUERY_KEYS.bundleListOpen, bundleListForcedOpenColumns.join(","));
+    params.set(SW_QUERY_KEYS.bundleListClosed, bundleListForcedClosedColumns.join(","));
     window.history.replaceState({}, "", url.toString());
   }, [
     softwareScope,
@@ -1137,6 +1166,8 @@ export default function RoleDashboard({
     rowsOverride,
     listForcedOpenColumns,
     listForcedClosedColumns,
+    bundleListForcedOpenColumns,
+    bundleListForcedClosedColumns,
   ]);
 
   useEffect(() => {
@@ -1657,6 +1688,17 @@ export default function RoleDashboard({
                   bundleStates={bundleStateById}
                   roleById={roleById}
                   roleServerCountByRole={roleServerCountByRole}
+                  forcedOpenColumns={bundleListForcedOpenColumns}
+                  forcedClosedColumns={bundleListForcedClosedColumns}
+                  onListColumnsChange={({ open, closed }) => {
+                    const normalized = normalizeListColumnState(
+                      open,
+                      closed,
+                      BUNDLE_OPTIONAL_LIST_COLUMNS
+                    );
+                    setBundleListForcedOpenColumns(normalized.open);
+                    setBundleListForcedClosedColumns(normalized.closed);
+                  }}
                   onOpenRoleDetails={(role) =>
                     setActiveDetails({
                       role,
@@ -1775,7 +1817,11 @@ export default function RoleDashboard({
                 forcedOpenColumns={listForcedOpenColumns}
                 forcedClosedColumns={listForcedClosedColumns}
                 onListColumnsChange={({ open, closed }) => {
-                  const normalized = normalizeListColumnState(open, closed);
+                  const normalized = normalizeListColumnState(
+                    open,
+                    closed,
+                    OPTIONAL_LIST_COLUMNS
+                  );
                   setListForcedOpenColumns(normalized.open);
                   setListForcedClosedColumns(normalized.closed);
                 }}
