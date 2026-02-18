@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import BundleAppList, { type BundleAppListRow } from "./BundleAppList";
 import BundleDetailsModal from "./BundleDetailsModal";
 import EnableDropdown from "./EnableDropdown";
@@ -185,6 +186,9 @@ export default function BundleGridView({
   );
   const [hoveredBundleId, setHoveredBundleId] = useState<string | null>(null);
   const [activeBundleDetailsId, setActiveBundleDetailsId] = useState<string | null>(null);
+  const [pendingMiniDisableBundleId, setPendingMiniDisableBundleId] = useState<string | null>(
+    null
+  );
   const deselectionTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const listTopScrollRef = useRef<HTMLDivElement | null>(null);
@@ -267,6 +271,10 @@ export default function BundleGridView({
     () => entries.find((entry) => entry.bundle.id === activeBundleDetailsId) || null,
     [entries, activeBundleDetailsId]
   );
+  const pendingMiniDisableEntry = useMemo(
+    () => entries.find((entry) => entry.bundle.id === pendingMiniDisableBundleId) || null,
+    [entries, pendingMiniDisableBundleId]
+  );
 
   const clearDeselectionFlash = (bundleId: string) => {
     const timer = deselectionTimersRef.current[bundleId];
@@ -300,12 +308,28 @@ export default function BundleGridView({
     }, DESELECTION_FADE_DURATION_MS);
   };
 
+  const requestMiniDisable = (entry: BundleEntry) => {
+    setPendingMiniDisableBundleId(entry.bundle.id);
+  };
+
+  const cancelMiniDisable = () => {
+    setPendingMiniDisableBundleId(null);
+  };
+
+  const confirmMiniDisable = () => {
+    if (!pendingMiniDisableEntry) return;
+    const { bundle } = pendingMiniDisableEntry;
+    setPendingMiniDisableBundleId(null);
+    onDisableBundle(bundle);
+    triggerDeselectionFlash(bundle.id);
+  };
+
   const toggleBundle = (entry: BundleEntry) => {
     if (entry.state.enabled) {
-      onDisableBundle(entry.bundle);
-      triggerDeselectionFlash(entry.bundle.id);
+      requestMiniDisable(entry);
       return;
     }
+    setPendingMiniDisableBundleId(null);
     clearDeselectionFlash(entry.bundle.id);
     onEnableBundle(entry.bundle);
   };
@@ -336,6 +360,12 @@ export default function BundleGridView({
     const exists = entries.some((entry) => entry.bundle.id === activeBundleDetailsId);
     if (!exists) setActiveBundleDetailsId(null);
   }, [entries, activeBundleDetailsId]);
+
+  useEffect(() => {
+    if (!pendingMiniDisableBundleId) return;
+    const exists = entries.some((entry) => entry.bundle.id === pendingMiniDisableBundleId);
+    if (!exists) setPendingMiniDisableBundleId(null);
+  }, [entries, pendingMiniDisableBundleId]);
 
   useEffect(() => {
     const node = listScrollRef.current;
@@ -834,6 +864,43 @@ export default function BundleGridView({
         onOpenRoleDetails={onOpenRoleDetails}
         onClose={() => setActiveBundleDetailsId(null)}
       />
+      {isMiniView && pendingMiniDisableEntry && typeof document !== "undefined"
+        ? createPortal(
+            <div className={styles.enableConfirmOverlay} onClick={cancelMiniDisable}>
+              <div
+                className={styles.enableConfirmCard}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <h4 className={styles.enableConfirmTitle}>Disable selection?</h4>
+                <p className={styles.enableConfirmText}>
+                  {activeAlias
+                    ? `Warning: Disabling will remove bundle "${pendingMiniDisableEntry.bundle.title}" from device "${activeAlias}".`
+                    : `Warning: Disabling will remove bundle "${pendingMiniDisableEntry.bundle.title}" from the current deployment selection.`}
+                </p>
+                <p className={styles.enableConfirmText}>
+                  It will no longer be deployed until you enable it again.
+                </p>
+                <div className={styles.enableConfirmActions}>
+                  <button
+                    type="button"
+                    onClick={cancelMiniDisable}
+                    className={styles.enableCancelButton}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmMiniDisable}
+                    className={styles.enableDisableButton}
+                  >
+                    Disable
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
     </>
   );
 }
