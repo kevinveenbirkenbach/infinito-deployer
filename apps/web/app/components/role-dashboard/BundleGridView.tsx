@@ -777,9 +777,6 @@ export default function BundleGridView({
                   {bundle.title}
                 </h3>
                 <div className={styles.detailBadgeRow}>
-                  <span className={styles.detailPlanBadge} title={bundle.id}>
-                    {bundle.id}
-                  </span>
                   <span className={styles.statusBadge} style={statusStyle}>
                     {bundle.deploy_target || "bundle"}
                   </span>
@@ -787,7 +784,7 @@ export default function BundleGridView({
               </div>
             </div>
 
-            <p className={styles.roleDescriptionOneLine}>
+            <p className={styles.roleDescriptionShort}>
               {bundle.description || "No description provided."}
             </p>
             <div className={styles.listPriceCell}>
@@ -796,7 +793,6 @@ export default function BundleGridView({
                 per month
               </span>
             </div>
-            <div className={styles.detailLinksRow}>{renderBundleRoleList(entry, 3)}</div>
 
             <div className={styles.detailFooterRow}>
               <div className={styles.detailControlRow}>
