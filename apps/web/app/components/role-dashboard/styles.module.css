@@ -1316,6 +1316,16 @@
   width: 100%;
 }
 
+.columnViewportInteractive {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.columnViewportDragging {
+  cursor: grabbing;
+}
+
 .columnTrack {
   display: flex;
   gap: 16px;

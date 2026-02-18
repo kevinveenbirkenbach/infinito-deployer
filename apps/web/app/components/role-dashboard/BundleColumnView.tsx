@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type {
+  CSSProperties,
+  PointerEvent as ReactPointerEvent,
+  WheelEvent as ReactWheelEvent,
+} from "react";
 import BundleAppList, { type BundleAppListRow } from "./BundleAppList";
 import BundleDetailsModal from "./BundleDetailsModal";
 import EnableDropdown from "./EnableDropdown";
@@ -45,6 +49,13 @@ type BundleColumnViewProps = {
 const DESELECTION_FADE_DURATION_MS = 3000;
 const PER_ITEM_DURATION_MIN_SECONDS = 14;
 const PER_ITEM_DURATION_MAX_SECONDS = 20;
+
+type LaneDragState = {
+  laneIndex: number;
+  pointerId: number;
+  startPointerAxis: number;
+  startScrollAxis: number;
+};
 
 function formatMonthlyPrice(amount: number): string {
   const normalizedAmount = Math.max(0, Number(amount) || 0);
@@ -113,8 +124,11 @@ export default function BundleColumnView({
     new Set()
   );
   const [hoveredLaneIndex, setHoveredLaneIndex] = useState<number | null>(null);
+  const [draggingLaneIndex, setDraggingLaneIndex] = useState<number | null>(null);
   const [activeBundleDetailsId, setActiveBundleDetailsId] = useState<string | null>(null);
   const deselectionTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const laneViewportRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const laneDragRef = useRef<LaneDragState | null>(null);
 
   const entries = useMemo<BundleEntry[]>(
     () =>
@@ -218,6 +232,102 @@ export default function BundleColumnView({
     }, DESELECTION_FADE_DURATION_MS);
   };
 
+  const readLaneScrollAxis = (viewport: HTMLDivElement): number =>
+    variant === "row" ? viewport.scrollLeft : viewport.scrollTop;
+
+  const writeLaneScrollAxis = (viewport: HTMLDivElement, value: number) => {
+    if (variant === "row") {
+      viewport.scrollLeft = value;
+      return;
+    }
+    viewport.scrollTop = value;
+  };
+
+  const pointerAxis = (event: ReactPointerEvent<HTMLDivElement>): number =>
+    variant === "row" ? event.clientX : event.clientY;
+
+  const isInteractiveDragTarget = (target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) return false;
+    return Boolean(target.closest("button, a, input, select, textarea, [role='button']"));
+  };
+
+  const stopLaneDrag = (laneIndex: number, pointerId?: number) => {
+    const drag = laneDragRef.current;
+    if (!drag || drag.laneIndex !== laneIndex) return;
+    if (typeof pointerId === "number" && drag.pointerId !== pointerId) return;
+    const viewport = laneViewportRefs.current[laneIndex];
+    if (
+      viewport &&
+      typeof pointerId === "number" &&
+      typeof viewport.releasePointerCapture === "function"
+    ) {
+      try {
+        viewport.releasePointerCapture(pointerId);
+      } catch {
+        // no-op: capture might already be released
+      }
+    }
+    laneDragRef.current = null;
+    setDraggingLaneIndex((prev) => (prev === laneIndex ? null : prev));
+  };
+
+  const handleLaneWheel =
+    (laneIndex: number) => (event: ReactWheelEvent<HTMLDivElement>) => {
+      const viewport = laneViewportRefs.current[laneIndex];
+      if (!viewport) return;
+      const delta =
+        Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+      if (!Number.isFinite(delta) || delta === 0) return;
+      writeLaneScrollAxis(viewport, readLaneScrollAxis(viewport) + delta);
+      setHoveredLaneIndex(laneIndex);
+      event.preventDefault();
+    };
+
+  const handleLanePointerDown =
+    (laneIndex: number) => (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      if (isInteractiveDragTarget(event.target)) return;
+      const viewport = laneViewportRefs.current[laneIndex];
+      if (!viewport) return;
+      laneDragRef.current = {
+        laneIndex,
+        pointerId: event.pointerId,
+        startPointerAxis: pointerAxis(event),
+        startScrollAxis: readLaneScrollAxis(viewport),
+      };
+      setDraggingLaneIndex(laneIndex);
+      setHoveredLaneIndex(laneIndex);
+      if (typeof viewport.setPointerCapture === "function") {
+        try {
+          viewport.setPointerCapture(event.pointerId);
+        } catch {
+          // no-op: capture can fail on unsupported targets
+        }
+      }
+      event.preventDefault();
+    };
+
+  const handleLanePointerMove =
+    (laneIndex: number) => (event: ReactPointerEvent<HTMLDivElement>) => {
+      const drag = laneDragRef.current;
+      if (!drag || drag.laneIndex !== laneIndex || drag.pointerId !== event.pointerId) return;
+      const viewport = laneViewportRefs.current[laneIndex];
+      if (!viewport) return;
+      const delta = pointerAxis(event) - drag.startPointerAxis;
+      writeLaneScrollAxis(viewport, drag.startScrollAxis - delta);
+      event.preventDefault();
+    };
+
+  const handleLanePointerUp =
+    (laneIndex: number) => (event: ReactPointerEvent<HTMLDivElement>) => {
+      stopLaneDrag(laneIndex, event.pointerId);
+    };
+
+  const handleLanePointerCancel =
+    (laneIndex: number) => (event: ReactPointerEvent<HTMLDivElement>) => {
+      stopLaneDrag(laneIndex, event.pointerId);
+    };
+
   const renderBundleRoleList = (entry: BundleEntry, pageSize: number) => (
     <BundleAppList
       bundleId={`${variant}:${entry.bundle.id}`}
@@ -231,8 +341,25 @@ export default function BundleColumnView({
     return () => {
       Object.values(deselectionTimersRef.current).forEach((timer) => clearTimeout(timer));
       deselectionTimersRef.current = {};
+      laneDragRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      lanes.forEach((_, laneIndex) => {
+        const viewport = laneViewportRefs.current[laneIndex];
+        if (!viewport) return;
+        const maxScroll =
+          variant === "row"
+            ? Math.max(0, viewport.scrollWidth - viewport.clientWidth)
+            : Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+        if (maxScroll <= 0) return;
+        writeLaneScrollAxis(viewport, Math.floor(maxScroll / 2));
+      });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [lanes, variant]);
 
   useEffect(() => {
     if (!activeBundleDetailsId) return;
@@ -281,11 +408,27 @@ export default function BundleColumnView({
                 }`}
               >
                 <div
-                  className={styles.columnViewport}
+                  ref={(node) => {
+                    laneViewportRefs.current[laneIndex] = node;
+                  }}
+                  className={`${styles.columnViewport} ${styles.columnViewportInteractive} ${
+                    draggingLaneIndex === laneIndex ? styles.columnViewportDragging : ""
+                  }`}
                   onMouseEnter={() => setHoveredLaneIndex(laneIndex)}
                   onMouseLeave={() =>
-                    setHoveredLaneIndex((prev) => (prev === laneIndex ? null : prev))
+                    setHoveredLaneIndex((prev) =>
+                      draggingLaneIndex === laneIndex
+                        ? laneIndex
+                        : prev === laneIndex
+                          ? null
+                          : prev
+                    )
                   }
+                  onWheel={handleLaneWheel(laneIndex)}
+                  onPointerDown={handleLanePointerDown(laneIndex)}
+                  onPointerMove={handleLanePointerMove(laneIndex)}
+                  onPointerUp={handleLanePointerUp(laneIndex)}
+                  onPointerCancel={handleLanePointerCancel(laneIndex)}
                 >
                   <div
                     className={`${styles.columnTrack} ${
