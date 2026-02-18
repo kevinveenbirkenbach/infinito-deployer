@@ -29,6 +29,12 @@ import ModeToggle from "./ModeToggle";
 import styles from "./RoleDashboard.module.css";
 import type { Bundle, Role, ViewMode } from "./role-dashboard/types";
 
+type BundleSelectionState = {
+  enabled: boolean;
+  selectedCount: number;
+  totalCount: number;
+};
+
 type RoleAppConfigPayload = {
   role_id: string;
   alias: string;
@@ -874,6 +880,10 @@ export default function RoleDashboard({
     Boolean(onSelectPlanForAlias || onToggleSelectedForAlias) ||
     String(activeAlias || "").trim() === alias;
 
+  const canToggleAliasBundle = (alias: string) =>
+    Boolean(onSelectPlanForAlias || onToggleSelectedForAlias) ||
+    String(activeAlias || "").trim() === alias;
+
   const toggleSelectedByAlias = (alias: string, roleId: string) => {
     if (!alias || !roleId) return;
     if (onToggleSelectedForAlias) {
@@ -960,8 +970,10 @@ export default function RoleDashboard({
     });
   };
 
-  const requestEnableBundle = (bundle: Bundle) => {
-    const alias = resolveBundleAlias(bundle);
+  const requestEnableBundleForAlias = (bundle: Bundle, aliasOverride?: string) => {
+    const aliasCandidate = String(aliasOverride || "").trim();
+    const alias = aliasCandidate || resolveBundleAlias(bundle);
+    if (!alias) return;
     const existing = selectedLookup[alias] || new Set<string>();
     if (existing.size === 0) {
       applyBundleToAlias(bundle, alias, "overwrite");
@@ -970,8 +982,10 @@ export default function RoleDashboard({
     setBundleMergePrompt({ bundle, alias });
   };
 
-  const disableBundle = (bundle: Bundle) => {
-    const alias = resolveBundleAlias(bundle);
+  const disableBundleForAlias = (bundle: Bundle, aliasOverride?: string) => {
+    const aliasCandidate = String(aliasOverride || "").trim();
+    const alias = aliasCandidate || resolveBundleAlias(bundle);
+    if (!alias) return;
     const existing = selectedLookup[alias] || new Set<string>();
     const bundleRoleIds = (Array.isArray(bundle.role_ids) ? bundle.role_ids : [])
       .map((roleId) => String(roleId || "").trim())
@@ -983,30 +997,58 @@ export default function RoleDashboard({
     });
   };
 
+  const requestEnableBundle = (bundle: Bundle) => {
+    requestEnableBundleForAlias(bundle);
+  };
+
+  const disableBundle = (bundle: Bundle) => {
+    disableBundleForAlias(bundle);
+  };
+
+  const bundleRoleCountById = useMemo(() => {
+    const out: Record<string, number> = {};
+    bundles.forEach((bundle) => {
+      out[bundle.id] = (Array.isArray(bundle.role_ids) ? bundle.role_ids : [])
+        .map((roleId) => String(roleId || "").trim())
+        .filter((roleId) => roleId && knownRoleIds.has(roleId)).length;
+    });
+    return out;
+  }, [bundles, knownRoleIds]);
+
+  const bundleStateByAlias = useMemo(() => {
+    const aliasCandidates = matrixAliases.length
+      ? matrixAliases
+      : [String(activeAlias || "").trim()].filter(Boolean);
+    const byAlias: Record<string, Record<string, BundleSelectionState>> = {};
+
+    aliasCandidates.forEach((alias) => {
+      const selectedForAlias = selectedLookup[alias] || new Set<string>();
+      const stateMap: Record<string, BundleSelectionState> = {};
+      bundles.forEach((bundle) => {
+        const bundleRoleIds = (Array.isArray(bundle.role_ids) ? bundle.role_ids : [])
+          .map((roleId) => String(roleId || "").trim())
+          .filter((roleId) => roleId && knownRoleIds.has(roleId));
+        const totalCount = bundleRoleIds.length;
+        const selectedCount = bundleRoleIds.reduce(
+          (sum, roleId) => sum + (selectedForAlias.has(roleId) ? 1 : 0),
+          0
+        );
+        stateMap[bundle.id] = {
+          enabled: totalCount > 0 && selectedCount === totalCount,
+          selectedCount,
+          totalCount,
+        };
+      });
+      byAlias[alias] = stateMap;
+    });
+
+    return byAlias;
+  }, [matrixAliases, activeAlias, selectedLookup, bundles, knownRoleIds]);
+
   const bundleStateById = useMemo(() => {
     const alias = String(activeAlias || "").trim() || matrixAliases[0] || "";
-    const selectedForAlias = selectedLookup[alias] || new Set<string>();
-    const stateMap: Record<
-      string,
-      { enabled: boolean; selectedCount: number; totalCount: number }
-    > = {};
-    bundles.forEach((bundle) => {
-      const bundleRoleIds = (Array.isArray(bundle.role_ids) ? bundle.role_ids : [])
-        .map((roleId) => String(roleId || "").trim())
-        .filter((roleId) => roleId && knownRoleIds.has(roleId));
-      const totalCount = bundleRoleIds.length;
-      const selectedCount = bundleRoleIds.reduce(
-        (sum, roleId) => sum + (selectedForAlias.has(roleId) ? 1 : 0),
-        0
-      );
-      stateMap[bundle.id] = {
-        enabled: totalCount > 0 && selectedCount === totalCount,
-        selectedCount,
-        totalCount,
-      };
-    });
-    return stateMap;
-  }, [activeAlias, matrixAliases, selectedLookup, bundles, knownRoleIds]);
+    return bundleStateByAlias[alias] || {};
+  }, [activeAlias, matrixAliases, bundleStateByAlias]);
 
   const detailAliases = useMemo(() => {
     const fallback = String(activeAlias || "").trim();
@@ -1651,11 +1693,119 @@ export default function RoleDashboard({
           <div
             ref={contentRef}
             className={`${styles.content} ${
-              softwareScope === "apps" && viewMode === "matrix" ? styles.contentMatrix : ""
+              viewMode === "matrix" ? styles.contentMatrix : ""
             }`}
           >
             {softwareScope === "bundles" ? (
-              viewMode === "row" || viewMode === "column" ? (
+              viewMode === "matrix" ? (
+                matrixAliases.length === 0 ? (
+                  <div className={`text-body-secondary ${styles.matrixEmpty}`}>
+                    Add at least one device to use bundle matrix selection.
+                  </div>
+                ) : (
+                  <div className={styles.matrixContainer}>
+                    <table className={styles.matrixTable}>
+                      <thead>
+                        <tr>
+                          <th>Bundle</th>
+                          {matrixAliases.map((alias) => (
+                            <th
+                              key={alias}
+                              className={styles.matrixAliasColumnHead}
+                              style={matrixColumnStyleByAlias[alias]}
+                            >
+                              <span className={styles.matrixAliasHead}>
+                                <span aria-hidden="true">
+                                  {serverMetaByAlias?.[alias]?.logoEmoji || "💻"}
+                                </span>
+                                <span className={styles.matrixAliasName} title={alias}>
+                                  {alias}
+                                </span>
+                              </span>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedBundles.map((bundle) => (
+                          <tr key={bundle.id}>
+                            <th className={styles.matrixRoleCell}>
+                              <div className={styles.matrixRoleInner}>
+                                <span className={styles.matrixBundleIcon} aria-hidden="true">
+                                  <i
+                                    className={String(bundle.logo_class || "fa-solid fa-layer-group")}
+                                  />
+                                </span>
+                                <div className={styles.matrixRoleText}>
+                                  <span className={styles.matrixRoleName}>{bundle.title}</span>
+                                  <span className={styles.matrixRoleId}>
+                                    {(bundle.deploy_target || "bundle").trim() || "bundle"} ·{" "}
+                                    {bundleRoleCountById[bundle.id] || 0} apps
+                                  </span>
+                                </div>
+                              </div>
+                            </th>
+                            {matrixAliases.map((alias) => {
+                              const bundleState = bundleStateByAlias[alias]?.[bundle.id];
+                              const totalCount =
+                                bundleState?.totalCount ?? bundleRoleCountById[bundle.id] ?? 0;
+                              const selectedCount = bundleState?.selectedCount ?? 0;
+                              const enabled = Boolean(bundleState?.enabled);
+                              const selectable = canToggleAliasBundle(alias);
+                              const partiallyEnabled =
+                                totalCount > 0 &&
+                                selectedCount > 0 &&
+                                selectedCount < totalCount;
+                              const partialTooltip = `Partially enabled on "${alias}": ${selectedCount}/${totalCount} apps active. Click to enable full bundle.`;
+                              return (
+                                <td
+                                  key={`${alias}:${bundle.id}`}
+                                  className={styles.matrixAliasColumnCell}
+                                  style={matrixColumnStyleByAlias[alias]}
+                                >
+                                  <div className={styles.matrixCellActions}>
+                                    {partiallyEnabled ? (
+                                      <button
+                                        type="button"
+                                        className={styles.matrixPartialButton}
+                                        title={partialTooltip}
+                                        disabled={!selectable}
+                                        onClick={() =>
+                                          requestEnableBundleForAlias(bundle, alias)
+                                        }
+                                      >
+                                        <i
+                                          className="fa-solid fa-triangle-exclamation"
+                                          aria-hidden="true"
+                                        />
+                                        <span>Partial</span>
+                                      </button>
+                                    ) : (
+                                      <EnableDropdown
+                                        enabled={enabled}
+                                        disabled={!selectable || totalCount === 0}
+                                        compact
+                                        showPlanField={false}
+                                        pricingModel="bundle"
+                                        plans={[{ id: "community", label: "Community" }]}
+                                        selectedPlanId="community"
+                                        appCount={Math.max(1, totalCount)}
+                                        contextLabel={`device "${alias}" for bundle "${bundle.title}"`}
+                                        onEnable={() => requestEnableBundleForAlias(bundle, alias)}
+                                        onDisable={() => disableBundleForAlias(bundle, alias)}
+                                      />
+                                    )}
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              ) : viewMode === "row" || viewMode === "column" ? (
                 <BundleColumnView
                   bundles={paginatedBundles}
                   iconSize={viewConfig.iconSize}
@@ -1730,7 +1880,9 @@ export default function RoleDashboard({
                               <span aria-hidden="true">
                                 {serverMetaByAlias?.[alias]?.logoEmoji || "💻"}
                               </span>
-                              <span>{alias}</span>
+                              <span className={styles.matrixAliasName} title={alias}>
+                                {alias}
+                              </span>
                             </span>
                           </th>
                         ))}

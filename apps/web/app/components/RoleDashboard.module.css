@@ -402,16 +402,33 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  min-width: 0;
 }
 
 .matrixAliasColumnHead {
+  width: 158px;
+  min-width: 158px;
+  max-width: 158px;
   background: var(--matrix-device-col-head-bg, var(--deployer-panel-catalog-bg));
   border-right-color: var(--matrix-device-col-border, var(--bs-border-color-translucent));
 }
 
 .matrixAliasColumnCell {
+  width: 158px;
+  min-width: 158px;
+  max-width: 158px;
   background: var(--matrix-device-col-bg, var(--bs-body-bg));
   border-right-color: var(--matrix-device-col-border, var(--bs-border-color-translucent));
+}
+
+.matrixAliasName {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .matrixRoleCell {
@@ -427,6 +444,18 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
+}
+
+.matrixBundleIcon {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--bs-body-color);
 }
 
 .matrixRoleText {
@@ -454,10 +483,33 @@
 }
 
 .matrixCellActions {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.matrixPartialButton {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-warning-border-subtle);
+  background: var(--bs-warning-bg-subtle);
+  color: var(--bs-warning-text-emphasis);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
+  padding: 0 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.matrixPartialButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .matrixSelectWrap {
