@@ -1328,14 +1328,13 @@
 
 .columnTrack {
   display: flex;
-  gap: 16px;
+  gap: 0;
   will-change: transform;
 }
 
 .columnTrackHorizontal {
   align-items: stretch;
   width: max-content;
-  padding-right: 16px;
   animation: columnTrackMarqueeX var(--column-scroll-duration, 18s) linear infinite;
 }
 
@@ -1343,8 +1342,24 @@
   flex-direction: column;
   align-items: stretch;
   height: max-content;
-  padding-bottom: 16px;
   animation: columnTrackMarqueeY var(--column-scroll-duration, 20s) linear infinite;
+}
+
+.columnTrackSegment {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.columnTrackSegmentRow {
+  align-items: stretch;
+  gap: 16px;
+}
+
+.columnTrackSegmentColumn {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
 }
 
 .columnTrackPaused {
@@ -1366,7 +1381,7 @@
   }
 
   100% {
-    transform: translate3d(-50%, 0, 0);
+    transform: translate3d(-33.333333%, 0, 0);
   }
 }
 
@@ -1376,7 +1391,7 @@
   }
 
   100% {
-    transform: translate3d(0, -50%, 0);
+    transform: translate3d(0, -33.333333%, 0);
   }
 }
 

@@ -36,6 +36,8 @@ type RoleColumnViewProps = {
 const DESELECTION_FADE_DURATION_MS = 3000;
 const PER_ITEM_DURATION_MIN_SECONDS = 14;
 const PER_ITEM_DURATION_MAX_SECONDS = 20;
+const LOOP_SEGMENT_COUNT = 3;
+const LOOP_SEGMENT_INDICES = [0, 1, 2] as const;
 
 type LaneDragState = {
   laneIndex: number;
@@ -166,6 +168,30 @@ export default function RoleColumnView({
     viewport.scrollTop = value;
   };
 
+  const laneLoopSegmentSize = (viewport: HTMLDivElement): number => {
+    const fullSize = variant === "row" ? viewport.scrollWidth : viewport.scrollHeight;
+    if (!Number.isFinite(fullSize) || fullSize <= 0) return 0;
+    return fullSize / LOOP_SEGMENT_COUNT;
+  };
+
+  const wrapLaneScroll = (viewport: HTMLDivElement) => {
+    const segmentSize = laneLoopSegmentSize(viewport);
+    if (!Number.isFinite(segmentSize) || segmentSize <= 0) return;
+    const min = segmentSize * 0.5;
+    const max = segmentSize * 1.5;
+    let axis = readLaneScrollAxis(viewport);
+    let wrapped = false;
+    while (axis < min) {
+      axis += segmentSize;
+      wrapped = true;
+    }
+    while (axis > max) {
+      axis -= segmentSize;
+      wrapped = true;
+    }
+    if (wrapped) writeLaneScrollAxis(viewport, axis);
+  };
+
   const pointerAxis = (event: ReactPointerEvent<HTMLDivElement>): number =>
     variant === "row" ? event.clientX : event.clientY;
 
@@ -202,6 +228,7 @@ export default function RoleColumnView({
         Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
       if (!Number.isFinite(delta) || delta === 0) return;
       writeLaneScrollAxis(viewport, readLaneScrollAxis(viewport) + delta);
+      wrapLaneScroll(viewport);
       setHoveredLaneIndex(laneIndex);
       event.preventDefault();
     };
@@ -238,6 +265,7 @@ export default function RoleColumnView({
       if (!viewport) return;
       const delta = pointerAxis(event) - drag.startPointerAxis;
       writeLaneScrollAxis(viewport, drag.startScrollAxis - delta);
+      wrapLaneScroll(viewport);
       event.preventDefault();
     };
 
@@ -250,6 +278,12 @@ export default function RoleColumnView({
     (laneIndex: number) => (event: ReactPointerEvent<HTMLDivElement>) => {
       stopLaneDrag(laneIndex, event.pointerId);
     };
+
+  const handleLaneScroll = (laneIndex: number) => () => {
+    const viewport = laneViewportRefs.current[laneIndex];
+    if (!viewport) return;
+    wrapLaneScroll(viewport);
+  };
 
   useEffect(() => {
     return () => {
@@ -264,12 +298,9 @@ export default function RoleColumnView({
       lanes.forEach((_, laneIndex) => {
         const viewport = laneViewportRefs.current[laneIndex];
         if (!viewport) return;
-        const maxScroll =
-          variant === "row"
-            ? Math.max(0, viewport.scrollWidth - viewport.clientWidth)
-            : Math.max(0, viewport.scrollHeight - viewport.clientHeight);
-        if (maxScroll <= 0) return;
-        writeLaneScrollAxis(viewport, Math.floor(maxScroll / 2));
+        const segmentSize = laneLoopSegmentSize(viewport);
+        if (segmentSize <= 0) return;
+        writeLaneScrollAxis(viewport, Math.floor(segmentSize));
       });
     });
     return () => cancelAnimationFrame(raf);
@@ -296,7 +327,6 @@ export default function RoleColumnView({
         }`}
       >
         {lanes.map((laneRoles, laneIndex) => {
-          const displayRoles = laneRoles.length > 0 ? [...laneRoles, ...laneRoles] : [];
           const basePerItemSeconds =
             laneRandomPerItemSeconds[laneIndex] ??
             (PER_ITEM_DURATION_MIN_SECONDS + PER_ITEM_DURATION_MAX_SECONDS) / 2;
@@ -335,6 +365,7 @@ export default function RoleColumnView({
                 onPointerMove={handleLanePointerMove(laneIndex)}
                 onPointerUp={handleLanePointerUp(laneIndex)}
                 onPointerCancel={handleLanePointerCancel(laneIndex)}
+                onScroll={handleLaneScroll(laneIndex)}
               >
                 <div
                   className={`${styles.columnTrack} ${
@@ -344,202 +375,228 @@ export default function RoleColumnView({
                   } ${lanePaused ? styles.columnTrackPaused : ""}`}
                   style={laneStyle}
                 >
-                  {displayRoles.map((role, cardIndex) => {
-                    const selectedState = selected.has(role.id);
-                    const isDeselectionFlashing = deselectionFlashRoleIds.has(role.id);
-                    const plans = rolePlans?.[role.id] || [{ id: "community", label: "Community" }];
-                    const selectedPlanId =
-                      selectedPlanByRole?.[role.id] ??
-                      plans.find((plan) => plan.id === "community")?.id ??
-                      plans[0]?.id ??
-                      "community";
-                    const roleServerCount = Math.max(
-                      0,
-                      Math.floor(Number(roleServerCountByRole?.[role.id] || 0))
-                    );
-                    const selectedPlanLabel =
-                      plans.find(
-                        (plan) =>
-                          plan.id ===
-                          (selectedPlanId ||
-                            plans.find((candidate) => candidate.id === "community")?.id ||
-                            plans[0]?.id)
-                      )?.label || "Community";
-                    const monthlyPriceLabel = formatMonthlyPrice(Math.max(1, roleServerCount));
-                    const statusColors = colorForStatus(role.status);
-                    const statusStyle = {
-                      "--status-bg": statusColors.bg,
-                      "--status-fg": statusColors.fg,
-                      "--status-border": statusColors.border,
-                    } as CSSProperties;
+                  {LOOP_SEGMENT_INDICES.map((segmentIndex) => (
+                    <div
+                      key={`lane-${laneIndex}-segment-${segmentIndex}`}
+                      className={`${styles.columnTrackSegment} ${
+                        variant === "row"
+                          ? styles.columnTrackSegmentRow
+                          : styles.columnTrackSegmentColumn
+                      }`}
+                    >
+                      {laneRoles.map((role, cardIndex) => {
+                        const selectedState = selected.has(role.id);
+                        const isDeselectionFlashing = deselectionFlashRoleIds.has(role.id);
+                        const plans = rolePlans?.[role.id] || [
+                          { id: "community", label: "Community" },
+                        ];
+                        const selectedPlanId =
+                          selectedPlanByRole?.[role.id] ??
+                          plans.find((plan) => plan.id === "community")?.id ??
+                          plans[0]?.id ??
+                          "community";
+                        const roleServerCount = Math.max(
+                          0,
+                          Math.floor(Number(roleServerCountByRole?.[role.id] || 0))
+                        );
+                        const selectedPlanLabel =
+                          plans.find(
+                            (plan) =>
+                              plan.id ===
+                              (selectedPlanId ||
+                                plans.find((candidate) => candidate.id === "community")?.id ||
+                                plans[0]?.id)
+                          )?.label || "Community";
+                        const monthlyPriceLabel = formatMonthlyPrice(Math.max(1, roleServerCount));
+                        const statusColors = colorForStatus(role.status);
+                        const statusStyle = {
+                          "--status-bg": statusColors.bg,
+                          "--status-fg": statusColors.fg,
+                          "--status-border": statusColors.border,
+                        } as CSSProperties;
 
-                    return (
-                      <article
-                        key={`${laneIndex}-${cardIndex}-${role.id}`}
-                        className={`${styles.cardBase} ${styles.columnCard} ${
-                          variant === "row" ? styles.columnCardRow : styles.columnCardColumn
-                        } ${selectedState ? styles.cardSelected : styles.cardDefault} ${
-                          isDeselectionFlashing ? styles.cardDeselectedFlash : ""
-                        }`}
-                      >
-                        <div
-                          className={`${styles.columnCardLayout} ${
-                            variant === "row"
-                              ? styles.columnCardLayoutRow
-                              : styles.columnCardLayoutColumn
-                          }`}
-                        >
-                          {variant === "row" ? (
-                            <div className={styles.columnRowShell}>
-                              <div className={styles.columnRowVisualPane}>
-                                <div className={styles.columnLogoFrame}>
-                                  <RoleLogoView role={role} size={Math.max(88, iconSize + 24)} />
+                        return (
+                          <article
+                            key={`${laneIndex}-${segmentIndex}-${cardIndex}-${role.id}`}
+                            className={`${styles.cardBase} ${styles.columnCard} ${
+                              variant === "row" ? styles.columnCardRow : styles.columnCardColumn
+                            } ${selectedState ? styles.cardSelected : styles.cardDefault} ${
+                              isDeselectionFlashing ? styles.cardDeselectedFlash : ""
+                            }`}
+                          >
+                            <div
+                              className={`${styles.columnCardLayout} ${
+                                variant === "row"
+                                  ? styles.columnCardLayoutRow
+                                  : styles.columnCardLayoutColumn
+                              }`}
+                            >
+                              {variant === "row" ? (
+                                <div className={styles.columnRowShell}>
+                                  <div className={styles.columnRowVisualPane}>
+                                    <div className={styles.columnLogoFrame}>
+                                      <RoleLogoView
+                                        role={role}
+                                        size={Math.max(88, iconSize + 24)}
+                                      />
+                                    </div>
+                                    <div className={styles.columnBadgeRow}>
+                                      <span
+                                        className={styles.detailPlanBadge}
+                                        title={selectedPlanLabel}
+                                      >
+                                        {selectedPlanLabel}
+                                      </span>
+                                      <span className={styles.statusBadge} style={statusStyle}>
+                                        {role.status}
+                                      </span>
+                                    </div>
+                                    <div className={styles.columnLinksRow}>
+                                      <RoleQuickLinks
+                                        role={role}
+                                        onOpenVideo={onOpenVideo}
+                                        adaptiveOverflow
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className={styles.columnRowContentPane}>
+                                    <h3 className={styles.columnRoleName} title={role.display_name}>
+                                      {role.display_name}
+                                    </h3>
+                                    <p
+                                      className={`text-body-secondary ${styles.columnDescription} ${styles.columnDescriptionTight}`}
+                                    >
+                                      {role.description || "No description provided."}
+                                    </p>
+                                    <div className={styles.columnPricePanel}>
+                                      <span className={styles.columnPriceValue}>
+                                        {monthlyPriceLabel}
+                                      </span>
+                                      <span className={styles.columnPriceCaption}>per month</span>
+                                    </div>
+                                    <div className={styles.columnActionRow}>
+                                      <EnableDropdown
+                                        enabled={selectedState}
+                                        compact
+                                        showPlanField={false}
+                                        pricingModel="app"
+                                        plans={plans}
+                                        selectedPlanId={selectedPlanId}
+                                        onSelectPlan={(planId) => {
+                                          onSelectRolePlan?.(role.id, planId);
+                                          if (selectedState && !planId) {
+                                            triggerDeselectionFlash(role.id);
+                                            return;
+                                          }
+                                          if (planId) clearDeselectionFlash(role.id);
+                                        }}
+                                        roleId={role.id}
+                                        pricing={role.pricing || null}
+                                        pricingSummary={role.pricing_summary || null}
+                                        baseUrl={baseUrl}
+                                        onOpenDetails={
+                                          onOpenDetails ? () => onOpenDetails(role) : undefined
+                                        }
+                                        serverCount={roleServerCount}
+                                        appCount={1}
+                                        onEnable={() => {
+                                          clearDeselectionFlash(role.id);
+                                          if (!selectedState) onToggleSelected(role.id);
+                                        }}
+                                        onDisable={() => {
+                                          if (selectedState) {
+                                            onToggleSelected(role.id);
+                                            triggerDeselectionFlash(role.id);
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className={styles.columnBadgeRow}>
-                                  <span className={styles.detailPlanBadge} title={selectedPlanLabel}>
-                                    {selectedPlanLabel}
-                                  </span>
-                                  <span className={styles.statusBadge} style={statusStyle}>
-                                    {role.status}
-                                  </span>
-                                </div>
-                                <div className={styles.columnLinksRow}>
-                                  <RoleQuickLinks
-                                    role={role}
-                                    onOpenVideo={onOpenVideo}
-                                    adaptiveOverflow
-                                  />
-                                </div>
-                              </div>
-                              <div className={styles.columnRowContentPane}>
-                                <h3 className={styles.columnRoleName} title={role.display_name}>
-                                  {role.display_name}
-                                </h3>
-                                <p
-                                  className={`text-body-secondary ${styles.columnDescription} ${styles.columnDescriptionTight}`}
-                                >
-                                  {role.description || "No description provided."}
-                                </p>
-                                <div className={styles.columnPricePanel}>
-                                  <span className={styles.columnPriceValue}>{monthlyPriceLabel}</span>
-                                  <span className={styles.columnPriceCaption}>per month</span>
-                                </div>
-                                <div className={styles.columnActionRow}>
-                                  <EnableDropdown
-                                    enabled={selectedState}
-                                    compact
-                                    showPlanField={false}
-                                    pricingModel="app"
-                                    plans={plans}
-                                    selectedPlanId={selectedPlanId}
-                                    onSelectPlan={(planId) => {
-                                      onSelectRolePlan?.(role.id, planId);
-                                      if (selectedState && !planId) {
-                                        triggerDeselectionFlash(role.id);
-                                        return;
+                              ) : (
+                                <div className={styles.columnVerticalShell}>
+                                  <header className={styles.columnVerticalHeader}>
+                                    <h3 className={styles.columnRoleName} title={role.display_name}>
+                                      {role.display_name}
+                                    </h3>
+                                  </header>
+                                  <div className={styles.columnLogoFrame}>
+                                    <RoleLogoView role={role} size={Math.max(92, iconSize + 28)} />
+                                  </div>
+                                  <div className={styles.columnBadgeRow}>
+                                    <span
+                                      className={styles.detailPlanBadge}
+                                      title={selectedPlanLabel}
+                                    >
+                                      {selectedPlanLabel}
+                                    </span>
+                                    <span className={styles.statusBadge} style={statusStyle}>
+                                      {role.status}
+                                    </span>
+                                  </div>
+                                  <p
+                                    className={`text-body-secondary ${styles.columnDescription} ${styles.columnDescriptionMedium}`}
+                                  >
+                                    {role.description || "No description provided."}
+                                  </p>
+                                  <div className={styles.columnPricePanel}>
+                                    <span className={styles.columnPriceValue}>
+                                      {monthlyPriceLabel}
+                                    </span>
+                                    <span className={styles.columnPriceCaption}>per month</span>
+                                  </div>
+                                  <div className={styles.columnLinksRow}>
+                                    <RoleQuickLinks
+                                      role={role}
+                                      onOpenVideo={onOpenVideo}
+                                      adaptiveOverflow
+                                    />
+                                  </div>
+                                  <div className={styles.columnActionRow}>
+                                    <EnableDropdown
+                                      enabled={selectedState}
+                                      compact
+                                      showPlanField={false}
+                                      pricingModel="app"
+                                      plans={plans}
+                                      selectedPlanId={selectedPlanId}
+                                      onSelectPlan={(planId) => {
+                                        onSelectRolePlan?.(role.id, planId);
+                                        if (selectedState && !planId) {
+                                          triggerDeselectionFlash(role.id);
+                                          return;
+                                        }
+                                        if (planId) clearDeselectionFlash(role.id);
+                                      }}
+                                      roleId={role.id}
+                                      pricing={role.pricing || null}
+                                      pricingSummary={role.pricing_summary || null}
+                                      baseUrl={baseUrl}
+                                      onOpenDetails={
+                                        onOpenDetails ? () => onOpenDetails(role) : undefined
                                       }
-                                      if (planId) clearDeselectionFlash(role.id);
-                                    }}
-                                    roleId={role.id}
-                                    pricing={role.pricing || null}
-                                    pricingSummary={role.pricing_summary || null}
-                                    baseUrl={baseUrl}
-                                    onOpenDetails={
-                                      onOpenDetails ? () => onOpenDetails(role) : undefined
-                                    }
-                                    serverCount={roleServerCount}
-                                    appCount={1}
-                                    onEnable={() => {
-                                      clearDeselectionFlash(role.id);
-                                      if (!selectedState) onToggleSelected(role.id);
-                                    }}
-                                    onDisable={() => {
-                                      if (selectedState) {
-                                        onToggleSelected(role.id);
-                                        triggerDeselectionFlash(role.id);
-                                      }
-                                    }}
-                                  />
+                                      serverCount={roleServerCount}
+                                      appCount={1}
+                                      onEnable={() => {
+                                        clearDeselectionFlash(role.id);
+                                        if (!selectedState) onToggleSelected(role.id);
+                                      }}
+                                      onDisable={() => {
+                                        if (selectedState) {
+                                          onToggleSelected(role.id);
+                                          triggerDeselectionFlash(role.id);
+                                        }
+                                      }}
+                                    />
+                                  </div>
                                 </div>
-                              </div>
+                              )}
                             </div>
-                          ) : (
-                            <div className={styles.columnVerticalShell}>
-                              <header className={styles.columnVerticalHeader}>
-                                <h3 className={styles.columnRoleName} title={role.display_name}>
-                                  {role.display_name}
-                                </h3>
-                              </header>
-                              <div className={styles.columnLogoFrame}>
-                                <RoleLogoView role={role} size={Math.max(92, iconSize + 28)} />
-                              </div>
-                              <div className={styles.columnBadgeRow}>
-                                <span className={styles.detailPlanBadge} title={selectedPlanLabel}>
-                                  {selectedPlanLabel}
-                                </span>
-                                <span className={styles.statusBadge} style={statusStyle}>
-                                  {role.status}
-                                </span>
-                              </div>
-                              <p
-                                className={`text-body-secondary ${styles.columnDescription} ${styles.columnDescriptionMedium}`}
-                              >
-                                {role.description || "No description provided."}
-                              </p>
-                              <div className={styles.columnPricePanel}>
-                                <span className={styles.columnPriceValue}>{monthlyPriceLabel}</span>
-                                <span className={styles.columnPriceCaption}>per month</span>
-                              </div>
-                              <div className={styles.columnLinksRow}>
-                                <RoleQuickLinks
-                                  role={role}
-                                  onOpenVideo={onOpenVideo}
-                                  adaptiveOverflow
-                                />
-                              </div>
-                              <div className={styles.columnActionRow}>
-                                <EnableDropdown
-                                  enabled={selectedState}
-                                  compact
-                                  showPlanField={false}
-                                  pricingModel="app"
-                                  plans={plans}
-                                  selectedPlanId={selectedPlanId}
-                                  onSelectPlan={(planId) => {
-                                    onSelectRolePlan?.(role.id, planId);
-                                    if (selectedState && !planId) {
-                                      triggerDeselectionFlash(role.id);
-                                      return;
-                                    }
-                                    if (planId) clearDeselectionFlash(role.id);
-                                  }}
-                                  roleId={role.id}
-                                  pricing={role.pricing || null}
-                                  pricingSummary={role.pricing_summary || null}
-                                  baseUrl={baseUrl}
-                                  onOpenDetails={
-                                    onOpenDetails ? () => onOpenDetails(role) : undefined
-                                  }
-                                  serverCount={roleServerCount}
-                                  appCount={1}
-                                  onEnable={() => {
-                                    clearDeselectionFlash(role.id);
-                                    if (!selectedState) onToggleSelected(role.id);
-                                  }}
-                                  onDisable={() => {
-                                    if (selectedState) {
-                                      onToggleSelected(role.id);
-                                      triggerDeselectionFlash(role.id);
-                                    }
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </article>
-                    );
-                  })}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

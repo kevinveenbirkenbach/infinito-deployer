@@ -49,6 +49,8 @@ type BundleColumnViewProps = {
 const DESELECTION_FADE_DURATION_MS = 3000;
 const PER_ITEM_DURATION_MIN_SECONDS = 14;
 const PER_ITEM_DURATION_MAX_SECONDS = 20;
+const LOOP_SEGMENT_COUNT = 3;
+const LOOP_SEGMENT_INDICES = [0, 1, 2] as const;
 
 type LaneDragState = {
   laneIndex: number;
@@ -243,6 +245,30 @@ export default function BundleColumnView({
     viewport.scrollTop = value;
   };
 
+  const laneLoopSegmentSize = (viewport: HTMLDivElement): number => {
+    const fullSize = variant === "row" ? viewport.scrollWidth : viewport.scrollHeight;
+    if (!Number.isFinite(fullSize) || fullSize <= 0) return 0;
+    return fullSize / LOOP_SEGMENT_COUNT;
+  };
+
+  const wrapLaneScroll = (viewport: HTMLDivElement) => {
+    const segmentSize = laneLoopSegmentSize(viewport);
+    if (!Number.isFinite(segmentSize) || segmentSize <= 0) return;
+    const min = segmentSize * 0.5;
+    const max = segmentSize * 1.5;
+    let axis = readLaneScrollAxis(viewport);
+    let wrapped = false;
+    while (axis < min) {
+      axis += segmentSize;
+      wrapped = true;
+    }
+    while (axis > max) {
+      axis -= segmentSize;
+      wrapped = true;
+    }
+    if (wrapped) writeLaneScrollAxis(viewport, axis);
+  };
+
   const pointerAxis = (event: ReactPointerEvent<HTMLDivElement>): number =>
     variant === "row" ? event.clientX : event.clientY;
 
@@ -279,6 +305,7 @@ export default function BundleColumnView({
         Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
       if (!Number.isFinite(delta) || delta === 0) return;
       writeLaneScrollAxis(viewport, readLaneScrollAxis(viewport) + delta);
+      wrapLaneScroll(viewport);
       setHoveredLaneIndex(laneIndex);
       event.preventDefault();
     };
@@ -315,6 +342,7 @@ export default function BundleColumnView({
       if (!viewport) return;
       const delta = pointerAxis(event) - drag.startPointerAxis;
       writeLaneScrollAxis(viewport, drag.startScrollAxis - delta);
+      wrapLaneScroll(viewport);
       event.preventDefault();
     };
 
@@ -327,6 +355,12 @@ export default function BundleColumnView({
     (laneIndex: number) => (event: ReactPointerEvent<HTMLDivElement>) => {
       stopLaneDrag(laneIndex, event.pointerId);
     };
+
+  const handleLaneScroll = (laneIndex: number) => () => {
+    const viewport = laneViewportRefs.current[laneIndex];
+    if (!viewport) return;
+    wrapLaneScroll(viewport);
+  };
 
   const renderBundleRoleList = (entry: BundleEntry, pageSize: number) => (
     <BundleAppList
@@ -350,12 +384,9 @@ export default function BundleColumnView({
       lanes.forEach((_, laneIndex) => {
         const viewport = laneViewportRefs.current[laneIndex];
         if (!viewport) return;
-        const maxScroll =
-          variant === "row"
-            ? Math.max(0, viewport.scrollWidth - viewport.clientWidth)
-            : Math.max(0, viewport.scrollHeight - viewport.clientHeight);
-        if (maxScroll <= 0) return;
-        writeLaneScrollAxis(viewport, Math.floor(maxScroll / 2));
+        const segmentSize = laneLoopSegmentSize(viewport);
+        if (segmentSize <= 0) return;
+        writeLaneScrollAxis(viewport, Math.floor(segmentSize));
       });
     });
     return () => cancelAnimationFrame(raf);
@@ -389,8 +420,6 @@ export default function BundleColumnView({
           }`}
         >
           {lanes.map((laneEntries, laneIndex) => {
-            const displayEntries =
-              laneEntries.length > 0 ? [...laneEntries, ...laneEntries] : [];
             const basePerItemSeconds =
               laneRandomPerItemSeconds[laneIndex] ??
               (PER_ITEM_DURATION_MIN_SECONDS + PER_ITEM_DURATION_MAX_SECONDS) / 2;
@@ -429,6 +458,7 @@ export default function BundleColumnView({
                   onPointerMove={handleLanePointerMove(laneIndex)}
                   onPointerUp={handleLanePointerUp(laneIndex)}
                   onPointerCancel={handleLanePointerCancel(laneIndex)}
+                  onScroll={handleLaneScroll(laneIndex)}
                 >
                   <div
                     className={`${styles.columnTrack} ${
@@ -438,141 +468,156 @@ export default function BundleColumnView({
                     } ${lanePaused ? styles.columnTrackPaused : ""}`}
                     style={laneStyle}
                   >
-                    {displayEntries.map((entry, cardIndex) => {
-                      const { bundle, roleIds, state } = entry;
-                      const isDeselectionFlashing = deselectionFlashBundleIds.has(bundle.id);
+                    {LOOP_SEGMENT_INDICES.map((segmentIndex) => (
+                      <div
+                        key={`lane-${laneIndex}-segment-${segmentIndex}`}
+                        className={`${styles.columnTrackSegment} ${
+                          variant === "row"
+                            ? styles.columnTrackSegmentRow
+                            : styles.columnTrackSegmentColumn
+                        }`}
+                      >
+                        {laneEntries.map((entry, cardIndex) => {
+                          const { bundle, roleIds, state } = entry;
+                          const isDeselectionFlashing = deselectionFlashBundleIds.has(bundle.id);
 
-                      return (
-                        <article
-                          key={`${laneIndex}-${cardIndex}-${bundle.id}`}
-                          className={`${styles.cardBase} ${styles.columnCard} ${
-                            variant === "row" ? styles.columnCardRow : styles.columnCardColumn
-                          } ${state.enabled ? styles.cardSelected : styles.cardDefault} ${
-                            isDeselectionFlashing ? styles.cardDeselectedFlash : ""
-                          }`}
-                        >
-                          <div
-                            className={`${styles.columnCardLayout} ${
-                              variant === "row"
-                                ? styles.columnCardLayoutRow
-                                : styles.columnCardLayoutColumn
-                            }`}
-                          >
-                            {variant === "row" ? (
-                              <div className={styles.columnRowShell}>
-                                <div className={styles.columnRowVisualPane}>
-                                  <div className={styles.columnLogoFrame}>
-                                    {bundleLogo(bundle, Math.max(88, iconSize + 24))}
+                          return (
+                            <article
+                              key={`${laneIndex}-${segmentIndex}-${cardIndex}-${bundle.id}`}
+                              className={`${styles.cardBase} ${styles.columnCard} ${
+                                variant === "row" ? styles.columnCardRow : styles.columnCardColumn
+                              } ${state.enabled ? styles.cardSelected : styles.cardDefault} ${
+                                isDeselectionFlashing ? styles.cardDeselectedFlash : ""
+                              }`}
+                            >
+                              <div
+                                className={`${styles.columnCardLayout} ${
+                                  variant === "row"
+                                    ? styles.columnCardLayoutRow
+                                    : styles.columnCardLayoutColumn
+                                }`}
+                              >
+                                {variant === "row" ? (
+                                  <div className={styles.columnRowShell}>
+                                    <div className={styles.columnRowVisualPane}>
+                                      <div className={styles.columnLogoFrame}>
+                                        {bundleLogo(bundle, Math.max(88, iconSize + 24))}
+                                      </div>
+                                      <div className={styles.columnBadgeRow}>
+                                        <p
+                                          className={`text-body-secondary ${styles.bundleInlineDescription}`}
+                                          title={bundle.description || "No description provided."}
+                                        >
+                                          {bundle.description || "No description provided."}
+                                        </p>
+                                      </div>
+                                      <div className={styles.columnLinksRow}>
+                                        {renderBundleRoleList(entry, 2)}
+                                      </div>
+                                    </div>
+                                    <div className={styles.columnRowContentPane}>
+                                      <h3 className={styles.columnRoleName} title={bundle.title}>
+                                        {bundle.title}
+                                      </h3>
+                                      <div className={styles.columnPricePanel}>
+                                        <span className={styles.columnPriceValue}>
+                                          {entry.totalPriceLabel}
+                                        </span>
+                                        <span
+                                          className={`${styles.columnPriceCaption} ${styles.bundlePerMonthCaption}`}
+                                        >
+                                          per month
+                                        </span>
+                                      </div>
+                                      <div className={styles.columnActionRow}>
+                                        <EnableDropdown
+                                          enabled={state.enabled}
+                                          compact
+                                          showPlanField={false}
+                                          pricingModel="bundle"
+                                          plans={[{ id: "community", label: "Community" }]}
+                                          selectedPlanId="community"
+                                          appCount={Math.max(1, roleIds.length)}
+                                          contextLabel={`device "${activeAlias}" for bundle "${bundle.title}"`}
+                                          onOpenDetails={() =>
+                                            setActiveBundleDetailsId(bundle.id)
+                                          }
+                                          onEnable={() => {
+                                            clearDeselectionFlash(bundle.id);
+                                            onEnableBundle(bundle);
+                                          }}
+                                          onDisable={() => {
+                                            if (!state.enabled) return;
+                                            onDisableBundle(bundle);
+                                            triggerDeselectionFlash(bundle.id);
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
                                   </div>
-                                  <div className={styles.columnBadgeRow}>
-                                    <p
-                                      className={`text-body-secondary ${styles.bundleInlineDescription}`}
-                                      title={bundle.description || "No description provided."}
-                                    >
-                                      {bundle.description || "No description provided."}
-                                    </p>
+                                ) : (
+                                  <div className={styles.columnVerticalShell}>
+                                    <header className={styles.columnVerticalHeader}>
+                                      <h3 className={styles.columnRoleName} title={bundle.title}>
+                                        {bundle.title}
+                                      </h3>
+                                    </header>
+                                    <div className={styles.columnLogoFrame}>
+                                      {bundleLogo(bundle, Math.max(92, iconSize + 28))}
+                                    </div>
+                                    <div className={styles.columnBadgeRow}>
+                                      <p
+                                        className={`text-body-secondary ${styles.bundleInlineDescription}`}
+                                        title={bundle.description || "No description provided."}
+                                      >
+                                        {bundle.description || "No description provided."}
+                                      </p>
+                                    </div>
+                                    <div className={styles.columnPricePanel}>
+                                      <span className={styles.columnPriceValue}>
+                                        {entry.totalPriceLabel}
+                                      </span>
+                                      <span
+                                        className={`${styles.columnPriceCaption} ${styles.bundlePerMonthCaption}`}
+                                      >
+                                        per month
+                                      </span>
+                                    </div>
+                                    <div className={styles.columnLinksRow}>
+                                      {renderBundleRoleList(entry, 3)}
+                                    </div>
+                                    <div className={styles.columnActionRow}>
+                                      <EnableDropdown
+                                        enabled={state.enabled}
+                                        compact
+                                        showPlanField={false}
+                                        pricingModel="bundle"
+                                        plans={[{ id: "community", label: "Community" }]}
+                                        selectedPlanId="community"
+                                        appCount={Math.max(1, roleIds.length)}
+                                        contextLabel={`device "${activeAlias}" for bundle "${bundle.title}"`}
+                                        onOpenDetails={() =>
+                                          setActiveBundleDetailsId(bundle.id)
+                                        }
+                                        onEnable={() => {
+                                          clearDeselectionFlash(bundle.id);
+                                          onEnableBundle(bundle);
+                                        }}
+                                        onDisable={() => {
+                                          if (!state.enabled) return;
+                                          onDisableBundle(bundle);
+                                          triggerDeselectionFlash(bundle.id);
+                                        }}
+                                      />
+                                    </div>
                                   </div>
-                                  <div className={styles.columnLinksRow}>
-                                    {renderBundleRoleList(entry, 2)}
-                                  </div>
-                                </div>
-                                <div className={styles.columnRowContentPane}>
-                                  <h3 className={styles.columnRoleName} title={bundle.title}>
-                                    {bundle.title}
-                                  </h3>
-                                  <div className={styles.columnPricePanel}>
-                                    <span className={styles.columnPriceValue}>
-                                      {entry.totalPriceLabel}
-                                    </span>
-                                    <span
-                                      className={`${styles.columnPriceCaption} ${styles.bundlePerMonthCaption}`}
-                                    >
-                                      per month
-                                    </span>
-                                  </div>
-                                  <div className={styles.columnActionRow}>
-                                    <EnableDropdown
-                                      enabled={state.enabled}
-                                      compact
-                                      showPlanField={false}
-                                      pricingModel="bundle"
-                                      plans={[{ id: "community", label: "Community" }]}
-                                      selectedPlanId="community"
-                                      appCount={Math.max(1, roleIds.length)}
-                                      contextLabel={`device "${activeAlias}" for bundle "${bundle.title}"`}
-                                      onOpenDetails={() => setActiveBundleDetailsId(bundle.id)}
-                                      onEnable={() => {
-                                        clearDeselectionFlash(bundle.id);
-                                        onEnableBundle(bundle);
-                                      }}
-                                      onDisable={() => {
-                                        if (!state.enabled) return;
-                                        onDisableBundle(bundle);
-                                        triggerDeselectionFlash(bundle.id);
-                                      }}
-                                    />
-                                  </div>
-                                </div>
+                                )}
                               </div>
-                            ) : (
-                              <div className={styles.columnVerticalShell}>
-                                <header className={styles.columnVerticalHeader}>
-                                  <h3 className={styles.columnRoleName} title={bundle.title}>
-                                    {bundle.title}
-                                  </h3>
-                                </header>
-                                <div className={styles.columnLogoFrame}>
-                                  {bundleLogo(bundle, Math.max(92, iconSize + 28))}
-                                </div>
-                                <div className={styles.columnBadgeRow}>
-                                  <p
-                                    className={`text-body-secondary ${styles.bundleInlineDescription}`}
-                                    title={bundle.description || "No description provided."}
-                                  >
-                                    {bundle.description || "No description provided."}
-                                  </p>
-                                </div>
-                                <div className={styles.columnPricePanel}>
-                                  <span className={styles.columnPriceValue}>
-                                    {entry.totalPriceLabel}
-                                  </span>
-                                  <span
-                                    className={`${styles.columnPriceCaption} ${styles.bundlePerMonthCaption}`}
-                                  >
-                                    per month
-                                  </span>
-                                </div>
-                                <div className={styles.columnLinksRow}>
-                                  {renderBundleRoleList(entry, 3)}
-                                </div>
-                                <div className={styles.columnActionRow}>
-                                  <EnableDropdown
-                                    enabled={state.enabled}
-                                    compact
-                                    showPlanField={false}
-                                    pricingModel="bundle"
-                                    plans={[{ id: "community", label: "Community" }]}
-                                    selectedPlanId="community"
-                                    appCount={Math.max(1, roleIds.length)}
-                                    contextLabel={`device "${activeAlias}" for bundle "${bundle.title}"`}
-                                    onOpenDetails={() => setActiveBundleDetailsId(bundle.id)}
-                                    onEnable={() => {
-                                      clearDeselectionFlash(bundle.id);
-                                      onEnableBundle(bundle);
-                                    }}
-                                    onDisable={() => {
-                                      if (!state.enabled) return;
-                                      onDisableBundle(bundle);
-                                      triggerDeselectionFlash(bundle.id);
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </article>
-                      );
-                    })}
+                            </article>
+                          );
+                        })}
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
