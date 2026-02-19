@@ -55,13 +55,8 @@ export function initials(name: string) {
 export function displayTargets(targets: string[]) {
   const out = new Set<string>();
   targets.forEach((target) => {
-    const trimmed = (target || "").trim();
+    const trimmed = (target || "").trim().toLowerCase();
     if (!trimmed) return;
-    if (trimmed === "universal") {
-      out.add("server");
-      out.add("workstation");
-      return;
-    }
     out.add(trimmed);
   });
   return Array.from(out);

@@ -228,6 +228,30 @@
   color: #dbeafe;
 }
 
+.releaseTrackButton {
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+}
+
+.releaseTrackButtonStable {
+  border-color: var(--bs-success-border-subtle);
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-success-text-emphasis);
+}
+
+.releaseTrackButtonPreview {
+  border-color: var(--bs-warning-border-subtle);
+  background: var(--bs-warning-bg-subtle);
+  color: var(--bs-warning-text-emphasis);
+}
+
+.releaseTrackButtonLocked,
+.releaseTrackButton:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
 .dropdownCardOverlay {
   position: fixed;
   padding: 12px;
@@ -249,6 +273,14 @@
 
 .groupTitle {
   font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.groupTitleIcon {
+  width: 12px;
+  text-align: center;
 }
 
 .groupButtons {
@@ -276,6 +308,9 @@
 }
 
 .filterAddButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   height: 32px;
   border-radius: 10px;
   border: 1px solid var(--bs-border-color);
@@ -312,6 +347,9 @@
 }
 
 .pillButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 12px;
   border-radius: 999px;
   border: 1px solid var(--bs-border-color);

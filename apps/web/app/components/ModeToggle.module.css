@@ -21,3 +21,9 @@
   background: var(--bs-warning-bg-subtle);
   color: var(--bs-warning-text-emphasis);
 }
+
+.buttonCustomer {
+  border-color: var(--bs-success-border-subtle);
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-success-text-emphasis);
+}

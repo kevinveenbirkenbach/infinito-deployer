@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import importlib.util
+import logging
+import os
 import re
+import sys
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from types import ModuleType
+from typing import Any, Callable, Dict, List, Optional, Set
 
 import yaml
 
@@ -11,6 +17,8 @@ from roles.role_models import RoleGalaxyInfo, RoleLogo, RoleMetaMain, RoleMetada
 
 _ALLOWED_STATUSES: Set[str] = {"pre-alpha", "alpha", "beta", "stable", "deprecated"}
 _TARGETS_ORDER: List[str] = ["universal", "server", "workstation"]
+_TARGETS_SET: Set[str] = set(_TARGETS_ORDER)
+LOGGER = logging.getLogger(__name__)
 
 
 def _as_mapping(obj: Any) -> Dict[str, Any]:
@@ -205,23 +213,79 @@ def _extract_headline_from_readme(role_dir: Path) -> Optional[str]:
     return None
 
 
+def _nexus_repo_path() -> Path:
+    raw = (os.getenv("INFINITO_REPO_PATH", "/repo/infinito-nexus") or "").strip()
+    return Path(raw or "/repo/infinito-nexus")
+
+
+@lru_cache(maxsize=8)
+def _load_nexus_types_from_group_names(repo_root: str) -> Callable[[List[str]], List[str]]:
+    repo_path = Path(repo_root)
+    invokable_py = repo_path / "module_utils" / "invokable.py"
+    if not invokable_py.is_file():
+        raise FileNotFoundError(f"Nexus SPOT module not found: {invokable_py}")
+
+    # Keep Nexus repo importable for module-internal imports such as
+    # `from filter_plugins.invokable_paths import ...`.
+    repo_root_str = str(repo_path)
+    if repo_root_str not in sys.path:
+        sys.path.insert(0, repo_root_str)
+
+    module_name = f"_infinito_nexus_invokable_{abs(hash(repo_root_str))}"
+    spec = importlib.util.spec_from_file_location(module_name, invokable_py)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not create module spec for {invokable_py}")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
+    mod = module if isinstance(module, ModuleType) else None
+    if mod is None:
+        raise ImportError(f"Failed to load module from {invokable_py}")
+
+    fn = getattr(mod, "types_from_group_names", None)
+    if not callable(fn):
+        raise AttributeError(
+            "Nexus SPOT module does not export callable 'types_from_group_names'"
+        )
+    return fn
+
+
+def _derive_deployment_targets_from_nexus(role_name: str) -> Optional[List[str]]:
+    name = role_name.strip()
+    if not name:
+        return []
+
+    repo_root = str(_nexus_repo_path())
+    try:
+        types_from_group_names = _load_nexus_types_from_group_names(repo_root)
+        raw = types_from_group_names([name]) or []
+    except Exception as exc:
+        LOGGER.warning(
+            "role %s: failed to classify deployment targets via Nexus SPOT: %s",
+            name,
+            exc,
+        )
+        return None
+
+    valid = {str(item).strip() for item in raw if str(item).strip() in _TARGETS_SET}
+    return [target for target in _TARGETS_ORDER if target in valid]
+
+
 def _derive_deployment_targets(
     role_name: str, platforms: List[Dict[str, Any]]
 ) -> List[str]:
-    name = role_name.strip()
+    spot_targets = _derive_deployment_targets_from_nexus(role_name)
+    if spot_targets is not None:
+        return spot_targets
+
+    # Keep fallback minimal and non-authoritative:
+    # if Nexus SPOT is unavailable, only infer "server" from Docker platforms.
     targets: Set[str] = set()
-
-    workstation_prefixes = ("desk-", "util-desk-", "drv-")
-    server_prefixes = (
-        "web-",
-        "util-srv-",
-    )
-
-    if name.startswith(workstation_prefixes):
-        targets.add("workstation")
-    if name.startswith(server_prefixes):
-        targets.add("server")
-
     platform_names = []
     for p in platforms:
         pm = p if isinstance(p, dict) else {}
@@ -233,9 +297,6 @@ def _derive_deployment_targets(
         targets.add("server")
 
     if not targets:
-        targets.add("universal")
-
-    if "server" in targets and "workstation" in targets:
         targets.add("universal")
 
     return [t for t in _TARGETS_ORDER if t in targets]
@@ -260,12 +321,8 @@ def _derive_display_name(role_name: str) -> str:
         "web-svc-",
         "svc-",
         "sys-",
-        "util-srv-",
-        "util-desk-",
         "desk-",
         "drv-",
-        "persona-provider-",
-        "persona-",
     ]
     for p in prefixes:
         if s.startswith(p):

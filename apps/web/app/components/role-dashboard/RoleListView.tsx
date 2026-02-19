@@ -98,9 +98,10 @@ function collapseEmojiForRole(role: Role): string {
   const targets = (role.deployment_targets || []).map((entry) =>
     String(entry || "").trim().toLowerCase()
   );
+  const hasUniversal = targets.includes("universal");
   const hasServer = targets.includes("server");
   const hasWorkstation = targets.includes("workstation");
-  if (hasServer && hasWorkstation) return "🧩";
+  if (hasUniversal || (hasServer && hasWorkstation)) return "🧩";
   if (hasServer) return "🖥️";
   if (hasWorkstation) return "💻";
   return "📦";

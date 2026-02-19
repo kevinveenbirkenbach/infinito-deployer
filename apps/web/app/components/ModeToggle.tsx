@@ -13,7 +13,9 @@ export default function ModeToggle({ mode, onModeChange }: ModeToggleProps) {
     <button
       type="button"
       onClick={() => onModeChange(isExpert ? "customer" : "expert")}
-      className={`${styles.button} ${isExpert ? styles.buttonExpert : ""}`}
+      className={`${styles.button} ${
+        isExpert ? styles.buttonExpert : styles.buttonCustomer
+      }`}
       aria-label="Toggle customer/expert mode"
       aria-pressed={isExpert}
     >

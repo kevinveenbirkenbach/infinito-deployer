@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Set
 
 _ALLOWED_STATUSES: Set[str] = {"pre-alpha", "alpha", "beta", "stable", "deprecated"}
-_ALLOWED_TARGETS: Set[str] = {"server", "workstation"}
+_ALLOWED_TARGETS: Set[str] = {"universal", "server", "workstation"}
 
 
 def safe_lower(s: str) -> str:

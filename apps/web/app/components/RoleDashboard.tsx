@@ -52,9 +52,87 @@ function formatViewLabel(mode: ViewMode): string {
 }
 
 type SoftwareScope = "apps" | "bundles";
+const TARGET_FILTER_OPTIONS = [
+  "all",
+  "universal",
+  "server",
+  "workstation",
+] as const;
+type DeployTargetFilter = (typeof TARGET_FILTER_OPTIONS)[number];
+const TARGET_FILTER_SET = new Set<string>(TARGET_FILTER_OPTIONS);
+type ReleaseTrack = "stable" | "preview";
+const RELEASE_TRACK_OPTIONS = ["stable", "preview"] as const;
+const RELEASE_TRACK_SET = new Set<string>(RELEASE_TRACK_OPTIONS);
+const TARGET_FILTER_META: Record<
+  DeployTargetFilter,
+  { iconClass: string; tooltip: string }
+> = {
+  all: {
+    iconClass: "fa-solid fa-globe",
+    tooltip: "Show software for all deploy targets.",
+  },
+  universal: {
+    iconClass: "fa-solid fa-infinity",
+    tooltip: "Show only software that is deployable on universal targets.",
+  },
+  server: {
+    iconClass: "fa-solid fa-server",
+    tooltip: "Show only software for server deployments.",
+  },
+  workstation: {
+    iconClass: "fa-solid fa-laptop-code",
+    tooltip: "Show only software for workstation deployments.",
+  },
+};
+const STATUS_FILTER_META: Record<string, { iconClass: string; tooltip: string }> = {
+  stable: {
+    iconClass: "fa-solid fa-circle-check",
+    tooltip: "Stable lifecycle stage.",
+  },
+  maintenance: {
+    iconClass: "fa-solid fa-screwdriver-wrench",
+    tooltip: "Maintenance lifecycle stage.",
+  },
+  beta: {
+    iconClass: "fa-solid fa-flask",
+    tooltip: "Beta lifecycle stage.",
+  },
+  alpha: {
+    iconClass: "fa-solid fa-vial",
+    tooltip: "Alpha lifecycle stage.",
+  },
+  "pre-alpha": {
+    iconClass: "fa-solid fa-seedling",
+    tooltip: "Pre-alpha lifecycle stage.",
+  },
+  deprecated: {
+    iconClass: "fa-solid fa-box-archive",
+    tooltip: "Deprecated lifecycle stage.",
+  },
+};
+const LIFECYCLE_STABLE_ALLOWED = new Set<string>([
+  "beta",
+  "stable",
+  "maintenance",
+]);
+const LIFECYCLE_PREVIEW_EXPERT_ALLOWED = new Set<string>([
+  "alpha",
+  "beta",
+  "stable",
+  "maintenance",
+]);
+const FILTER_TOOLTIPS = {
+  rows: "Choose how many rows are rendered in row/column views.",
+  deployTarget: "Filter software by deploy target.",
+  lifecycle: "Filter apps and bundles by lifecycle status.",
+  selection: "Filter apps by enabled/disabled selection state.",
+  categories: "Filter software by metadata categories.",
+  tags: "Filter software by galaxy tags.",
+} as const;
 
 const SW_QUERY_KEYS = {
   scope: "sw_scope",
+  track: "sw_track",
   search: "sw_search",
   target: "sw_target",
   status: "sw_status",
@@ -71,6 +149,21 @@ const SW_QUERY_KEYS = {
 
 function normalizeFacet(value: string): string {
   return String(value || "").trim().toLowerCase();
+}
+
+function isReleaseTrack(value: string): value is ReleaseTrack {
+  return RELEASE_TRACK_SET.has(value);
+}
+
+function normalizeDeployTarget(value: string): string {
+  const normalized = normalizeFacet(value);
+  if (normalized === "servers") return "server";
+  if (normalized === "workstations") return "workstation";
+  return normalized;
+}
+
+function isDeployTargetFilter(value: string): value is DeployTargetFilter {
+  return TARGET_FILTER_SET.has(value);
 }
 
 function parseCsvParam(value: string | null): string[] {
@@ -207,7 +300,7 @@ export default function RoleDashboard({
   const [query, setQuery] = useState("");
   const [queryDraft, setQueryDraft] = useState("");
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
-  const [targetFilter, setTargetFilter] = useState("all");
+  const [targetFilter, setTargetFilter] = useState<DeployTargetFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<Set<string>>(new Set());
   const [tagFilter, setTagFilter] = useState<Set<string>>(new Set());
   const [categoryDraft, setCategoryDraft] = useState("");
@@ -219,6 +312,7 @@ export default function RoleDashboard({
   const [columnAnimationRunning, setColumnAnimationRunning] = useState(true);
   const [animatedRoleOffset, setAnimatedRoleOffset] = useState(0);
   const [animatedBundleOffset, setAnimatedBundleOffset] = useState(0);
+  const [releaseTrack, setReleaseTrack] = useState<ReleaseTrack>("stable");
   const [rowsOverride, setRowsOverride] = useState<number | null>(null);
   const [listForcedOpenColumns, setListForcedOpenColumns] = useState<
     OptionalListColumnKey[]
@@ -244,6 +338,8 @@ export default function RoleDashboard({
   const [filtersPos, setFiltersPos] = useState({ top: 0, left: 0 });
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [localMode, setLocalMode] = useState<"customer" | "expert">("customer");
+  const activeMode = controlledMode ?? localMode;
+  const isExpertMode = activeMode === "expert";
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [editorContent, setEditorContent] = useState("");
   const [editorPath, setEditorPath] = useState("");
@@ -280,6 +376,13 @@ export default function RoleDashboard({
       setSoftwareScope(scopeParam);
     }
 
+    const trackParam = String(params.get(SW_QUERY_KEYS.track) || "")
+      .trim()
+      .toLowerCase();
+    if (isReleaseTrack(trackParam)) {
+      setReleaseTrack(trackParam);
+    }
+
     const searchParam = params.get(SW_QUERY_KEYS.search);
     if (searchParam !== null) {
       setQuery(searchParam);
@@ -289,7 +392,7 @@ export default function RoleDashboard({
     const targetParam = String(params.get(SW_QUERY_KEYS.target) || "")
       .trim()
       .toLowerCase();
-    if (targetParam === "all" || targetParam === "server" || targetParam === "workstation") {
+    if (isDeployTargetFilter(targetParam)) {
       setTargetFilter(targetParam);
     }
 
@@ -362,6 +465,12 @@ export default function RoleDashboard({
 
     querySyncReadyRef.current = true;
   }, []);
+
+  useEffect(() => {
+    if (isExpertMode) return;
+    if (releaseTrack === "stable") return;
+    setReleaseTrack("stable");
+  }, [isExpertMode, releaseTrack]);
 
   useEffect(() => {
     if (!activeVideo) return;
@@ -451,13 +560,88 @@ export default function RoleDashboard({
     return () => observer.disconnect();
   }, []);
 
-  const statusOptions = useMemo(() => {
+  const roleStatusById = useMemo(() => {
+    const out: Record<string, string> = {};
+    roles.forEach((role) => {
+      const roleId = String(role.id || "").trim();
+      const status = normalizeFacet(role.status);
+      if (!roleId || !status) return;
+      out[roleId] = status;
+    });
+    return out;
+  }, [roles]);
+
+  const appLifecycleOptionsAll = useMemo(() => {
     const set = new Set<string>();
     roles.forEach((role) => {
-      if (role.status) set.add(role.status);
+      const status = normalizeFacet(role.status);
+      if (status) set.add(status);
     });
     return sortStatuses(Array.from(set));
   }, [roles]);
+
+  const bundleLifecycleByBundleId = useMemo(() => {
+    const out: Record<string, Set<string>> = {};
+    bundles.forEach((bundle) => {
+      const statuses = new Set<string>();
+      (Array.isArray(bundle.role_ids) ? bundle.role_ids : [])
+        .map((roleId) => String(roleId || "").trim())
+        .filter(Boolean)
+        .forEach((roleId) => {
+          const status = roleStatusById[roleId];
+          if (status) statuses.add(status);
+        });
+      out[bundle.id] = statuses;
+    });
+    return out;
+  }, [bundles, roleStatusById]);
+
+  const bundleLifecycleOptionsAll = useMemo(() => {
+    const set = new Set<string>();
+    Object.values(bundleLifecycleByBundleId).forEach((statuses) => {
+      statuses.forEach((status) => set.add(status));
+    });
+    return sortStatuses(Array.from(set));
+  }, [bundleLifecycleByBundleId]);
+
+  const lifecycleAllowedStatuses = useMemo(
+    () =>
+      new Set<string>(
+        Array.from(
+          isExpertMode && releaseTrack === "preview"
+            ? LIFECYCLE_PREVIEW_EXPERT_ALLOWED
+            : LIFECYCLE_STABLE_ALLOWED
+        )
+      ),
+    [isExpertMode, releaseTrack]
+  );
+
+  const lifecycleBaseOptions =
+    softwareScope === "bundles" ? bundleLifecycleOptionsAll : appLifecycleOptionsAll;
+
+  const lifecycleStatusOptions = useMemo(
+    () =>
+      sortStatuses(
+        lifecycleBaseOptions.filter((status) => lifecycleAllowedStatuses.has(status))
+      ),
+    [lifecycleBaseOptions, lifecycleAllowedStatuses]
+  );
+
+  const lifecycleStatusOptionSet = useMemo(
+    () => new Set<string>(lifecycleStatusOptions),
+    [lifecycleStatusOptions]
+  );
+
+  useEffect(() => {
+    setStatusFilter((prev) => {
+      const next = new Set(
+        Array.from(prev).filter((status) => lifecycleStatusOptionSet.has(status))
+      );
+      const unchanged =
+        next.size === prev.size && Array.from(next).every((status) => prev.has(status));
+      return unchanged ? prev : next;
+    });
+  }, [lifecycleStatusOptionSet]);
 
   const appCategoryOptions = useMemo(
     () => collectFacetValues(roles, (role) => role.categories),
@@ -687,8 +871,16 @@ export default function RoleDashboard({
     const tagTokens = new Set(Array.from(tagFilter));
     return bundles.filter((bundle) => {
       if (targetFilter !== "all") {
-        const target = normalizeFacet(bundle.deploy_target);
+        const target = normalizeDeployTarget(bundle.deploy_target);
         if (target !== targetFilter) return false;
+      }
+
+      if (statusFilter.size > 0) {
+        const bundleStatuses = bundleLifecycleByBundleId[bundle.id] || new Set<string>();
+        const hasLifecycleMatch = Array.from(statusFilter).some((status) =>
+          bundleStatuses.has(status)
+        );
+        if (!hasLifecycleMatch) return false;
       }
 
       if (categoryTokens.size > 0) {
@@ -710,7 +902,15 @@ export default function RoleDashboard({
 
       return true;
     });
-  }, [bundles, targetFilter, categoryFilter, tagFilter, query]);
+  }, [
+    bundles,
+    targetFilter,
+    statusFilter,
+    bundleLifecycleByBundleId,
+    categoryFilter,
+    tagFilter,
+    query,
+  ]);
 
   const filteredRoles = useMemo(() => {
     if (!showSelectedOnly) return appFilteredRoles;
@@ -922,7 +1122,7 @@ export default function RoleDashboard({
       .map((alias) => String(alias || "").trim())
       .filter(Boolean);
     if (existingAliases.length > 0) {
-      const deployTarget = String(bundle.deploy_target || "").trim().toLowerCase();
+      const deployTarget = normalizeDeployTarget(bundle.deploy_target);
       const targetMatch =
         existingAliases.find((alias) => alias.toLowerCase() === deployTarget) ||
         existingAliases.find((alias) =>
@@ -1085,6 +1285,8 @@ export default function RoleDashboard({
     categoryFilter,
     tagFilter,
     softwareScope,
+    releaseTrack,
+    activeMode,
     showSelectedOnly,
     viewMode,
     rowsOverride,
@@ -1168,6 +1370,7 @@ export default function RoleDashboard({
     const url = new URL(window.location.href);
     const params = url.searchParams;
     params.set(SW_QUERY_KEYS.scope, softwareScope);
+    params.set(SW_QUERY_KEYS.track, releaseTrack);
     params.set(SW_QUERY_KEYS.search, query);
     params.set(SW_QUERY_KEYS.target, targetFilter);
     params.set(
@@ -1198,6 +1401,7 @@ export default function RoleDashboard({
     window.history.replaceState({}, "", url.toString());
   }, [
     softwareScope,
+    releaseTrack,
     query,
     targetFilter,
     statusFilter,
@@ -1223,7 +1427,6 @@ export default function RoleDashboard({
     return () => window.removeEventListener("keydown", onEscape);
   }, [editingRole]);
 
-  const activeMode = controlledMode ?? localMode;
   const applyMode = (mode: "customer" | "expert") => {
     if (onModeChange) {
       onModeChange(mode);
@@ -1236,8 +1439,16 @@ export default function RoleDashboard({
     applyMode(mode);
     if (mode === "customer") {
       setEditingRole(null);
+      setReleaseTrack("stable");
     }
   };
+
+  const releaseTrackLocked = !isExpertMode;
+  const releaseTrackTooltip = releaseTrackLocked
+    ? "Preview features require Expert mode. Switch to Expert mode to unlock preview."
+    : releaseTrack === "preview"
+      ? "Preview mode active. Alpha lifecycle filters are additionally available."
+      : "Stable mode active. Lifecycle filters are limited to beta and maintenance/stable.";
 
   const startEditRoleConfig = async (role: Role, aliasOverride?: string) => {
     if (!onLoadRoleAppConfig) return;
@@ -1319,7 +1530,13 @@ export default function RoleDashboard({
             style={{ top: filtersPos.top, left: filtersPos.left }}
           >
             <div className={styles.group}>
-              <span className={`text-body-tertiary ${styles.groupTitle}`}>Rows</span>
+              <span
+                className={`text-body-tertiary ${styles.groupTitle}`}
+                title={FILTER_TOOLTIPS.rows}
+              >
+                <i className={`fa-solid fa-grip ${styles.groupTitleIcon}`} aria-hidden="true" />
+                <span>Rows</span>
+              </span>
               <select
                 value={rowsOverride ? String(rowsOverride) : "auto"}
                 onChange={(event) => {
@@ -1332,6 +1549,7 @@ export default function RoleDashboard({
                   }
                 }}
                 className={`form-select ${styles.rowSelect}`}
+                title={FILTER_TOOLTIPS.rows}
               >
                 <option value="auto">Auto ({computedRows})</option>
                 {rowOptions.map((value) => (
@@ -1343,55 +1561,95 @@ export default function RoleDashboard({
             </div>
 
             <div className={styles.group}>
-              <span className={`text-body-tertiary ${styles.groupTitle}`}>
-                Deploy target
+              <span
+                className={`text-body-tertiary ${styles.groupTitle}`}
+                title={FILTER_TOOLTIPS.deployTarget}
+              >
+                <i className={`fa-solid fa-crosshairs ${styles.groupTitleIcon}`} aria-hidden="true" />
+                <span>Deploy target</span>
               </span>
               <div className={styles.groupButtons}>
-                {["all", "server", "workstation"].map((target) => (
+                {TARGET_FILTER_OPTIONS.map((target) => (
                   <button
                     key={target}
                     onClick={() => setTargetFilter(target)}
                     className={`${styles.pillButton} ${
                       targetFilter === target ? styles.pillButtonActive : ""
                     }`}
+                    title={TARGET_FILTER_META[target].tooltip}
+                    aria-label={TARGET_FILTER_META[target].tooltip}
                   >
-                    {target === "server" ? "device" : target}
+                    <i className={TARGET_FILTER_META[target].iconClass} aria-hidden="true" />
+                    <span>{target}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {softwareScope === "apps" ? (
-              <div className={styles.group}>
-                <span className={`text-body-tertiary ${styles.groupTitle}`}>Status</span>
-                <div className={styles.groupButtons}>
-                  {statusOptions.map((status) => {
-                    const active = statusFilter.has(status);
-                    return (
-                      <button
-                        key={status}
-                        onClick={() => toggleStatus(status)}
-                        className={`${styles.pillButton} ${
-                          active ? styles.pillButtonActive : ""
-                        }`}
-                      >
-                        {status}
-                      </button>
-                    );
-                  })}
-                </div>
+            <div className={styles.group}>
+              <span
+                className={`text-body-tertiary ${styles.groupTitle}`}
+                title={FILTER_TOOLTIPS.lifecycle}
+              >
+                <i className={`fa-solid fa-wave-square ${styles.groupTitleIcon}`} aria-hidden="true" />
+                <span>Lifecycle</span>
+              </span>
+              <div className={styles.groupButtons}>
+                {lifecycleStatusOptions.map((status) => {
+                  const active = statusFilter.has(status);
+                  const statusMeta = STATUS_FILTER_META[status] || {
+                    iconClass: "fa-solid fa-circle",
+                    tooltip: `${status} lifecycle stage.`,
+                  };
+                  return (
+                    <button
+                      key={status}
+                      onClick={() => toggleStatus(status)}
+                      className={`${styles.pillButton} ${
+                        active ? styles.pillButtonActive : ""
+                      }`}
+                      title={`${
+                        softwareScope === "bundles" ? "Filter bundles" : "Filter apps"
+                      } by lifecycle: ${status}. ${statusMeta.tooltip}`}
+                    >
+                      <i className={statusMeta.iconClass} aria-hidden="true" />
+                      <span>{status}</span>
+                    </button>
+                  );
+                })}
               </div>
-            ) : null}
+              {lifecycleStatusOptions.length === 0 ? (
+                <span className={styles.groupHint}>
+                  No lifecycle options available for this scope and mode.
+                </span>
+              ) : null}
+            </div>
 
             {softwareScope === "apps" ? (
               <div className={styles.group}>
-                <span className={`text-body-tertiary ${styles.groupTitle}`}>
-                  Selection
+                <span
+                  className={`text-body-tertiary ${styles.groupTitle}`}
+                  title={FILTER_TOOLTIPS.selection}
+                >
+                  <i className={`fa-solid fa-list-check ${styles.groupTitleIcon}`} aria-hidden="true" />
+                  <span>Selection</span>
                 </span>
                 <div className={styles.groupButtons}>
                   {[
-                    { key: "all", label: "all", active: !showSelectedOnly },
-                    { key: "selected", label: "enabled", active: showSelectedOnly },
+                    {
+                      key: "all",
+                      label: "all",
+                      iconClass: "fa-solid fa-layer-group",
+                      tooltip: "Show all apps.",
+                      active: !showSelectedOnly,
+                    },
+                    {
+                      key: "selected",
+                      label: "enabled",
+                      iconClass: "fa-solid fa-circle-check",
+                      tooltip: "Show only enabled apps.",
+                      active: showSelectedOnly,
+                    },
                   ].map((item) => (
                     <button
                       key={item.key}
@@ -1399,8 +1657,10 @@ export default function RoleDashboard({
                       className={`${styles.pillButton} ${
                         item.active ? styles.pillButtonActive : ""
                       }`}
+                      title={item.tooltip}
                     >
-                      {item.label}
+                      <i className={item.iconClass} aria-hidden="true" />
+                      <span>{item.label}</span>
                     </button>
                   ))}
                 </div>
@@ -1408,7 +1668,13 @@ export default function RoleDashboard({
             ) : null}
 
             <div className={styles.group}>
-              <span className={`text-body-tertiary ${styles.groupTitle}`}>Categories</span>
+              <span
+                className={`text-body-tertiary ${styles.groupTitle}`}
+                title={FILTER_TOOLTIPS.categories}
+              >
+                <i className={`fa-solid fa-folder-open ${styles.groupTitleIcon}`} aria-hidden="true" />
+                <span>Categories</span>
+              </span>
               <div className={styles.filterInputRow}>
                 <input
                   value={categoryDraft}
@@ -1422,12 +1688,15 @@ export default function RoleDashboard({
                   list="role-category-options"
                   placeholder="Search/add category"
                   className={`form-control ${styles.filterInput}`}
+                  title={FILTER_TOOLTIPS.categories}
                 />
                 <button
                   type="button"
                   onClick={addCategoryFilter}
                   className={styles.filterAddButton}
+                  title="Add category filter"
                 >
+                  <i className="fa-solid fa-plus" aria-hidden="true" />
                   Add
                 </button>
               </div>
@@ -1450,6 +1719,7 @@ export default function RoleDashboard({
                         })
                       }
                       className={styles.selectedToken}
+                      title={`Remove category filter: ${activeCategoryLabelByToken.get(token) || token}`}
                     >
                       <span>{activeCategoryLabelByToken.get(token) || token}</span>
                       <i className="fa-solid fa-xmark" aria-hidden="true" />
@@ -1462,7 +1732,13 @@ export default function RoleDashboard({
             </div>
 
             <div className={styles.group}>
-              <span className={`text-body-tertiary ${styles.groupTitle}`}>Tags</span>
+              <span
+                className={`text-body-tertiary ${styles.groupTitle}`}
+                title={FILTER_TOOLTIPS.tags}
+              >
+                <i className={`fa-solid fa-tags ${styles.groupTitleIcon}`} aria-hidden="true" />
+                <span>Tags</span>
+              </span>
               <div className={styles.filterInputRow}>
                 <input
                   value={tagDraft}
@@ -1476,12 +1752,15 @@ export default function RoleDashboard({
                   list="role-tag-options"
                   placeholder="Search/add tag"
                   className={`form-control ${styles.filterInput}`}
+                  title={FILTER_TOOLTIPS.tags}
                 />
                 <button
                   type="button"
                   onClick={addTagFilter}
                   className={styles.filterAddButton}
+                  title="Add tag filter"
                 >
+                  <i className="fa-solid fa-plus" aria-hidden="true" />
                   Add
                 </button>
               </div>
@@ -1504,6 +1783,7 @@ export default function RoleDashboard({
                         })
                       }
                       className={styles.selectedToken}
+                      title={`Remove tag filter: ${activeTagLabelByToken.get(token) || token}`}
                     >
                       <span>{activeTagLabelByToken.get(token) || token}</span>
                       <i className="fa-solid fa-xmark" aria-hidden="true" />
@@ -1589,6 +1869,11 @@ export default function RoleDashboard({
                 }}
                 className={`${styles.toolbarButton} ${styles.filterButton}`}
                 aria-expanded={filtersOpen}
+                title={
+                  softwareScope === "apps"
+                    ? "Open filters for rows, deploy target, lifecycle, selection, categories and tags"
+                    : "Open filters for rows, deploy target, lifecycle, categories and tags"
+                }
               >
                 <i className="fa-solid fa-filter" aria-hidden="true" />
                 <span>Filters</span>
@@ -1609,6 +1894,11 @@ export default function RoleDashboard({
                 }`}
                 aria-label="Toggle apps and bundles"
                 aria-pressed={softwareScope === "apps"}
+                title={
+                  softwareScope === "apps"
+                    ? "Switch scope to bundles"
+                    : "Switch scope to apps"
+                }
               >
                 <i
                   className={
@@ -1620,6 +1910,34 @@ export default function RoleDashboard({
                 />
                 <span>{softwareScope === "apps" ? "Apps" : "Bundles"}</span>
               </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setReleaseTrack((prev) => (prev === "preview" ? "stable" : "preview"))
+                }
+                className={`${styles.toolbarButton} ${styles.releaseTrackButton} ${
+                  releaseTrack === "preview"
+                    ? styles.releaseTrackButtonPreview
+                    : styles.releaseTrackButtonStable
+                } ${releaseTrackLocked ? styles.releaseTrackButtonLocked : ""}`}
+                aria-label="Toggle stable and preview release track"
+                aria-pressed={releaseTrack === "preview"}
+                title={releaseTrackTooltip}
+                disabled={releaseTrackLocked}
+              >
+                <i
+                  className={
+                    releaseTrack === "preview"
+                      ? "fa-solid fa-flask"
+                      : "fa-solid fa-shield-halved"
+                  }
+                  aria-hidden="true"
+                />
+                <span>{releaseTrack === "preview" ? "Preview" : "Stable"}</span>
+              </button>
+              <div className={styles.modeControl}>
+                <ModeToggle mode={activeMode} onModeChange={handleModeChange} />
+              </div>
               <div className={styles.viewModeControl}>
                 <button
                   ref={viewButtonRef}
@@ -1683,9 +2001,6 @@ export default function RoleDashboard({
                     })}
                   </div>
                 ) : null}
-              </div>
-              <div className={styles.modeControl}>
-                <ModeToggle mode={activeMode} onModeChange={handleModeChange} />
               </div>
             </div>
           </div>

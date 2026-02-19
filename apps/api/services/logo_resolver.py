@@ -140,8 +140,6 @@ class SimpleIconsResolver:
             "web-svc-",
             "svc-",
             "sys-",
-            "util-srv-",
-            "util-desk-",
             "desk-",
             "drv-",
             "persona-provider-",

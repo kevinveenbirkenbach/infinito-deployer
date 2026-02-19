@@ -91,11 +91,7 @@ export function filterRoles(roles, filters) {
 
     if (target && target !== "all") {
       const targets = role.deployment_targets ?? [];
-      if (target === "server" || target === "workstation") {
-        if (!targets.includes(target) && !targets.includes("universal")) {
-          return false;
-        }
-      } else if (!targets.includes(target)) {
+      if (!targets.includes(target)) {
         return false;
       }
     }
