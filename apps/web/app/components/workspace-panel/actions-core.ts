@@ -983,6 +983,24 @@ export function createWorkspacePanelCoreActions(ctx: any) {
     const user = credentials.user?.trim() || "";
     const description = credentials.description?.trim() || "";
     const primaryDomain = credentials.primaryDomain?.trim() || "";
+    const requirementServerType = String(
+      credentials.requirementServerType || ""
+    )
+      .trim()
+      .toLowerCase();
+    const requirementStorageGbRaw = String(
+      credentials.requirementStorageGb || ""
+    ).trim();
+    const requirementStorageGbParsed = Number(requirementStorageGbRaw);
+    const requirementStorageGb =
+      requirementStorageGbRaw &&
+      Number.isFinite(requirementStorageGbParsed) &&
+      requirementStorageGbParsed >= 0
+        ? String(Math.floor(requirementStorageGbParsed))
+        : "";
+    const requirementLocation = String(
+      credentials.requirementLocation || ""
+    ).trim();
     const color = normalizeDeviceColor(credentials.color) || "";
     const logoEmoji = normalizeDeviceEmoji(credentials.logoEmoji) || "";
     const targetPath =
@@ -990,7 +1008,19 @@ export function createWorkspacePanelCoreActions(ctx: any) {
       (activeAlias ? `host_vars/${sanitizeAliasFilename(activeAlias)}.yml` : null);
     if (!targetPath) return;
     if (activePath === targetPath && editorDirty) return;
-    if (!host && !user && !description && !primaryDomain && !color && !logoEmoji) return;
+    if (
+      !host &&
+      !user &&
+      !description &&
+      !primaryDomain &&
+      !requirementServerType &&
+      !requirementStorageGb &&
+      !requirementLocation &&
+      !color &&
+      !logoEmoji
+    ) {
+      return;
+    }
 
     try {
       let data: Record<string, any> = {};
@@ -1025,6 +1055,57 @@ export function createWorkspacePanelCoreActions(ctx: any) {
         }
       } else if (Object.prototype.hasOwnProperty.call(data, "DOMAIN_PRIMARY")) {
         delete data.DOMAIN_PRIMARY;
+        changed = true;
+      }
+      const requirementsNode =
+        data.server_requirements &&
+        typeof data.server_requirements === "object" &&
+        !Array.isArray(data.server_requirements)
+          ? { ...data.server_requirements }
+          : {};
+      let requirementsChanged = false;
+      if (requirementServerType) {
+        if (requirementsNode.server_type !== requirementServerType) {
+          requirementsNode.server_type = requirementServerType;
+          requirementsChanged = true;
+        }
+      } else if (
+        Object.prototype.hasOwnProperty.call(requirementsNode, "server_type")
+      ) {
+        delete requirementsNode.server_type;
+        requirementsChanged = true;
+      }
+      if (requirementStorageGb) {
+        const storageValue = Number(requirementStorageGb);
+        if (requirementsNode.storage_gb !== storageValue) {
+          requirementsNode.storage_gb = storageValue;
+          requirementsChanged = true;
+        }
+      } else if (
+        Object.prototype.hasOwnProperty.call(requirementsNode, "storage_gb")
+      ) {
+        delete requirementsNode.storage_gb;
+        requirementsChanged = true;
+      }
+      if (requirementLocation) {
+        if (requirementsNode.location !== requirementLocation) {
+          requirementsNode.location = requirementLocation;
+          requirementsChanged = true;
+        }
+      } else if (
+        Object.prototype.hasOwnProperty.call(requirementsNode, "location")
+      ) {
+        delete requirementsNode.location;
+        requirementsChanged = true;
+      }
+      if (requirementsChanged) {
+        if (Object.keys(requirementsNode).length > 0) {
+          data.server_requirements = requirementsNode;
+        } else if (
+          Object.prototype.hasOwnProperty.call(data, "server_requirements")
+        ) {
+          delete data.server_requirements;
+        }
         changed = true;
       }
       if (color && data.color !== color) {

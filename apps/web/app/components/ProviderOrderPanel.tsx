@@ -32,6 +32,9 @@ type ProviderOrderPanelProps = {
     ansible_host: string;
     ansible_user: string;
     ansible_port: number;
+    requirementServerType?: string;
+    requirementStorageGb?: string;
+    requirementLocation?: string;
   }) => void;
 };
 
@@ -45,8 +48,6 @@ export default function ProviderOrderPanel({
   const [offers, setOffers] = useState<ProviderOffer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [catalogUpdatedAt, setCatalogUpdatedAt] = useState<string>("");
-  const [catalogStale, setCatalogStale] = useState(false);
 
   const [customerType, setCustomerType] = useState("vps");
   const [customerStorage, setCustomerStorage] = useState("200");
@@ -87,8 +88,6 @@ export default function ProviderOrderPanel({
           ? (data.offers as ProviderOffer[])
           : [];
         setOffers(nextOffers);
-        setCatalogUpdatedAt(String(data?.updated_at || ""));
-        setCatalogStale(Boolean(data?.stale));
         const providerFlags: Record<string, boolean> = {};
         Array.from(new Set(nextOffers.map((offer) => offer.provider))).forEach(
           (provider) => {
@@ -237,11 +236,24 @@ export default function ProviderOrderPanel({
       const data = await res.json();
       const device = data?.device;
       if (device?.alias && device?.ansible_host && device?.ansible_user) {
+        const requirementServerType = String(offer.product_type || "vps")
+          .trim()
+          .toLowerCase();
+        const parsedStorage = Number(offer.storage?.gb ?? 0);
+        const requirementStorageGb =
+          Number.isFinite(parsedStorage) && parsedStorage > 0
+            ? String(Math.floor(parsedStorage))
+            : "200";
+        const requirementLocation =
+          String(offer.location_label || "").trim() || "Germany";
         onOrderedServer({
           alias: String(device.alias),
           ansible_host: String(device.ansible_host),
           ansible_user: String(device.ansible_user),
           ansible_port: Number(device.ansible_port || 22),
+          requirementServerType,
+          requirementStorageGb,
+          requirementLocation,
         });
       }
     } catch (err: any) {
@@ -253,9 +265,6 @@ export default function ProviderOrderPanel({
 
   return (
     <div className={styles.root}>
-      {catalogStale ? (
-        <div className={styles.warning}>Catalog may be outdated. Last update: {catalogUpdatedAt || "unknown"}.</div>
-      ) : null}
       {loading ? <div className={styles.hint}>Loading provider catalog...</div> : null}
       {error ? <div className={styles.error}>{error}</div> : null}
       {orderError ? <div className={styles.error}>{orderError}</div> : null}

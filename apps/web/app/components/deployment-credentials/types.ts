@@ -2,6 +2,9 @@ export type ServerState = {
   alias: string;
   description: string;
   primaryDomain: string;
+  requirementServerType: string;
+  requirementStorageGb: string;
+  requirementLocation: string;
   host: string;
   port: string;
   user: string;

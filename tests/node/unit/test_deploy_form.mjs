@@ -13,6 +13,9 @@ test("initial state keeps required defaults and is invalid", () => {
   assert.equal(state.host, "");
   assert.equal(state.port, "22");
   assert.equal(state.user, "root");
+  assert.equal(state.requirementServerType, "vps");
+  assert.equal(state.requirementStorageGb, "200");
+  assert.equal(state.requirementLocation, "Germany");
   assert.equal(state.password, "");
   assert.equal(state.privateKey, "");
   assert.equal(state.publicKey, "");

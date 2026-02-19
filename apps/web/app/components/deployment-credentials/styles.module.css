@@ -179,6 +179,9 @@
 }
 
 .selectControl {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid var(--bs-border-color);
@@ -362,6 +365,32 @@
   text-align: center;
 }
 
+.colCompare {
+  width: 126px;
+  min-width: 126px;
+  text-align: center;
+}
+
+.listCompareCell {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.listCompareButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-info-border-subtle);
+  background: var(--bs-info-bg-subtle);
+  color: var(--bs-info-text-emphasis);
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .rowDefault {
   border: 1px solid var(--bs-border-color-translucent);
   background: var(--bs-body-bg);
@@ -512,6 +541,15 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.aliasInputRow .inputSmall,
+.aliasInputRow .fieldInput {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
 }
 
 .aliasEmojiPreview {
@@ -582,6 +620,8 @@
 
 .inputSmall {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 6px 8px;
   border-radius: 10px;
   border: 1px solid var(--bs-border-color);
@@ -631,6 +671,9 @@
 }
 
 .identityAliasInput {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
   height: 38px;
   min-height: 38px;
   box-sizing: border-box;
@@ -728,6 +771,7 @@
 }
 
 .serverCard {
+  min-width: 0;
   padding: var(--server-card-padding, 16px);
   border-radius: 18px;
   display: grid;
@@ -812,11 +856,13 @@
 .fieldGrid {
   display: grid;
   gap: var(--server-fields-gap, 10px);
+  min-width: 0;
 }
 
 .fieldWrap {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .fieldLabel {
@@ -825,6 +871,8 @@
 
 .fieldInput {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   padding: var(--server-input-padding, 8px 10px);
   border-radius: 10px;
   border: 1px solid var(--bs-border-color);
@@ -891,6 +939,12 @@
   justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.customerCompareButton {
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .cardPrimaryActions {

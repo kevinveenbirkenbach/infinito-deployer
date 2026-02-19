@@ -13,6 +13,9 @@ test("createServerPlaceholder does not assign random color or emoji", () => {
   assert.equal(placeholder.alias, "smile");
   assert.equal(placeholder.color, "");
   assert.equal(placeholder.logoEmoji, "");
+  assert.equal(placeholder.requirementServerType, "vps");
+  assert.equal(placeholder.requirementStorageGb, "200");
+  assert.equal(placeholder.requirementLocation, "Germany");
   assert.equal(placeholder.authMethod, "password");
 });
 
@@ -46,6 +49,11 @@ test("parseHostVarsServerPatchData extracts persisted color and emoji from host_
     ansible_port: 2222,
     description: "Smile device",
     DOMAIN_PRIMARY: "example.org",
+    server_requirements: {
+      server_type: "dedicated",
+      storage_gb: 750,
+      location: "Nuremberg",
+    },
     color: "#11aa55",
     logo: { emoji: "💾" },
   });
@@ -55,6 +63,9 @@ test("parseHostVarsServerPatchData extracts persisted color and emoji from host_
   assert.equal(patch.port, "2222");
   assert.equal(patch.description, "Smile device");
   assert.equal(patch.primaryDomain, "example.org");
+  assert.equal(patch.requirementServerType, "dedicated");
+  assert.equal(patch.requirementStorageGb, "750");
+  assert.equal(patch.requirementLocation, "Nuremberg");
   assert.equal(patch.color, "#11AA55");
   assert.equal(patch.logoEmoji, "💾");
 });
@@ -66,6 +77,9 @@ test("buildCredentialsPatchFromHostVarsData does not clear color/emoji when miss
     port: "22",
     description: "",
     primaryDomain: "",
+    requirementServerType: "vps",
+    requirementStorageGb: "200",
+    requirementLocation: "Germany",
     color: "#2255AA",
     logoEmoji: "💻",
   };

@@ -33,6 +33,7 @@ type DeploymentCredentialsFormProps = {
   onOpenCredentialsAliasHandled?: () => void;
   deviceMode?: "customer" | "expert";
   onDeviceModeChange?: (mode: "customer" | "expert") => void;
+  onOpenDetailSearch?: () => void;
   compact?: boolean;
 };
 
@@ -63,6 +64,7 @@ export default function DeploymentCredentialsForm({
   onOpenCredentialsAliasHandled,
   deviceMode,
   onDeviceModeChange,
+  onOpenDetailSearch,
   compact = false,
 }: DeploymentCredentialsFormProps) {
   const Wrapper = compact ? "div" : "section";
@@ -800,6 +802,8 @@ export default function DeploymentCredentialsForm({
               onRequestPurge={requestPurgeServers}
               requestedDetailAlias={requestedDetailAlias}
               onRequestedDetailAliasHandled={() => setRequestedDetailAlias(null)}
+              deviceMode={deviceMode}
+              onOpenDetailSearch={onOpenDetailSearch}
             />
           </div>
         </div>

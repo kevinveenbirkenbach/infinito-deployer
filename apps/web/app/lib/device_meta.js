@@ -1,4 +1,7 @@
 const HEX_COLOR_PATTERN = /^#?([A-Fa-f0-9]{6})$/;
+const DEFAULT_REQUIREMENT_SERVER_TYPE = "vps";
+const DEFAULT_REQUIREMENT_STORAGE_GB = "200";
+const DEFAULT_REQUIREMENT_LOCATION = "Germany";
 
 function normalizeDeviceColor(value) {
   const raw = String(value || "").trim();
@@ -14,11 +17,38 @@ function normalizeDeviceEmoji(value) {
   return raw;
 }
 
+function normalizeRequirementServerType(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return null;
+  return raw;
+}
+
+function normalizeRequirementStorageGb(value) {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    return String(Math.max(0, Math.floor(value)));
+  }
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return null;
+  return String(Math.max(0, Math.floor(parsed)));
+}
+
+function normalizeRequirementLocation(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  return raw;
+}
+
 export function createServerPlaceholder(alias) {
   return {
     alias: String(alias || "").trim(),
     description: "",
     primaryDomain: "",
+    requirementServerType: DEFAULT_REQUIREMENT_SERVER_TYPE,
+    requirementStorageGb: DEFAULT_REQUIREMENT_STORAGE_GB,
+    requirementLocation: DEFAULT_REQUIREMENT_LOCATION,
     host: "",
     port: "22",
     user: "root",
@@ -37,9 +67,21 @@ export function normalizePersistedDeviceMeta(servers) {
   return (Array.isArray(servers) ? servers : []).map((server) => {
     const normalizedColor = normalizeDeviceColor(server?.color);
     const normalizedLogo = normalizeDeviceEmoji(server?.logoEmoji);
+    const normalizedRequirementServerType =
+      normalizeRequirementServerType(server?.requirementServerType) ||
+      DEFAULT_REQUIREMENT_SERVER_TYPE;
+    const normalizedRequirementStorageGb =
+      normalizeRequirementStorageGb(server?.requirementStorageGb) ||
+      DEFAULT_REQUIREMENT_STORAGE_GB;
+    const normalizedRequirementLocation =
+      normalizeRequirementLocation(server?.requirementLocation) ||
+      DEFAULT_REQUIREMENT_LOCATION;
     return {
       ...server,
       description: String(server?.description || ""),
+      requirementServerType: normalizedRequirementServerType,
+      requirementStorageGb: normalizedRequirementStorageGb,
+      requirementLocation: normalizedRequirementLocation,
       color: normalizedColor || "",
       logoEmoji: normalizedLogo || "",
     };
@@ -49,6 +91,39 @@ export function normalizePersistedDeviceMeta(servers) {
 function parseHostVarsValues(data) {
   const node =
     data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  const requirementsNode =
+    node.server_requirements &&
+    typeof node.server_requirements === "object" &&
+    !Array.isArray(node.server_requirements)
+      ? node.server_requirements
+      : {};
+  const hasRequirementServerType =
+    Object.prototype.hasOwnProperty.call(requirementsNode, "server_type") ||
+    Object.prototype.hasOwnProperty.call(node, "server_type");
+  const hasRequirementStorageGb =
+    Object.prototype.hasOwnProperty.call(requirementsNode, "storage_gb") ||
+    Object.prototype.hasOwnProperty.call(node, "storage_gb");
+  const hasRequirementLocation =
+    Object.prototype.hasOwnProperty.call(requirementsNode, "location") ||
+    Object.prototype.hasOwnProperty.call(node, "location");
+  const rawRequirementServerType = Object.prototype.hasOwnProperty.call(
+    requirementsNode,
+    "server_type"
+  )
+    ? requirementsNode.server_type
+    : node.server_type;
+  const rawRequirementStorageGb = Object.prototype.hasOwnProperty.call(
+    requirementsNode,
+    "storage_gb"
+  )
+    ? requirementsNode.storage_gb
+    : node.storage_gb;
+  const rawRequirementLocation = Object.prototype.hasOwnProperty.call(
+    requirementsNode,
+    "location"
+  )
+    ? requirementsNode.location
+    : node.location;
   const nextHost =
     typeof node.ansible_host === "string" ? String(node.ansible_host || "").trim() : "";
   const nextUser =
@@ -66,6 +141,15 @@ function parseHostVarsValues(data) {
     typeof node.logo.emoji === "string"
       ? normalizeDeviceEmoji(String(node.logo.emoji || "")) || ""
       : "";
+  const nextRequirementServerType = hasRequirementServerType
+    ? normalizeRequirementServerType(rawRequirementServerType) || ""
+    : "";
+  const nextRequirementStorageGb = hasRequirementStorageGb
+    ? normalizeRequirementStorageGb(rawRequirementStorageGb) || ""
+    : "";
+  const nextRequirementLocation = hasRequirementLocation
+    ? normalizeRequirementLocation(rawRequirementLocation) || ""
+    : "";
   let nextPort = "";
   if (typeof node.ansible_port === "number") {
     nextPort = Number.isFinite(node.ansible_port) ? String(node.ansible_port) : "";
@@ -83,6 +167,12 @@ function parseHostVarsValues(data) {
     nextPrimaryDomain,
     nextColor,
     nextLogoEmoji,
+    nextRequirementServerType,
+    nextRequirementStorageGb,
+    nextRequirementLocation,
+    hasRequirementServerType,
+    hasRequirementStorageGb,
+    hasRequirementLocation,
     nextPort,
   };
 }
@@ -95,6 +185,12 @@ export function parseHostVarsServerPatchData(data) {
     nextPrimaryDomain,
     nextColor,
     nextLogoEmoji,
+    nextRequirementServerType,
+    nextRequirementStorageGb,
+    nextRequirementLocation,
+    hasRequirementServerType,
+    hasRequirementStorageGb,
+    hasRequirementLocation,
     nextPort,
   } = parseHostVarsValues(data);
   const patch = {};
@@ -103,6 +199,15 @@ export function parseHostVarsServerPatchData(data) {
   if (nextPort) patch.port = nextPort;
   patch.description = nextDescription;
   patch.primaryDomain = nextPrimaryDomain;
+  if (hasRequirementServerType) {
+    patch.requirementServerType = nextRequirementServerType;
+  }
+  if (hasRequirementStorageGb) {
+    patch.requirementStorageGb = nextRequirementStorageGb;
+  }
+  if (hasRequirementLocation) {
+    patch.requirementLocation = nextRequirementLocation;
+  }
   if (nextColor) patch.color = nextColor;
   if (nextLogoEmoji) patch.logoEmoji = nextLogoEmoji;
   return patch;
@@ -116,6 +221,12 @@ export function buildCredentialsPatchFromHostVarsData(data, credentials) {
     nextPrimaryDomain,
     nextColor,
     nextLogoEmoji,
+    nextRequirementServerType,
+    nextRequirementStorageGb,
+    nextRequirementLocation,
+    hasRequirementServerType,
+    hasRequirementStorageGb,
+    hasRequirementLocation,
     nextPort,
   } = parseHostVarsValues(data);
   const patch = {};
@@ -133,6 +244,24 @@ export function buildCredentialsPatchFromHostVarsData(data, credentials) {
   }
   if (nextPrimaryDomain !== credentials.primaryDomain) {
     patch.primaryDomain = nextPrimaryDomain;
+  }
+  if (
+    hasRequirementServerType &&
+    nextRequirementServerType !== credentials.requirementServerType
+  ) {
+    patch.requirementServerType = nextRequirementServerType;
+  }
+  if (
+    hasRequirementStorageGb &&
+    nextRequirementStorageGb !== credentials.requirementStorageGb
+  ) {
+    patch.requirementStorageGb = nextRequirementStorageGb;
+  }
+  if (
+    hasRequirementLocation &&
+    nextRequirementLocation !== credentials.requirementLocation
+  ) {
+    patch.requirementLocation = nextRequirementLocation;
   }
   if (nextColor && nextColor !== credentials.color) {
     patch.color = nextColor;

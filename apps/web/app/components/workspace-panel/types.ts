@@ -9,6 +9,9 @@ export type CredentialsState = {
   alias: string;
   description: string;
   primaryDomain: string;
+  requirementServerType: string;
+  requirementStorageGb: string;
+  requirementLocation: string;
   host: string;
   port: string;
   user: string;

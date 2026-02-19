@@ -179,6 +179,9 @@ export default function DeploymentWorkspace({
       alias: initial.alias,
       description: initial.description,
       primaryDomain: initial.primaryDomain || "",
+      requirementServerType: initial.requirementServerType || "vps",
+      requirementStorageGb: initial.requirementStorageGb || "200",
+      requirementLocation: initial.requirementLocation || "Germany",
       host: initial.host,
       port: initial.port,
       user: initial.user,
@@ -243,6 +246,7 @@ export default function DeploymentWorkspace({
   );
   const [deviceMode, setDeviceMode] = useState<"customer" | "expert">("customer");
   const [expertConfirmOpen, setExpertConfirmOpen] = useState(false);
+  const [detailSearchOpen, setDetailSearchOpen] = useState(false);
   const [primaryDomainModalOpen, setPrimaryDomainModalOpen] = useState(false);
   const [primaryDomainDraft, setPrimaryDomainDraft] = useState("");
   const [primaryDomainModalError, setPrimaryDomainModalError] = useState<
@@ -556,6 +560,9 @@ export default function DeploymentWorkspace({
         alias,
         description: "",
         primaryDomain: "",
+        requirementServerType: "vps",
+        requirementStorageGb: "200",
+        requirementLocation: "Germany",
         host: "",
         port: "22",
         user: "root",
@@ -659,6 +666,9 @@ export default function DeploymentWorkspace({
               merged.user === server.user &&
               merged.description === server.description &&
               merged.primaryDomain === server.primaryDomain &&
+              merged.requirementServerType === server.requirementServerType &&
+              merged.requirementStorageGb === server.requirementStorageGb &&
+              merged.requirementLocation === server.requirementLocation &&
               merged.color === server.color &&
               merged.logoEmoji === server.logoEmoji;
             if (same) return server;
@@ -854,6 +864,7 @@ export default function DeploymentWorkspace({
     setLiveError(null);
     setOpenCredentialsAlias(null);
     setExpertConfirmOpen(false);
+    setDetailSearchOpen(false);
     setPrimaryDomainModalOpen(false);
     setPrimaryDomainDraft("");
     setPrimaryDomainModalError(null);
@@ -915,6 +926,15 @@ export default function DeploymentWorkspace({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [deployRolePickerOpen]);
+
+  useEffect(() => {
+    if (!detailSearchOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDetailSearchOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [detailSearchOpen]);
 
   useEffect(() => {
     if (!expertConfirmOpen) return;
@@ -1323,6 +1343,9 @@ export default function DeploymentWorkspace({
       alias: activeServer?.alias ?? "",
       description: activeServer?.description ?? "",
       primaryDomain: activeServer?.primaryDomain ?? "",
+      requirementServerType: activeServer?.requirementServerType ?? "vps",
+      requirementStorageGb: activeServer?.requirementStorageGb ?? "200",
+      requirementLocation: activeServer?.requirementLocation ?? "Germany",
       host: activeServer?.host ?? "",
       port: activeServer?.port ?? "",
       user: activeServer?.user ?? "",
@@ -1522,15 +1545,30 @@ export default function DeploymentWorkspace({
       ansible_host: string;
       ansible_user: string;
       ansible_port: number;
+      requirementServerType?: string;
+      requirementStorageGb?: string;
+      requirementLocation?: string;
     }) => {
       const alias = String(device.alias || "").trim();
       if (!alias) return;
+      const requirementServerType = String(
+        device.requirementServerType || "vps"
+      ).trim() || "vps";
+      const requirementStorageGb = String(
+        device.requirementStorageGb || "200"
+      ).trim() || "200";
+      const requirementLocation = String(
+        device.requirementLocation || "Germany"
+      ).trim() || "Germany";
       setServers((prev) => {
         const existingIndex = prev.findIndex((server) => server.alias === alias);
         const patch: ServerState = {
           alias,
           description: "",
           primaryDomain: "",
+          requirementServerType,
+          requirementStorageGb,
+          requirementLocation,
           host: String(device.ansible_host || ""),
           port: String(device.ansible_port || 22),
           user: String(device.ansible_user || "root"),
@@ -1550,6 +1588,9 @@ export default function DeploymentWorkspace({
             host: patch.host,
             user: patch.user,
             port: patch.port,
+            requirementServerType: patch.requirementServerType,
+            requirementStorageGb: patch.requirementStorageGb,
+            requirementLocation: patch.requirementLocation,
           };
           return normalizePersistedDeviceMeta(next);
         }
@@ -1828,13 +1869,6 @@ export default function DeploymentWorkspace({
       title: "Hardware",
       content: (
         <div className={styles.serverPanelStack}>
-          <ProviderOrderPanel
-            baseUrl={baseUrl}
-            workspaceId={workspaceId}
-            primaryDomain={workspacePrimaryDomain}
-            mode={deviceMode}
-            onOrderedServer={handleProviderOrderedServer}
-          />
           <DeploymentCredentialsForm
             baseUrl={baseUrl}
             workspaceId={workspaceId}
@@ -1851,6 +1885,7 @@ export default function DeploymentWorkspace({
             onOpenCredentialsAliasHandled={() => setOpenCredentialsAlias(null)}
             deviceMode={deviceMode}
             onDeviceModeChange={handleModeChange}
+            onOpenDetailSearch={() => setDetailSearchOpen(true)}
             compact
           />
         </div>
@@ -2446,6 +2481,42 @@ export default function DeploymentWorkspace({
                   </label>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {detailSearchOpen ? (
+        <div
+          className={styles.detailSearchOverlay}
+          onClick={() => setDetailSearchOpen(false)}
+        >
+          <div
+            className={styles.detailSearchCard}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.detailSearchHeader}>
+              <div>
+                <h3 className={styles.detailSearchTitle}>Detailed Server Search</h3>
+                <p className={`text-body-secondary ${styles.detailSearchHint}`}>
+                  Use advanced provider filters and order directly into your workspace.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailSearchOpen(false)}
+                className={`${styles.smallButton} ${styles.smallButtonEnabled}`}
+              >
+                Close
+              </button>
+            </div>
+            <div className={styles.detailSearchBody}>
+              <ProviderOrderPanel
+                baseUrl={baseUrl}
+                workspaceId={workspaceId}
+                primaryDomain={workspacePrimaryDomain}
+                mode="expert"
+                onOrderedServer={handleProviderOrderedServer}
+              />
             </div>
           </div>
         </div>

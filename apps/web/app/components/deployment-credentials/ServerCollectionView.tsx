@@ -10,6 +10,7 @@ import type {
 import type { FocusEvent as ReactFocusEvent } from "react";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
+import CountryFlagSelectPlugin from "./CountryFlagSelectPlugin";
 import { SERVER_VIEW_CONFIG } from "./types";
 import styles from "./styles.module.css";
 import {
@@ -25,6 +26,8 @@ import type {
 
 type ServerCollectionViewProps = {
   viewMode: ServerViewMode;
+  deviceMode?: "customer" | "expert";
+  onOpenDetailSearch?: () => void;
   paginatedServers: ServerState[];
   computedColumns: number;
   aliasCounts: Record<string, number>;
@@ -89,6 +92,8 @@ const ALIAS_PATTERN = /^[a-z0-9_-]+$/;
 
 export default function ServerCollectionView({
   viewMode,
+  deviceMode = "customer",
+  onOpenDetailSearch,
   paginatedServers,
   computedColumns,
   aliasCounts,
@@ -105,6 +110,7 @@ export default function ServerCollectionView({
   onRequestedDetailAliasHandled,
 }: ServerCollectionViewProps) {
   const viewConfig = SERVER_VIEW_CONFIG[viewMode];
+  const isCustomerMode = deviceMode === "customer";
 
   const [aliasDrafts, setAliasDrafts] = useState<Record<string, string>>({});
   const [passwordConfirmDrafts, setPasswordConfirmDrafts] = useState<
@@ -185,6 +191,11 @@ export default function ServerCollectionView({
 
   useEffect(() => {
     if (!requestedDetailAlias) return;
+    if (isCustomerMode) {
+      setDetailAlias(null);
+      onRequestedDetailAliasHandled?.();
+      return;
+    }
     const exists = paginatedServers.some(
       (server) => server.alias === requestedDetailAlias
     );
@@ -192,7 +203,12 @@ export default function ServerCollectionView({
       setDetailAlias(requestedDetailAlias);
     }
     onRequestedDetailAliasHandled?.();
-  }, [requestedDetailAlias, paginatedServers, onRequestedDetailAliasHandled]);
+  }, [
+    requestedDetailAlias,
+    paginatedServers,
+    onRequestedDetailAliasHandled,
+    isCustomerMode,
+  ]);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -869,7 +885,7 @@ export default function ServerCollectionView({
     : undefined;
 
   const detailModal =
-    detailServer && typeof document !== "undefined"
+    !isCustomerMode && detailServer && typeof document !== "undefined"
       ? createPortal(
           <div
             className={`${styles.modalOverlay} ${styles.serverModalOverlay}`}
@@ -1363,6 +1379,170 @@ export default function ServerCollectionView({
       : null;
 
   if (viewMode === "list") {
+    if (isCustomerMode) {
+      return (
+        <div className={styles.listRoot}>
+          <div className={styles.listTableWrap}>
+            <table className={styles.listTable}>
+              <thead>
+                <tr>
+                  <th>Alias</th>
+                  <th>Server type</th>
+                  <th>Storage (GB)</th>
+                  <th>Location</th>
+                  <th className={styles.colCompare}>Compare</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedServers.map((server) => {
+                  const validation = getValidationState(server);
+                  const aliasValue = aliasDrafts[server.alias] ?? server.alias;
+                  return (
+                    <tr key={server.alias} className={styles.listTableRow}>
+                      <td>
+                        <div className={styles.fieldColumn}>
+                          <div className={styles.aliasInputRow}>
+                            <input
+                              type="color"
+                              value={normalizeDeviceColor(server.color) || "#89CFF0"}
+                              onChange={(event) =>
+                                onPatchServer(server.alias, { color: event.target.value })
+                              }
+                              className={styles.colorPickerInput}
+                              aria-label="Device color"
+                            />
+                            <div className={styles.emojiPickerShell}>
+                              <button
+                                type="button"
+                                className={`${styles.emojiPickerTrigger} ${
+                                  openEmojiAlias === server.alias
+                                    ? styles.emojiPickerTriggerOpen
+                                    : ""
+                                }`}
+                                onClick={() =>
+                                  setOpenEmojiAlias((prev) =>
+                                    prev === server.alias ? null : server.alias
+                                  )
+                                }
+                                title="Choose device emoji"
+                                aria-label="Choose device emoji"
+                              >
+                                <span className={styles.aliasEmojiPreview} aria-hidden="true">
+                                  {server.logoEmoji || "💻"}
+                                </span>
+                              </button>
+                              {openEmojiAlias === server.alias ? (
+                                <div className={styles.emojiPickerMenu}>
+                                  <Picker
+                                    data={data}
+                                    theme="dark"
+                                    previewPosition="none"
+                                    navPosition="bottom"
+                                    searchPosition="sticky"
+                                    perLine={8}
+                                    maxFrequentRows={2}
+                                    onEmojiSelect={(emoji: any) => {
+                                      const nextEmoji = String(emoji?.native || "").trim();
+                                      if (!nextEmoji) return;
+                                      onPatchServer(server.alias, { logoEmoji: nextEmoji });
+                                      setOpenEmojiAlias(null);
+                                    }}
+                                  />
+                                </div>
+                              ) : null}
+                            </div>
+                            <input
+                              value={aliasValue}
+                              onChange={(event) =>
+                                onAliasTyping(server, event.target.value)
+                              }
+                              onBlur={() => commitAlias(server)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  commitAlias(server);
+                                }
+                              }}
+                              placeholder="device"
+                              className={`${styles.inputSmall} ${
+                                validation.aliasError ? styles.inputError : ""
+                              }`}
+                            />
+                          </div>
+                          {validation.aliasError ? (
+                            <span className={`text-danger ${styles.aliasErrorText}`}>
+                              {validation.aliasError}
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td>
+                        <select
+                          value={server.requirementServerType || "vps"}
+                          onChange={(event) =>
+                            onPatchServer(server.alias, {
+                              requirementServerType: event.target.value,
+                            })
+                          }
+                          className={styles.selectControl}
+                        >
+                          <option value="vps">VPS</option>
+                          <option value="dedicated">Dedicated</option>
+                          <option value="managed">Managed</option>
+                        </select>
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          value={server.requirementStorageGb || "200"}
+                          onChange={(event) =>
+                            onPatchServer(server.alias, {
+                              requirementStorageGb: event.target.value,
+                            })
+                          }
+                          min={20}
+                          step={1}
+                          inputMode="numeric"
+                          placeholder="200"
+                          className={styles.inputSmall}
+                        />
+                      </td>
+                      <td>
+                        <CountryFlagSelectPlugin
+                          value={server.requirementLocation || "Germany"}
+                          onChange={(nextLocation) =>
+                            onPatchServer(server.alias, {
+                              requirementLocation: nextLocation,
+                            })
+                          }
+                          className={styles.selectControl}
+                          aria-label={`Location requirement for ${server.alias}`}
+                        />
+                      </td>
+                      <td className={styles.listCompareCell}>
+                        {onOpenDetailSearch ? (
+                          <button
+                            type="button"
+                            onClick={onOpenDetailSearch}
+                            className={styles.listCompareButton}
+                          >
+                            <i className="fa-solid fa-scale-balanced" aria-hidden="true" />
+                            <span>Compare</span>
+                          </button>
+                        ) : (
+                          <span className="text-body-secondary">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <>
         <div className={styles.listRoot}>
@@ -1539,6 +1719,175 @@ export default function ServerCollectionView({
         {statusPopoverOverlay}
         {detailModal}
       </>
+    );
+  }
+
+  if (isCustomerMode) {
+    return (
+      <div className={styles.cardGrid} style={gridStyle}>
+        {paginatedServers.map((server) => {
+          const dense = viewConfig.dense;
+          const aliasValue = aliasDrafts[server.alias] ?? server.alias;
+          const validation = getValidationState(server);
+          const tintStyle = getTintStyle(server.color, true);
+          const cardStyle = {
+            "--server-card-padding": dense ? "12px" : "16px",
+            "--server-card-gap": dense ? "10px" : "12px",
+            "--server-fields-gap": dense ? "8px" : "10px",
+            "--server-input-padding": dense ? "6px 8px" : "8px 10px",
+            "--server-input-font": dense ? "12px" : "13px",
+            ...(tintStyle ?? {}),
+          } as CSSProperties;
+          return (
+            <div
+              key={server.alias}
+              className={`${styles.serverCard} ${styles.cardDefault} ${
+                tintStyle ? styles.cardTinted : ""
+              }`}
+              style={cardStyle}
+            >
+              <div className={styles.fieldGrid}>
+                <div className={styles.fieldWrap}>
+                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>Identity</label>
+                  <div className={styles.aliasInputRow}>
+                    <input
+                      type="color"
+                      value={normalizeDeviceColor(server.color) || "#89CFF0"}
+                      onChange={(event) =>
+                        onPatchServer(server.alias, { color: event.target.value })
+                      }
+                      className={styles.colorPickerInput}
+                      aria-label="Device color"
+                    />
+                    <div className={styles.emojiPickerShell}>
+                      <button
+                        type="button"
+                        className={`${styles.emojiPickerTrigger} ${
+                          openEmojiAlias === server.alias
+                            ? styles.emojiPickerTriggerOpen
+                            : ""
+                        }`}
+                        onClick={() =>
+                          setOpenEmojiAlias((prev) =>
+                            prev === server.alias ? null : server.alias
+                          )
+                        }
+                        title="Choose device emoji"
+                        aria-label="Choose device emoji"
+                      >
+                        <span className={styles.aliasEmojiPreview} aria-hidden="true">
+                          {server.logoEmoji || "💻"}
+                        </span>
+                      </button>
+                      {openEmojiAlias === server.alias ? (
+                        <div className={styles.emojiPickerMenu}>
+                          <Picker
+                            data={data}
+                            theme="dark"
+                            previewPosition="none"
+                            navPosition="bottom"
+                            searchPosition="sticky"
+                            perLine={8}
+                            maxFrequentRows={2}
+                            onEmojiSelect={(emoji: any) => {
+                              const nextEmoji = String(emoji?.native || "").trim();
+                              if (!nextEmoji) return;
+                              onPatchServer(server.alias, { logoEmoji: nextEmoji });
+                              setOpenEmojiAlias(null);
+                            }}
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                    <input
+                      value={aliasValue}
+                      onChange={(event) => onAliasTyping(server, event.target.value)}
+                      onBlur={() => commitAlias(server)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          commitAlias(server);
+                        }
+                      }}
+                      placeholder="device"
+                      className={`${styles.fieldInput} ${styles.identityAliasInput} ${
+                        validation.aliasError ? styles.inputError : ""
+                      }`}
+                    />
+                  </div>
+                  {validation.aliasError ? (
+                    <p className="text-danger">{validation.aliasError}</p>
+                  ) : null}
+                </div>
+                <div className={styles.fieldWrap}>
+                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>
+                    Server type
+                  </label>
+                  <select
+                    value={server.requirementServerType || "vps"}
+                    onChange={(event) =>
+                      onPatchServer(server.alias, {
+                        requirementServerType: event.target.value,
+                      })
+                    }
+                    className={styles.selectControl}
+                  >
+                    <option value="vps">VPS</option>
+                    <option value="dedicated">Dedicated</option>
+                    <option value="managed">Managed</option>
+                  </select>
+                </div>
+                <div className={styles.fieldWrap}>
+                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>
+                    Storage (GB)
+                  </label>
+                  <input
+                    type="number"
+                    value={server.requirementStorageGb || "200"}
+                    onChange={(event) =>
+                      onPatchServer(server.alias, {
+                        requirementStorageGb: event.target.value,
+                      })
+                    }
+                    min={20}
+                    step={1}
+                    inputMode="numeric"
+                    placeholder="200"
+                    className={styles.fieldInput}
+                  />
+                </div>
+                <div className={styles.fieldWrap}>
+                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>
+                    Location
+                  </label>
+                  <CountryFlagSelectPlugin
+                    value={server.requirementLocation || "Germany"}
+                    onChange={(nextLocation) =>
+                      onPatchServer(server.alias, {
+                        requirementLocation: nextLocation,
+                      })
+                    }
+                    className={styles.selectControl}
+                    aria-label={`Location requirement for ${server.alias}`}
+                  />
+                </div>
+              </div>
+              {onOpenDetailSearch ? (
+                <div className={styles.cardFooter}>
+                  <button
+                    type="button"
+                    onClick={onOpenDetailSearch}
+                    className={`${styles.actionButtonSecondary} ${styles.customerCompareButton}`}
+                  >
+                    <i className="fa-solid fa-scale-balanced" aria-hidden="true" />
+                    <span>Compare</span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
     );
   }
 
