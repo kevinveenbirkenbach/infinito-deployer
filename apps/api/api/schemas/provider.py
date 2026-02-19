@@ -77,6 +77,12 @@ class ProviderOrderDomainOut(BaseModel):
     note: str
 
 
+class ProviderDomainAvailabilityOut(BaseModel):
+    domain: str
+    available: bool
+    note: str
+
+
 class ProviderDnsZoneIn(BaseModel):
     provider: str = Field(..., min_length=1)
     domain: str = Field(..., min_length=1)

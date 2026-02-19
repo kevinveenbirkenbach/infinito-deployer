@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import socket
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -11,6 +13,8 @@ from fastapi import HTTPException
 from services.job_runner.paths import state_dir
 from services.job_runner.util import atomic_write_json, safe_mkdir, utc_iso
 from services.workspaces import WorkspaceService
+
+_DOMAIN_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 
 
 def _cache_path() -> Path:
@@ -249,6 +253,42 @@ class ProviderCatalogService:
                 continue
             return offer
         raise HTTPException(status_code=404, detail="offer not found")
+
+    def check_domain_availability(self, domain: str) -> Dict[str, Any]:
+        value = str(domain or "").strip().lower().strip(".")
+        if not value:
+            raise HTTPException(status_code=400, detail="domain is required")
+        if len(value) > 253:
+            raise HTTPException(status_code=400, detail="domain too long")
+
+        labels = value.split(".")
+        if len(labels) < 2 or not all(_DOMAIN_LABEL_RE.match(label) for label in labels):
+            raise HTTPException(status_code=400, detail="invalid domain format")
+        if len(labels[-1]) < 2:
+            raise HTTPException(status_code=400, detail="invalid top-level domain")
+
+        try:
+            socket.getaddrinfo(value, None)
+            return {
+                "domain": value,
+                "available": False,
+                "note": "Domain resolves in DNS and is likely already registered.",
+            }
+        except socket.gaierror:
+            return {
+                "domain": value,
+                "available": True,
+                "note": (
+                    "No DNS records found. The domain may be available, "
+                    "but this is not a guaranteed registry lookup."
+                ),
+            }
+        except Exception:
+            return {
+                "domain": value,
+                "available": False,
+                "note": "Availability check failed.",
+            }
 
     def order_server(
         self,

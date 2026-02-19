@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from api.auth import ensure_workspace_access
 from api.schemas.provider import (
+    ProviderDomainAvailabilityOut,
     ProviderDnsZoneIn,
     ProviderDnsZoneOut,
     ProviderListOut,
@@ -134,6 +135,14 @@ def order_domain(payload: ProviderOrderDomainIn) -> ProviderOrderDomainOut:
         domain=payload.domain.strip().lower(),
         note="Domain ordering is queued (mocked provider flow).",
     )
+
+
+@router.get("/domain-availability", response_model=ProviderDomainAvailabilityOut)
+def domain_availability(
+    domain: str = Query(..., min_length=1),
+) -> ProviderDomainAvailabilityOut:
+    result = _providers().check_domain_availability(domain)
+    return ProviderDomainAvailabilityOut(**result)
 
 
 @router.post("/dns/zone", response_model=ProviderDnsZoneOut)
