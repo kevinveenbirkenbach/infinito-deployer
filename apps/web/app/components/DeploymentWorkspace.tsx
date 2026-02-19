@@ -104,6 +104,23 @@ function encodeWorkspacePath(path: string): string {
     .join("/");
 }
 
+function parseYamlMapping(content: string): Record<string, unknown> {
+  const trimmed = String(content || "").trim();
+  if (!trimmed) return {};
+  const parsed = YAML.parse(trimmed);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return {};
+  }
+  return { ...(parsed as Record<string, unknown>) };
+}
+
+function readPrimaryDomainFromGroupVars(data: Record<string, unknown>): string {
+  const value = data.DOMAIN_PRIMARY;
+  if (typeof value === "string") return value.trim();
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
 type PanelKey =
   | "intro"
   | "store"
@@ -146,6 +163,8 @@ const PANEL_ICON_BY_KEY: Record<PanelKey, string> = {
   billing: "fa-file-invoice",
   support: "fa-life-ring",
 };
+
+const GROUP_VARS_ALL_PATH = "group_vars/all.yml";
 
 export default function DeploymentWorkspace({
   baseUrl,
@@ -206,8 +225,10 @@ export default function DeploymentWorkspace({
   const lastDeploymentSelectionRef = useRef<string[] | null>(null);
   const uiQueryReadyRef = useRef(false);
   const pendingAliasFromQueryRef = useRef("");
+  const primaryDomainPromptInFlightRef = useRef(false);
 
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [workspacePrimaryDomain, setWorkspacePrimaryDomain] = useState("");
   const [inventoryReady, setInventoryReady] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
@@ -222,6 +243,12 @@ export default function DeploymentWorkspace({
   );
   const [deviceMode, setDeviceMode] = useState<"customer" | "expert">("customer");
   const [expertConfirmOpen, setExpertConfirmOpen] = useState(false);
+  const [primaryDomainModalOpen, setPrimaryDomainModalOpen] = useState(false);
+  const [primaryDomainDraft, setPrimaryDomainDraft] = useState("");
+  const [primaryDomainModalError, setPrimaryDomainModalError] = useState<
+    string | null
+  >(null);
+  const [primaryDomainModalSaving, setPrimaryDomainModalSaving] = useState(false);
   const [activePanel, setActivePanel] = useState<PanelKey>("intro");
   const handleModeChange = useCallback(
     (mode: "customer" | "expert") => {
@@ -292,6 +319,135 @@ export default function DeploymentWorkspace({
       alive = false;
     };
   }, [baseUrl]);
+
+  const readGroupVarsAll = useCallback(
+    async (targetWorkspaceId: string): Promise<Record<string, unknown>> => {
+      const path = encodeWorkspacePath(GROUP_VARS_ALL_PATH);
+      const res = await fetch(
+        `${baseUrl}/api/workspaces/${targetWorkspaceId}/files/${path}`,
+        {
+          cache: "no-store",
+        }
+      );
+      if (res.status === 404) return {};
+      if (!res.ok) {
+        throw new Error(`Failed to read ${GROUP_VARS_ALL_PATH}: HTTP ${res.status}`);
+      }
+      const data = (await res.json()) as { content?: unknown };
+      try {
+        return parseYamlMapping(String(data?.content ?? ""));
+      } catch {
+        throw new Error(`${GROUP_VARS_ALL_PATH} is not valid YAML.`);
+      }
+    },
+    [baseUrl]
+  );
+
+  const readWorkspacePrimaryDomain = useCallback(
+    async (targetWorkspaceId: string): Promise<string> => {
+      const data = await readGroupVarsAll(targetWorkspaceId);
+      return readPrimaryDomainFromGroupVars(data);
+    },
+    [readGroupVarsAll]
+  );
+
+  const writeGroupVarsAll = useCallback(
+    async (targetWorkspaceId: string, data: Record<string, unknown>) => {
+      const path = encodeWorkspacePath(GROUP_VARS_ALL_PATH);
+      const res = await fetch(
+        `${baseUrl}/api/workspaces/${targetWorkspaceId}/files/${path}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: YAML.stringify(data) }),
+        }
+      );
+      if (!res.ok) {
+        throw new Error(`Failed to write ${GROUP_VARS_ALL_PATH}: HTTP ${res.status}`);
+      }
+    },
+    [baseUrl]
+  );
+
+  const ensureWorkspacePrimaryDomain = useCallback(async () => {
+    if (!workspaceId) return;
+    if (primaryDomainPromptInFlightRef.current) return;
+
+    primaryDomainPromptInFlightRef.current = true;
+    try {
+      const data = await readGroupVarsAll(workspaceId);
+      const existingDomain = readPrimaryDomainFromGroupVars(data);
+      setWorkspacePrimaryDomain(existingDomain);
+      if (existingDomain) {
+        setPrimaryDomainDraft(existingDomain);
+        setPrimaryDomainModalError(null);
+        setPrimaryDomainModalOpen(false);
+        return;
+      }
+      setPrimaryDomainModalError(null);
+      setPrimaryDomainDraft((prev) => prev || "");
+      setPrimaryDomainModalOpen(true);
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : `Failed to read or write ${GROUP_VARS_ALL_PATH}.`;
+      setPrimaryDomainModalError(message);
+      setPrimaryDomainModalOpen(true);
+    } finally {
+      primaryDomainPromptInFlightRef.current = false;
+    }
+  }, [workspaceId, readGroupVarsAll]);
+
+  const saveWorkspacePrimaryDomain = useCallback(async () => {
+    if (!workspaceId) return;
+    const nextDomain = String(primaryDomainDraft || "").trim();
+    if (!nextDomain) {
+      setPrimaryDomainModalError("Please enter a domain.");
+      return;
+    }
+    setPrimaryDomainModalSaving(true);
+    setPrimaryDomainModalError(null);
+    try {
+      const data = await readGroupVarsAll(workspaceId);
+      const nextData = { ...data, DOMAIN_PRIMARY: nextDomain };
+      await writeGroupVarsAll(workspaceId, nextData);
+      setWorkspacePrimaryDomain(nextDomain);
+      setPrimaryDomainModalOpen(false);
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : `Failed to write ${GROUP_VARS_ALL_PATH}.`;
+      setPrimaryDomainModalError(message);
+    } finally {
+      setPrimaryDomainModalSaving(false);
+    }
+  }, [workspaceId, primaryDomainDraft, readGroupVarsAll, writeGroupVarsAll]);
+
+  useEffect(() => {
+    if (!workspaceId) {
+      setWorkspacePrimaryDomain("");
+      return;
+    }
+    let cancelled = false;
+    const loadPrimaryDomain = async () => {
+      try {
+        const domain = await readWorkspacePrimaryDomain(workspaceId);
+        if (!cancelled) {
+          setWorkspacePrimaryDomain(domain);
+        }
+      } catch {
+        if (!cancelled) {
+          setWorkspacePrimaryDomain("");
+        }
+      }
+    };
+    void loadPrimaryDomain();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, readWorkspacePrimaryDomain]);
 
   useEffect(() => {
     if (!activeAlias && servers.length > 0) {
@@ -636,8 +792,13 @@ export default function DeploymentWorkspace({
     setLiveError(null);
     setOpenCredentialsAlias(null);
     setExpertConfirmOpen(false);
+    setPrimaryDomainModalOpen(false);
+    setPrimaryDomainDraft("");
+    setPrimaryDomainModalError(null);
+    setPrimaryDomainModalSaving(false);
     setConnectRequestKey(0);
     setCancelRequestKey(0);
+    primaryDomainPromptInFlightRef.current = false;
   }, [workspaceId]);
 
   useEffect(() => {
@@ -678,6 +839,11 @@ export default function DeploymentWorkspace({
   }, [activePanel, deviceMode, activeAlias]);
 
   useEffect(() => {
+    if (activePanel !== "server") return;
+    void ensureWorkspacePrimaryDomain();
+  }, [activePanel, ensureWorkspacePrimaryDomain]);
+
+  useEffect(() => {
     if (!deployRolePickerOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setDeployRolePickerOpen(false);
@@ -694,6 +860,17 @@ export default function DeploymentWorkspace({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [expertConfirmOpen]);
+
+  useEffect(() => {
+    if (!primaryDomainModalOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !primaryDomainModalSaving) {
+        setPrimaryDomainModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [primaryDomainModalOpen, primaryDomainModalSaving]);
 
   const applySelectedRolesByAlias = useCallback(
     (rolesByAlias: Record<string, string[]>) => {
@@ -1586,6 +1763,7 @@ export default function DeploymentWorkspace({
           <ProviderOrderPanel
             baseUrl={baseUrl}
             workspaceId={workspaceId}
+            primaryDomain={workspacePrimaryDomain}
             mode={deviceMode}
             onOrderedServer={handleProviderOrderedServer}
           />
@@ -2083,6 +2261,9 @@ export default function DeploymentWorkspace({
                 onClick={() => {
                   if (isDisabled) return;
                   setActivePanel(panel.key);
+                  if (panel.key === "server") {
+                    void ensureWorkspacePrimaryDomain();
+                  }
                 }}
                 disabled={isDisabled}
                 title={isDisabled ? panel.disabledReason : undefined}
@@ -2235,6 +2416,71 @@ export default function DeploymentWorkspace({
               >
                 <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
                 <span>Enable</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {primaryDomainModalOpen ? (
+        <div
+          onClick={() => {
+            if (primaryDomainModalSaving) return;
+            setPrimaryDomainModalOpen(false);
+          }}
+          className={styles.primaryDomainOverlay}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className={styles.primaryDomainCard}
+          >
+            <div className={styles.primaryDomainTitleRow}>
+              <i
+                className={`fa-solid fa-globe ${styles.primaryDomainIcon}`}
+                aria-hidden="true"
+              />
+              <h3 className={styles.primaryDomainTitle}>Set Primary Domain</h3>
+            </div>
+            <p className={styles.primaryDomainText}>
+              Please enter the domain. The value will be stored in{" "}
+              <code>group_vars/all.yml</code> as <code>DOMAIN_PRIMARY</code>.
+            </p>
+            <input
+              value={primaryDomainDraft}
+              onChange={(event) => {
+                setPrimaryDomainDraft(event.target.value);
+                if (primaryDomainModalError) setPrimaryDomainModalError(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  if (!primaryDomainModalSaving) {
+                    void saveWorkspacePrimaryDomain();
+                  }
+                }
+              }}
+              placeholder="example.org"
+              autoFocus
+              className={`form-control ${styles.primaryDomainInput}`}
+            />
+            {primaryDomainModalError ? (
+              <p className={styles.primaryDomainError}>{primaryDomainModalError}</p>
+            ) : null}
+            <div className={styles.primaryDomainActions}>
+              <button
+                type="button"
+                onClick={() => setPrimaryDomainModalOpen(false)}
+                disabled={primaryDomainModalSaving}
+                className={`${styles.modeActionButton} ${styles.modeActionButtonSuccess}`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveWorkspacePrimaryDomain()}
+                disabled={primaryDomainModalSaving}
+                className={`${styles.modeActionButton} ${styles.modeActionButtonDanger}`}
+              >
+                {primaryDomainModalSaving ? "Saving..." : "Save"}
               </button>
             </div>
           </div>

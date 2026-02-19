@@ -26,19 +26,6 @@
   font-size: 13px;
 }
 
-.primaryDomainRow {
-  display: grid;
-  gap: 4px;
-}
-
-.primaryDomainRow input {
-  border: 1px solid var(--bs-border-color);
-  border-radius: 8px;
-  padding: 7px 10px;
-  background: var(--bs-body-bg);
-  color: var(--bs-body-color);
-}
-
 .customerInputs {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

@@ -25,6 +25,7 @@ type ProviderOffer = {
 type ProviderOrderPanelProps = {
   baseUrl: string;
   workspaceId: string | null;
+  primaryDomain: string;
   mode: "customer" | "expert";
   onOrderedServer: (server: {
     alias: string;
@@ -37,6 +38,7 @@ type ProviderOrderPanelProps = {
 export default function ProviderOrderPanel({
   baseUrl,
   workspaceId,
+  primaryDomain,
   mode,
   onOrderedServer,
 }: ProviderOrderPanelProps) {
@@ -45,7 +47,6 @@ export default function ProviderOrderPanel({
   const [error, setError] = useState<string | null>(null);
   const [catalogUpdatedAt, setCatalogUpdatedAt] = useState<string>("");
   const [catalogStale, setCatalogStale] = useState(false);
-  const [primaryDomain, setPrimaryDomain] = useState("");
 
   const [customerType, setCustomerType] = useState("vps");
   const [customerStorage, setCustomerStorage] = useState("200");
@@ -219,7 +220,7 @@ export default function ProviderOrderPanel({
           workspace_id: workspaceId,
           offer_id: offer.offer_id,
           provider: offer.provider,
-          primary_domain: primaryDomain.trim() || undefined,
+          primary_domain: String(primaryDomain || "").trim() || undefined,
           confirm: true,
         }),
       });
@@ -258,15 +259,6 @@ export default function ProviderOrderPanel({
       {loading ? <div className={styles.hint}>Loading provider catalog...</div> : null}
       {error ? <div className={styles.error}>{error}</div> : null}
       {orderError ? <div className={styles.error}>{orderError}</div> : null}
-
-      <div className={styles.primaryDomainRow}>
-        <label>Primary domain (optional)</label>
-        <input
-          value={primaryDomain}
-          onChange={(event) => setPrimaryDomain(event.target.value)}
-          placeholder="example.org"
-        />
-      </div>
 
       {mode === "customer" ? (
         <div>
