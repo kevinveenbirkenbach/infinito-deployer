@@ -37,15 +37,26 @@ export type ConnectionResult = {
   ssh_error?: string | null;
 };
 
-export const SERVER_VIEW_MODES = ["selection", "list"] as const;
+export const SERVER_VIEW_MODES = [
+  "detail",
+  "list",
+  "mini",
+  "matrix",
+  "row",
+  "column",
+] as const;
 export type ServerViewMode = (typeof SERVER_VIEW_MODES)[number];
 
 export const SERVER_VIEW_CONFIG: Record<
   ServerViewMode,
   { minWidth: number; minHeight: number; dense: boolean }
 > = {
-  selection: { minWidth: 260, minHeight: 190, dense: true },
-  list: { minWidth: 600, minHeight: 72, dense: true },
+  detail: { minWidth: 320, minHeight: 240, dense: false },
+  list: { minWidth: 600, minHeight: 84, dense: true },
+  mini: { minWidth: 220, minHeight: 160, dense: true },
+  matrix: { minWidth: 960, minHeight: 84, dense: true },
+  row: { minWidth: 700, minHeight: 188, dense: false },
+  column: { minWidth: 620, minHeight: 220, dense: false },
 };
 
 export const FIELD_LABELS: Record<string, string> = {

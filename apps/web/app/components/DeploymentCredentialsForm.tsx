@@ -47,11 +47,34 @@ type DeploymentCredentialsFormProps = {
 };
 
 const SERVER_VIEW_ICONS: Record<ServerViewMode, string> = {
-  selection: "fa-solid fa-object-group",
+  detail: "fa-solid fa-table-cells-large",
   list: "fa-solid fa-list",
+  mini: "fa-solid fa-border-all",
+  matrix: "fa-solid fa-table",
+  row: "fa-solid fa-grip-lines",
+  column: "fa-solid fa-columns",
 };
 
 const ROW_FILTER_OPTIONS: number[] = [1, 2, 3, 5, 10, 20, 100, 500, 1000];
+const HW_QUERY_KEYS = {
+  view: "hw_view",
+  rows: "hw_rows",
+} as const;
+const DEFAULT_SERVER_VIEW_MODES: ServerViewMode[] = [
+  "detail",
+  "list",
+  "mini",
+  "matrix",
+];
+const ANIMATED_SERVER_VIEW_MODES: ServerViewMode[] = ["row", "column"];
+const SERVER_VIEW_MODE_SET = new Set<ServerViewMode>(SERVER_VIEW_MODES);
+const SINGLE_COLUMN_SERVER_VIEW_MODES = new Set<ServerViewMode>([
+  "list",
+  "matrix",
+  "row",
+  "column",
+]);
+const LIST_LIKE_SERVER_VIEW_MODES = new Set<ServerViewMode>(["list", "matrix"]);
 
 function formatViewLabel(mode: ServerViewMode): string {
   return mode.charAt(0).toUpperCase() + mode.slice(1);
@@ -93,11 +116,17 @@ export default function DeploymentCredentialsForm({
   const [page, setPage] = useState(1);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const filtersButtonRef = useRef<HTMLButtonElement | null>(null);
   const filtersPopoverRef = useRef<HTMLDivElement | null>(null);
   const viewButtonRef = useRef<HTMLButtonElement | null>(null);
   const viewPopoverRef = useRef<HTMLDivElement | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
+  const [listAutoMetrics, setListAutoMetrics] = useState({
+    wrapHeight: 0,
+    headHeight: 0,
+    rowHeight: 0,
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filtersPos, setFiltersPos] = useState({ top: 0, left: 0 });
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
@@ -108,6 +137,7 @@ export default function DeploymentCredentialsForm({
   } | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const uiQueryReadyRef = useRef(false);
 
   useEffect(() => {
     if (!openCredentialsAlias) return;
@@ -130,6 +160,42 @@ export default function DeploymentCredentialsForm({
     openCredentialsAlias,
     servers,
   ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const rawView = String(params.get(HW_QUERY_KEYS.view) || "")
+      .trim()
+      .toLowerCase();
+    const normalizedView = rawView === "selection" ? "detail" : rawView;
+    if (SERVER_VIEW_MODE_SET.has(normalizedView as ServerViewMode)) {
+      setViewMode(normalizedView as ServerViewMode);
+    }
+
+    const rowsParam = String(params.get(HW_QUERY_KEYS.rows) || "")
+      .trim()
+      .toLowerCase();
+    if (rowsParam) {
+      if (rowsParam === "auto") {
+        setRowsOverride(null);
+      } else {
+        const parsed = Number(rowsParam);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          setRowsOverride(Math.floor(parsed));
+        }
+      }
+    }
+    uiQueryReadyRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!uiQueryReadyRef.current) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set(HW_QUERY_KEYS.view, viewMode);
+    url.searchParams.set(HW_QUERY_KEYS.rows, rowsOverride ? String(rowsOverride) : "auto");
+    window.history.replaceState({}, "", url.toString());
+  }, [viewMode, rowsOverride]);
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -184,20 +250,44 @@ export default function DeploymentCredentialsForm({
 
   const viewConfig = SERVER_VIEW_CONFIG[viewMode];
   const gridGap = 16;
+  const isSingleColumnView = SINGLE_COLUMN_SERVER_VIEW_MODES.has(viewMode);
+  const isListLikeView = LIST_LIKE_SERVER_VIEW_MODES.has(viewMode);
   const computedColumns =
-    viewMode === "list"
+    isSingleColumnView
       ? 1
       : Math.max(
           1,
           Math.floor((gridSize.width + gridGap) / (viewConfig.minWidth + gridGap))
         );
-  const listFixedOverhead = viewMode === "list" ? 132 : 0;
-  const baseRowHeight = viewMode === "list" ? Math.max(112, viewConfig.minHeight) : viewConfig.minHeight;
-  const rowsAvailableHeight = Math.max(0, gridSize.height - listFixedOverhead);
-  const computedRows = Math.max(
-    1,
-    Math.floor((rowsAvailableHeight + gridGap) / (baseRowHeight + gridGap))
-  );
+  const contentHeightBuffer = viewMode === "mini" ? 24 : 8;
+  const computedRows = useMemo(() => {
+    if (isListLikeView) {
+      const wrapHeight = listAutoMetrics.wrapHeight || Math.max(0, gridSize.height);
+      const headHeight = listAutoMetrics.headHeight || 44;
+      const rowHeight = listAutoMetrics.rowHeight || viewConfig.minHeight;
+      const safetyPx = 2;
+      const bodyHeight = Math.max(0, wrapHeight - headHeight);
+      return Math.max(
+        1,
+        Math.floor(Math.max(0, bodyHeight - safetyPx) / Math.max(1, rowHeight))
+      );
+    }
+    return Math.max(
+      1,
+      Math.floor(
+        (Math.max(0, gridSize.height - contentHeightBuffer) + gridGap) /
+          (viewConfig.minHeight + gridGap)
+      )
+    );
+  }, [
+    isListLikeView,
+    listAutoMetrics.wrapHeight,
+    listAutoMetrics.headHeight,
+    listAutoMetrics.rowHeight,
+    gridSize.height,
+    viewConfig.minHeight,
+    contentHeightBuffer,
+  ]);
   const rows = Math.max(1, rowsOverride ?? computedRows);
   const pageSize = Math.max(1, computedColumns * rows);
   const rowOptions = useMemo(() => {
@@ -221,6 +311,64 @@ export default function DeploymentCredentialsForm({
   useEffect(() => {
     setPage(1);
   }, [query, viewMode, rowsOverride]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isListLikeView) return;
+    const container = contentRef.current;
+    if (!container) return;
+
+    const measure = () => {
+      const wrap = container.querySelector<HTMLElement>("[data-server-list-wrap]");
+      if (!wrap) return;
+      const head = wrap.querySelector<HTMLElement>("thead");
+      const rows = Array.from(wrap.querySelectorAll<HTMLElement>("tbody tr"));
+      const rowHeight = rows.reduce(
+        (max, row) => Math.max(max, row.getBoundingClientRect().height),
+        0
+      );
+      const next = {
+        wrapHeight: wrap.clientHeight || 0,
+        headHeight: head ? head.getBoundingClientRect().height : 0,
+        rowHeight,
+      };
+      setListAutoMetrics((prev) => {
+        if (
+          Math.abs(prev.wrapHeight - next.wrapHeight) < 1 &&
+          Math.abs(prev.headHeight - next.headHeight) < 1 &&
+          Math.abs(prev.rowHeight - next.rowHeight) < 1
+        ) {
+          return prev;
+        }
+        return next;
+      });
+    };
+
+    measure();
+    const raf = window.requestAnimationFrame(measure);
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => measure());
+      observer.observe(container);
+      const wrap = container.querySelector<HTMLElement>("[data-server-list-wrap]");
+      if (wrap) {
+        observer.observe(wrap);
+        const table = wrap.querySelector<HTMLElement>("table");
+        const head = wrap.querySelector<HTMLElement>("thead");
+        if (table) observer.observe(table);
+        if (head) observer.observe(head);
+      }
+    } else {
+      window.addEventListener("resize", measure);
+    }
+    return () => {
+      window.cancelAnimationFrame(raf);
+      observer?.disconnect();
+      if (!observer) {
+        window.removeEventListener("resize", measure);
+      }
+    };
+  }, [isListLikeView, filteredServers.length, currentPage, deviceMode]);
 
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
@@ -771,7 +919,30 @@ export default function DeploymentCredentialsForm({
                       className={styles.viewModeMenu}
                       role="menu"
                     >
-                      {SERVER_VIEW_MODES.map((mode) => {
+                      {DEFAULT_SERVER_VIEW_MODES.map((mode) => {
+                        const active = viewMode === mode;
+                        return (
+                          <button
+                            key={mode}
+                            onClick={() => {
+                              setViewMode(mode);
+                              setViewMenuOpen(false);
+                            }}
+                            className={`${styles.viewModeMenuItem} ${
+                              active ? styles.viewModeMenuItemActive : ""
+                            }`}
+                          >
+                            <i className={SERVER_VIEW_ICONS[mode]} aria-hidden="true" />
+                            <span>{formatViewLabel(mode)}</span>
+                          </button>
+                        );
+                      })}
+                      <span
+                        className={`text-body-tertiary ${styles.viewModeMenuSectionLabel}`}
+                      >
+                        Animated
+                      </span>
+                      {ANIMATED_SERVER_VIEW_MODES.map((mode) => {
                         const active = viewMode === mode;
                         return (
                           <button
@@ -796,7 +967,7 @@ export default function DeploymentCredentialsForm({
             </div>
           </div>
 
-          <div className={styles.contentWrap}>
+          <div ref={contentRef} className={styles.contentWrap}>
             <ServerCollectionView
               viewMode={viewMode}
               paginatedServers={paginatedServers}

@@ -1592,11 +1592,11 @@ export default function ServerCollectionView({
         )
       : null;
 
-  if (viewMode === "list") {
+  if (viewMode === "list" || viewMode === "matrix") {
     if (isCustomerMode) {
       return (
-        <div className={styles.listRoot}>
-          <div className={styles.listTableWrap}>
+        <div className={styles.listRoot} data-server-list-root>
+          <div className={styles.listTableWrap} data-server-list-wrap>
             <table className={styles.listTable}>
               <thead>
                 <tr>
@@ -1759,8 +1759,8 @@ export default function ServerCollectionView({
 
     return (
       <>
-        <div className={styles.listRoot}>
-          <div className={styles.listToolbar}>
+        <div className={styles.listRoot} data-server-list-root>
+          <div className={styles.listToolbar} data-server-list-toolbar>
             <button
               type="button"
               className={styles.bulkActionTrigger}
@@ -1780,7 +1780,7 @@ export default function ServerCollectionView({
             </span>
           </div>
 
-          <div className={styles.listTableWrap}>
+          <div className={styles.listTableWrap} data-server-list-wrap>
             <table className={styles.listTable}>
               <thead>
                 <tr>

@@ -233,9 +233,12 @@
 }
 
 .listRoot {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
+  flex: 1;
   min-height: 0;
+  height: 100%;
 }
 
 .listToolbar {
@@ -320,8 +323,10 @@
 .listTableWrap {
   border-radius: 14px;
   border: 1px solid var(--bs-border-color-translucent);
+  flex: 1;
+  min-height: 0;
   overflow-x: auto;
-  overflow-y: visible;
+  overflow-y: auto;
   background: var(--bs-body-bg);
 }
 

@@ -229,41 +229,44 @@ export default function WorkspacePanelFileEditor(props: any) {
                   ) : null}
                 </div>
               ) : (
-                <CodeMirror
-                  value={editorValue}
-                  height="100%"
-                  extensions={editorExtensions}
-                  onCreateEditor={(view) => {
-                    editorViewRef.current = view;
-                  }}
-                  onContextMenu={(event) => {
-                    const view = editorViewRef.current;
-                    if (!view) return;
-                    const pos = view.posAtCoords({
-                      x: event.clientX,
-                      y: event.clientY,
-                    });
-                    if (pos == null) return;
-                    const line = view.state.doc.lineAt(pos).number;
-                    const lines = editorValue.split("\n");
-                    const block = findVaultBlock(lines, line - 1);
-                    if (!block) return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setContextMenu(null);
-                    setEditorMenu({
-                      x: event.clientX,
-                      y: event.clientY,
-                      block,
-                    });
-                  }}
-                  onChange={(value) => {
-                    setEditorValue(value);
-                    setEditorDirty(true);
-                    setEditorStatus(null);
-                    setEditorError(null);
-                  }}
-                />
+                <div className={styles.editorSurface}>
+                  <CodeMirror
+                    value={editorValue}
+                    height="100%"
+                    className={styles.codeEditor}
+                    extensions={editorExtensions}
+                    onCreateEditor={(view) => {
+                      editorViewRef.current = view;
+                    }}
+                    onContextMenu={(event) => {
+                      const view = editorViewRef.current;
+                      if (!view) return;
+                      const pos = view.posAtCoords({
+                        x: event.clientX,
+                        y: event.clientY,
+                      });
+                      if (pos == null) return;
+                      const line = view.state.doc.lineAt(pos).number;
+                      const lines = editorValue.split("\n");
+                      const block = findVaultBlock(lines, line - 1);
+                      if (!block) return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setContextMenu(null);
+                      setEditorMenu({
+                        x: event.clientX,
+                        y: event.clientY,
+                        block,
+                      });
+                    }}
+                    onChange={(value) => {
+                      setEditorValue(value);
+                      setEditorDirty(true);
+                      setEditorStatus(null);
+                      setEditorError(null);
+                    }}
+                  />
+                </div>
               )}
               {editorError ? (
                 <p className={`text-danger ${styles.statusMessage}`}>{editorError}</p>
