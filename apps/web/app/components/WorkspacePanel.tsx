@@ -846,14 +846,21 @@ export default function WorkspacePanel({
     }
   }, [selectionTouched]);
 
+  const hasPendingAliasMutations =
+    (aliasRenames?.length ?? 0) > 0 ||
+    (aliasDeletes?.length ?? 0) > 0 ||
+    (aliasCleanups?.length ?? 0) > 0;
+
   useEffect(() => {
     if (!workspaceId) return;
     if (!onSelectedRolesByAliasChange) return;
+    if (hasPendingAliasMutations) return;
     const merged = mergeRolesByAlias(selectedRolesByAlias);
     if (rolesByAliasKey(merged) !== rolesByAliasKey(selectedRolesByAlias)) {
       onSelectedRolesByAliasChange(merged);
     }
   }, [
+    hasPendingAliasMutations,
     workspaceId,
     hostVarsAliases,
     onSelectedRolesByAliasChange,
@@ -1058,6 +1065,7 @@ export default function WorkspacePanel({
   useEffect(() => {
     if (!workspaceId) return;
     if (autoSyncRef.current) return;
+    if (hasPendingAliasMutations) return;
     if (activePath === "inventory.yml" && editorDirty) return;
 
     const run = async () => {
@@ -1080,6 +1088,7 @@ export default function WorkspacePanel({
 
     void run();
   }, [
+    hasPendingAliasMutations,
     workspaceId,
     inventoryReady,
     canGenerate,
@@ -1095,6 +1104,7 @@ export default function WorkspacePanel({
     if (!workspaceId || !inventoryReady) return;
     if (!onSelectedRolesByAliasChange) return;
     if (autoSyncRef.current) return;
+    if (hasPendingAliasMutations) return;
     if (activePath === "inventory.yml" && editorDirty) return;
 
     const run = async () => {
@@ -1109,6 +1119,7 @@ export default function WorkspacePanel({
 
     void run();
   }, [
+    hasPendingAliasMutations,
     workspaceId,
     inventoryReady,
     inventoryModifiedAt,

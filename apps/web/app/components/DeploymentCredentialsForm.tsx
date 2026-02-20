@@ -33,7 +33,7 @@ type DeploymentCredentialsFormProps = {
   onOpenCredentialsAliasHandled?: () => void;
   deviceMode?: "customer" | "expert";
   onDeviceModeChange?: (mode: "customer" | "expert") => void;
-  onOpenDetailSearch?: () => void;
+  onOpenDetailSearch?: (alias?: string) => void;
   compact?: boolean;
 };
 

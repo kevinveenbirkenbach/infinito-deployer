@@ -27,7 +27,7 @@ import type {
 type ServerCollectionViewProps = {
   viewMode: ServerViewMode;
   deviceMode?: "customer" | "expert";
-  onOpenDetailSearch?: () => void;
+  onOpenDetailSearch?: (alias?: string) => void;
   paginatedServers: ServerState[];
   computedColumns: number;
   aliasCounts: Record<string, number>;
@@ -1523,7 +1523,7 @@ export default function ServerCollectionView({
                         {onOpenDetailSearch ? (
                           <button
                             type="button"
-                            onClick={onOpenDetailSearch}
+                            onClick={() => onOpenDetailSearch(server.alias)}
                             className={styles.listCompareButton}
                           >
                             <i className="fa-solid fa-scale-balanced" aria-hidden="true" />
@@ -1876,7 +1876,7 @@ export default function ServerCollectionView({
                 <div className={styles.cardFooter}>
                   <button
                     type="button"
-                    onClick={onOpenDetailSearch}
+                    onClick={() => onOpenDetailSearch(server.alias)}
                     className={`${styles.actionButtonSecondary} ${styles.customerCompareButton}`}
                   >
                     <i className="fa-solid fa-scale-balanced" aria-hidden="true" />

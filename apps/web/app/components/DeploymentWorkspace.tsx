@@ -10,6 +10,7 @@ import LiveDeploymentView from "./LiveDeploymentView";
 import DeploymentWorkspaceServerSwitcher from "./DeploymentWorkspaceServerSwitcher";
 import ProviderOrderPanel from "./ProviderOrderPanel";
 import styles from "./DeploymentWorkspace.module.css";
+import { sanitizeAliasFilename } from "./workspace-panel/utils";
 import { createInitialState } from "../lib/deploy_form";
 import {
   createServerPlaceholder,
@@ -247,6 +248,9 @@ export default function DeploymentWorkspace({
   const [deviceMode, setDeviceMode] = useState<"customer" | "expert">("customer");
   const [expertConfirmOpen, setExpertConfirmOpen] = useState(false);
   const [detailSearchOpen, setDetailSearchOpen] = useState(false);
+  const [detailSearchTargetAlias, setDetailSearchTargetAlias] = useState<
+    string | null
+  >(null);
   const [primaryDomainModalOpen, setPrimaryDomainModalOpen] = useState(false);
   const [primaryDomainDraft, setPrimaryDomainDraft] = useState("");
   const [primaryDomainModalError, setPrimaryDomainModalError] = useState<
@@ -579,6 +583,96 @@ export default function DeploymentWorkspace({
     []
   );
 
+  const persistDeviceVisualMetaForAlias = useCallback(
+    async (
+      alias: string,
+      patch: { color?: string; logoEmoji?: string }
+    ): Promise<void> => {
+      if (!workspaceId) return;
+      const targetAlias = String(alias || "").trim();
+      if (!targetAlias) return;
+      const hasColorPatch = Object.prototype.hasOwnProperty.call(patch, "color");
+      const hasLogoPatch = Object.prototype.hasOwnProperty.call(patch, "logoEmoji");
+      if (!hasColorPatch && !hasLogoPatch) return;
+
+      const hostVarsPath = `host_vars/${sanitizeAliasFilename(targetAlias)}.yml`;
+      const fileUrl = `${baseUrl}/api/workspaces/${workspaceId}/files/${encodeWorkspacePath(
+        hostVarsPath
+      )}`;
+
+      let data: Record<string, any> = {};
+      try {
+        const readRes = await fetch(fileUrl, { cache: "no-store" });
+        if (readRes.ok) {
+          const payload = await readRes.json();
+          const parsed = YAML.parse(String(payload?.content ?? ""));
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            data = parsed as Record<string, any>;
+          }
+        } else if (readRes.status !== 404) {
+          return;
+        }
+      } catch {
+        return;
+      }
+
+      let changed = false;
+
+      if (hasColorPatch) {
+        const nextColor = normalizeDeviceColor(patch.color) || "";
+        if (nextColor) {
+          if (data.color !== nextColor) {
+            data.color = nextColor;
+            changed = true;
+          }
+        } else if (Object.prototype.hasOwnProperty.call(data, "color")) {
+          delete data.color;
+          changed = true;
+        }
+      }
+
+      if (hasLogoPatch) {
+        const nextLogo = normalizeDeviceEmoji(patch.logoEmoji) || "";
+        const logoNode: Record<string, any> =
+          data.logo && typeof data.logo === "object" && !Array.isArray(data.logo)
+            ? { ...data.logo }
+            : {};
+        const currentLogo =
+          typeof logoNode.emoji === "string" ? String(logoNode.emoji || "") : "";
+        if (nextLogo) {
+          if (currentLogo !== nextLogo) {
+            logoNode.emoji = nextLogo;
+            data.logo = logoNode;
+            changed = true;
+          } else if (!data.logo || typeof data.logo !== "object" || Array.isArray(data.logo)) {
+            data.logo = logoNode;
+            changed = true;
+          }
+        } else if (Object.prototype.hasOwnProperty.call(logoNode, "emoji")) {
+          delete logoNode.emoji;
+          if (Object.keys(logoNode).length === 0) {
+            delete data.logo;
+          } else {
+            data.logo = logoNode;
+          }
+          changed = true;
+        }
+      }
+
+      if (!changed) return;
+      try {
+        await fetch(fileUrl, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: YAML.stringify(data) }),
+        });
+      } catch {
+        // Ignore visual metadata sync errors to keep the UI responsive.
+      }
+    },
+    [baseUrl, workspaceId]
+  );
+
   const activeServer = useMemo(() => {
     if (activeAlias) {
       const found = servers.find((server) => server.alias === activeAlias);
@@ -865,6 +959,7 @@ export default function DeploymentWorkspace({
     setOpenCredentialsAlias(null);
     setExpertConfirmOpen(false);
     setDetailSearchOpen(false);
+    setDetailSearchTargetAlias(null);
     setPrimaryDomainModalOpen(false);
     setPrimaryDomainDraft("");
     setPrimaryDomainModalError(null);
@@ -930,7 +1025,10 @@ export default function DeploymentWorkspace({
   useEffect(() => {
     if (!detailSearchOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDetailSearchOpen(false);
+      if (event.key === "Escape") {
+        setDetailSearchOpen(false);
+        setDetailSearchTargetAlias(null);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -1033,6 +1131,8 @@ export default function DeploymentWorkspace({
       const nextAliasRaw =
         typeof patch.alias === "string" ? patch.alias.trim() : "";
       const shouldRename = nextAliasRaw && nextAliasRaw !== alias;
+      const hasColorPatch = Object.prototype.hasOwnProperty.call(patch, "color");
+      const hasLogoPatch = Object.prototype.hasOwnProperty.call(patch, "logoEmoji");
 
       setServers((prev) => {
         const idx = prev.findIndex((server) => server.alias === alias);
@@ -1051,6 +1151,14 @@ export default function DeploymentWorkspace({
         };
         return normalizePersistedDeviceMeta(next);
       });
+
+      if (hasColorPatch || hasLogoPatch) {
+        const targetAlias = shouldRename ? nextAliasRaw : alias;
+        void persistDeviceVisualMetaForAlias(targetAlias, {
+          ...(hasColorPatch ? { color: String(patch.color || "") } : {}),
+          ...(hasLogoPatch ? { logoEmoji: String(patch.logoEmoji || "") } : {}),
+        });
+      }
 
       if (shouldRename) {
         const nextAlias = nextAliasRaw;
@@ -1086,7 +1194,7 @@ export default function DeploymentWorkspace({
         setAliasRenames((prev) => [...prev, { from: alias, to: nextAlias }]);
       }
     },
-    [activeAlias]
+    [activeAlias, persistDeviceVisualMetaForAlias]
   );
 
   const addServer = useCallback(
@@ -1106,14 +1214,18 @@ export default function DeploymentWorkspace({
         idx += 1;
       }
 
-      setServers((prev) =>
-        normalizePersistedDeviceMeta([...prev, createServer(alias, prev)])
-      );
+      const newServer = createServer(alias, servers);
+
+      setServers((prev) => normalizePersistedDeviceMeta([...prev, newServer]));
       setSelectedByAlias((prev) => ({ ...prev, [alias]: new Set<string>() }));
       setActiveAlias(alias);
+      void persistDeviceVisualMetaForAlias(alias, {
+        color: newServer.color,
+        logoEmoji: newServer.logoEmoji,
+      });
       return alias;
     },
-    [servers, createServer]
+    [servers, createServer, persistDeviceVisualMetaForAlias]
   );
 
   const removeServerFromClient = useCallback(
@@ -1551,6 +1663,11 @@ export default function DeploymentWorkspace({
     }) => {
       const alias = String(device.alias || "").trim();
       if (!alias) return;
+      const existingAlias = servers.some((server) => server.alias === alias);
+      const nextColor = pickUniqueDeviceColor(new Set(servers.map((server) => server.color)));
+      const nextLogoEmoji = pickUniqueDeviceEmoji(
+        new Set(servers.map((server) => server.logoEmoji))
+      );
       const requirementServerType = String(
         device.requirementServerType || "vps"
       ).trim() || "vps";
@@ -1572,8 +1689,8 @@ export default function DeploymentWorkspace({
           host: String(device.ansible_host || ""),
           port: String(device.ansible_port || 22),
           user: String(device.ansible_user || "root"),
-          color: pickUniqueDeviceColor(new Set(prev.map((server) => server.color))),
-          logoEmoji: pickUniqueDeviceEmoji(new Set(prev.map((server) => server.logoEmoji))),
+          color: nextColor,
+          logoEmoji: nextLogoEmoji,
           authMethod: "password",
           password: "",
           privateKey: "",
@@ -1596,6 +1713,12 @@ export default function DeploymentWorkspace({
         }
         return normalizePersistedDeviceMeta([...prev, patch]);
       });
+      if (!existingAlias) {
+        void persistDeviceVisualMetaForAlias(alias, {
+          color: nextColor,
+          logoEmoji: nextLogoEmoji,
+        });
+      }
       setSelectedByAlias((prev) => {
         if (prev[alias]) return prev;
         return { ...prev, [alias]: new Set<string>() };
@@ -1606,7 +1729,7 @@ export default function DeploymentWorkspace({
       });
       setActiveAlias(alias);
     },
-    []
+    [persistDeviceVisualMetaForAlias, servers]
   );
 
   const roleAppConfigUrl = useCallback(
@@ -1885,7 +2008,11 @@ export default function DeploymentWorkspace({
             onOpenCredentialsAliasHandled={() => setOpenCredentialsAlias(null)}
             deviceMode={deviceMode}
             onDeviceModeChange={handleModeChange}
-            onOpenDetailSearch={() => setDetailSearchOpen(true)}
+            onOpenDetailSearch={(alias) => {
+              const targetAlias = String(alias || "").trim();
+              setDetailSearchTargetAlias(targetAlias || null);
+              setDetailSearchOpen(true);
+            }}
             compact
           />
         </div>
@@ -2488,7 +2615,10 @@ export default function DeploymentWorkspace({
       {detailSearchOpen ? (
         <div
           className={styles.detailSearchOverlay}
-          onClick={() => setDetailSearchOpen(false)}
+          onClick={() => {
+            setDetailSearchOpen(false);
+            setDetailSearchTargetAlias(null);
+          }}
         >
           <div
             className={styles.detailSearchCard}
@@ -2503,7 +2633,10 @@ export default function DeploymentWorkspace({
               </div>
               <button
                 type="button"
-                onClick={() => setDetailSearchOpen(false)}
+                onClick={() => {
+                  setDetailSearchOpen(false);
+                  setDetailSearchTargetAlias(null);
+                }}
                 className={`${styles.smallButton} ${styles.smallButtonEnabled}`}
               >
                 Close
@@ -2515,6 +2648,7 @@ export default function DeploymentWorkspace({
                 workspaceId={workspaceId}
                 primaryDomain={workspacePrimaryDomain}
                 mode="expert"
+                compareAlias={detailSearchTargetAlias}
                 onOrderedServer={handleProviderOrderedServer}
               />
             </div>

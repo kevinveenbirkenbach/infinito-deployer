@@ -132,15 +132,47 @@ function parseHostVarsValues(data) {
     typeof node.description === "string" ? String(node.description || "") : "";
   const nextPrimaryDomain =
     typeof node.DOMAIN_PRIMARY === "string" ? String(node.DOMAIN_PRIMARY || "") : "";
-  const nextColor =
-    typeof node.color === "string" ? normalizeDeviceColor(node.color) || "" : "";
-  const nextLogoEmoji =
+  const rawColor =
+    typeof node.color === "string"
+      ? node.color
+      : node.infinito &&
+        typeof node.infinito === "object" &&
+        !Array.isArray(node.infinito) &&
+        node.infinito.device &&
+        typeof node.infinito.device === "object" &&
+        !Array.isArray(node.infinito.device) &&
+        typeof node.infinito.device.color === "string"
+      ? node.infinito.device.color
+      : "";
+  const nextColor = normalizeDeviceColor(rawColor) || "";
+  const rawLogoEmoji =
     node.logo &&
     typeof node.logo === "object" &&
     !Array.isArray(node.logo) &&
     typeof node.logo.emoji === "string"
-      ? normalizeDeviceEmoji(String(node.logo.emoji || "")) || ""
+      ? String(node.logo.emoji || "")
+      : typeof node.logoEmoji === "string"
+      ? node.logoEmoji
+      : typeof node.logo_emoji === "string"
+      ? node.logo_emoji
+      : node.infinito &&
+        typeof node.infinito === "object" &&
+        !Array.isArray(node.infinito) &&
+        node.infinito.device &&
+        typeof node.infinito.device === "object" &&
+        !Array.isArray(node.infinito.device) &&
+        typeof node.infinito.device.logo_emoji === "string"
+      ? node.infinito.device.logo_emoji
+      : node.infinito &&
+        typeof node.infinito === "object" &&
+        !Array.isArray(node.infinito) &&
+        node.infinito.device &&
+        typeof node.infinito.device === "object" &&
+        !Array.isArray(node.infinito.device) &&
+        typeof node.infinito.device.logoEmoji === "string"
+      ? node.infinito.device.logoEmoji
       : "";
+  const nextLogoEmoji = normalizeDeviceEmoji(rawLogoEmoji) || "";
   const nextRequirementServerType = hasRequirementServerType
     ? normalizeRequirementServerType(rawRequirementServerType) || ""
     : "";

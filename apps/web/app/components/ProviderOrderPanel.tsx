@@ -27,6 +27,7 @@ type ProviderOrderPanelProps = {
   workspaceId: string | null;
   primaryDomain: string;
   mode: "customer" | "expert";
+  compareAlias?: string | null;
   onOrderedServer: (server: {
     alias: string;
     ansible_host: string;
@@ -43,6 +44,7 @@ export default function ProviderOrderPanel({
   workspaceId,
   primaryDomain,
   mode,
+  compareAlias = null,
   onOrderedServer,
 }: ProviderOrderPanelProps) {
   const [offers, setOffers] = useState<ProviderOffer[]>([]);
@@ -212,6 +214,7 @@ export default function ProviderOrderPanel({
 
     setBusyOfferId(offer.offer_id);
     try {
+      const compareAliasValue = String(compareAlias || "").trim();
       const res = await fetch(`${baseUrl}/api/providers/order/server`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -219,6 +222,7 @@ export default function ProviderOrderPanel({
           workspace_id: workspaceId,
           offer_id: offer.offer_id,
           provider: offer.provider,
+          alias: compareAliasValue || undefined,
           primary_domain: String(primaryDomain || "").trim() || undefined,
           confirm: true,
         }),

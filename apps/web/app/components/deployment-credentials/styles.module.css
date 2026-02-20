@@ -838,6 +838,10 @@
   background: var(--bs-body-bg);
   color: var(--deployer-muted-ink);
   font-size: var(--server-action-font, 12px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   cursor: pointer;
 }
 
