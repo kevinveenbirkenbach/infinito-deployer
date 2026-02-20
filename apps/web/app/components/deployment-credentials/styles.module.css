@@ -847,6 +847,202 @@
   align-content: start;
 }
 
+.motionRoot {
+  --motion-lane-gap: 14px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.motionRootRow {
+  flex-direction: column;
+}
+
+.motionRootColumn {
+  flex-direction: row;
+}
+
+.motionLanes {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  gap: var(--motion-lane-gap, 14px);
+}
+
+.motionLanesRow {
+  grid-template-rows: repeat(
+    var(--motion-lane-count, 1),
+    minmax(0, var(--motion-lane-size, 180px))
+  );
+}
+
+.motionLanesColumn {
+  grid-template-columns: repeat(
+    var(--motion-lane-count, 1),
+    minmax(0, var(--motion-lane-size, 220px))
+  );
+}
+
+.motionLane {
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.motionLaneRow {
+  height: var(--motion-lane-size, 180px);
+}
+
+.motionLaneColumn {
+  width: var(--motion-lane-size, 220px);
+}
+
+.motionViewport {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.motionTrack {
+  display: flex;
+  width: max-content;
+  height: max-content;
+  will-change: transform;
+}
+
+.motionTrackHorizontal {
+  align-items: stretch;
+  animation: serverTrackMarqueeX var(--motion-scroll-duration, 18s) linear infinite;
+}
+
+.motionTrackVertical {
+  flex-direction: column;
+  animation: serverTrackMarqueeY var(--motion-scroll-duration, 20s) linear infinite;
+}
+
+.motionLane:hover .motionTrack {
+  animation-play-state: paused;
+}
+
+.motionTrackSegment {
+  display: flex;
+  min-width: max-content;
+  min-height: max-content;
+}
+
+.motionTrackSegmentRow {
+  gap: var(--motion-lane-gap, 14px);
+  padding-right: var(--motion-lane-gap, 14px);
+}
+
+.motionTrackSegmentColumn {
+  flex-direction: column;
+  gap: var(--motion-lane-gap, 14px);
+  padding-bottom: var(--motion-lane-gap, 14px);
+}
+
+@keyframes serverTrackMarqueeX {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(calc(-100% / 3), 0, 0);
+  }
+}
+
+@keyframes serverTrackMarqueeY {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(0, calc(-100% / 3), 0);
+  }
+}
+
+.motionCard {
+  min-width: 0;
+  border-radius: 16px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  box-shadow: var(--deployer-shadow);
+}
+
+.motionCardRow {
+  width: var(--motion-row-card-width, 560px);
+  height: calc(var(--motion-lane-size, 180px) - 2px);
+  grid-template-rows: auto auto auto auto;
+}
+
+.motionCardColumn {
+  width: calc(var(--motion-lane-size, 220px) - 2px);
+  min-height: var(--motion-column-card-min-height, 300px);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
+.motionCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.motionIdentity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.motionAlias {
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.motionCardMeta {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--deployer-muted-ink);
+}
+
+.motionCardHint {
+  font-size: 12px;
+}
+
+.motionCardActions {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.motionCardActions .actionButtonSecondary {
+  font-size: 12px;
+}
+
+.motionEmpty {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  border: 1px dashed var(--bs-border-color-translucent);
+  background: var(--deployer-card-bg-soft);
+  font-size: 13px;
+}
+
 .serverCard {
   min-width: 0;
   padding: var(--server-card-padding, 16px);

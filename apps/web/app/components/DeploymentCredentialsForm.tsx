@@ -75,6 +75,7 @@ const SINGLE_COLUMN_SERVER_VIEW_MODES = new Set<ServerViewMode>([
   "column",
 ]);
 const LIST_LIKE_SERVER_VIEW_MODES = new Set<ServerViewMode>(["list", "matrix"]);
+const LANE_SERVER_VIEW_MODES = new Set<ServerViewMode>(["row", "column"]);
 
 function formatViewLabel(mode: ServerViewMode): string {
   return mode.charAt(0).toUpperCase() + mode.slice(1);
@@ -127,6 +128,7 @@ export default function DeploymentCredentialsForm({
     headHeight: 0,
     rowHeight: 0,
   });
+  const [cardAutoRowHeight, setCardAutoRowHeight] = useState(0);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filtersPos, setFiltersPos] = useState({ top: 0, left: 0 });
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
@@ -252,6 +254,7 @@ export default function DeploymentCredentialsForm({
   const gridGap = 16;
   const isSingleColumnView = SINGLE_COLUMN_SERVER_VIEW_MODES.has(viewMode);
   const isListLikeView = LIST_LIKE_SERVER_VIEW_MODES.has(viewMode);
+  const isLaneView = LANE_SERVER_VIEW_MODES.has(viewMode);
   const computedColumns =
     isSingleColumnView
       ? 1
@@ -259,6 +262,7 @@ export default function DeploymentCredentialsForm({
           1,
           Math.floor((gridSize.width + gridGap) / (viewConfig.minWidth + gridGap))
         );
+  const laneGap = 14;
   const contentHeightBuffer = viewMode === "mini" ? 24 : 8;
   const computedRows = useMemo(() => {
     if (isListLikeView) {
@@ -272,23 +276,51 @@ export default function DeploymentCredentialsForm({
         Math.floor(Math.max(0, bodyHeight - safetyPx) / Math.max(1, rowHeight))
       );
     }
+    if (isLaneView) {
+      const laneMinSize = viewMode === "row" ? 188 : 220;
+      const rowAxisSize = viewMode === "column" ? gridSize.width : gridSize.height;
+      return Math.max(
+        1,
+        Math.floor(
+          (Math.max(0, rowAxisSize) + laneGap) / (laneMinSize + laneGap)
+        )
+      );
+    }
+    const measuredCardHeight = cardAutoRowHeight || viewConfig.minHeight;
+    const safetyPx = 2;
     return Math.max(
       1,
       Math.floor(
-        (Math.max(0, gridSize.height - contentHeightBuffer) + gridGap) /
-          (viewConfig.minHeight + gridGap)
+        (Math.max(0, gridSize.height - contentHeightBuffer - safetyPx) + gridGap) /
+          (measuredCardHeight + gridGap)
       )
     );
   }, [
     isListLikeView,
+    isLaneView,
     listAutoMetrics.wrapHeight,
     listAutoMetrics.headHeight,
     listAutoMetrics.rowHeight,
+    cardAutoRowHeight,
+    viewMode,
+    gridSize.width,
     gridSize.height,
+    laneGap,
     viewConfig.minHeight,
     contentHeightBuffer,
   ]);
   const rows = Math.max(1, rowsOverride ?? computedRows);
+  const laneCount = Math.max(1, rows);
+  const laneGapTotal = Math.max(0, laneGap * (laneCount - 1));
+  const rowLaneSize = Math.max(
+    188,
+    Math.floor(Math.max(0, gridSize.height - laneGapTotal) / laneCount)
+  );
+  const columnLaneSize = Math.max(
+    220,
+    Math.floor(Math.max(0, gridSize.width - laneGapTotal) / laneCount)
+  );
+  const laneSize = viewMode === "row" ? rowLaneSize : columnLaneSize;
   const pageSize = Math.max(1, computedColumns * rows);
   const rowOptions = useMemo(() => {
     const maxRows = Math.max(
@@ -369,6 +401,44 @@ export default function DeploymentCredentialsForm({
       }
     };
   }, [isListLikeView, filteredServers.length, currentPage, deviceMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (isListLikeView || isLaneView) return;
+    const container = contentRef.current;
+    if (!container) return;
+
+    const measure = () => {
+      const cards = Array.from(
+        container.querySelectorAll<HTMLElement>("[data-server-card]")
+      );
+      const next = cards.reduce(
+        (max, card) => Math.max(max, card.getBoundingClientRect().height),
+        0
+      );
+      setCardAutoRowHeight((prev) => {
+        if (Math.abs(prev - next) < 1) return prev;
+        return next;
+      });
+    };
+
+    measure();
+    const raf = window.requestAnimationFrame(measure);
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => measure());
+      observer.observe(container);
+    } else {
+      window.addEventListener("resize", measure);
+    }
+    return () => {
+      window.cancelAnimationFrame(raf);
+      observer?.disconnect();
+      if (!observer) {
+        window.removeEventListener("resize", measure);
+      }
+    };
+  }, [isListLikeView, isLaneView, filteredServers.length, currentPage, deviceMode]);
 
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
@@ -972,6 +1042,8 @@ export default function DeploymentCredentialsForm({
               viewMode={viewMode}
               paginatedServers={paginatedServers}
               computedColumns={computedColumns}
+              laneCount={laneCount}
+              laneSize={laneSize}
               aliasCounts={aliasCounts}
               testResults={connectionResults}
               workspaceId={workspaceId}

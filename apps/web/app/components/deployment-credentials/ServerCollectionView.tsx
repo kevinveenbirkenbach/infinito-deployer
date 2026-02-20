@@ -30,6 +30,8 @@ type ServerCollectionViewProps = {
   onOpenDetailSearch?: (alias?: string) => void;
   paginatedServers: ServerState[];
   computedColumns: number;
+  laneCount?: number;
+  laneSize?: number;
   aliasCounts: Record<string, number>;
   testResults: Record<string, ConnectionResult>;
   workspaceId: string | null;
@@ -106,6 +108,23 @@ type PrimaryDomainMenu = {
 };
 
 const ALIAS_PATTERN = /^[a-z0-9_-]+$/;
+const MOTION_LOOP_SEGMENTS = [0, 1, 2] as const;
+
+function buildMotionLanes(servers: ServerState[], laneCount: number): ServerState[][] {
+  const safeLaneCount = Math.max(1, Math.floor(Number(laneCount) || 1));
+  const lanes = Array.from({ length: safeLaneCount }, () => [] as ServerState[]);
+  servers.forEach((server, index) => {
+    lanes[index % safeLaneCount].push(server);
+  });
+  if (servers.length > 0) {
+    lanes.forEach((lane, laneIndex) => {
+      if (lane.length === 0) {
+        lane.push(servers[laneIndex % servers.length]);
+      }
+    });
+  }
+  return lanes;
+}
 
 export default function ServerCollectionView({
   viewMode,
@@ -113,6 +132,8 @@ export default function ServerCollectionView({
   onOpenDetailSearch,
   paginatedServers,
   computedColumns,
+  laneCount = 1,
+  laneSize = 220,
   aliasCounts,
   testResults,
   workspaceId,
@@ -1592,6 +1613,181 @@ export default function ServerCollectionView({
         )
       : null;
 
+  if (viewMode === "row" || viewMode === "column") {
+    const motionLanes = buildMotionLanes(paginatedServers, laneCount);
+    const safeLaneSize = Math.max(
+      viewMode === "row" ? 120 : 160,
+      Math.floor(Number(laneSize) || 0)
+    );
+    const motionRootStyle = {
+      "--motion-lane-count": Math.max(1, motionLanes.length),
+      "--motion-lane-size": `${safeLaneSize}px`,
+      "--motion-row-card-width": `${Math.max(420, Math.round(safeLaneSize * 2))}px`,
+      "--motion-column-card-min-height": `${Math.max(260, Math.round(safeLaneSize * 1.6))}px`,
+    } as CSSProperties;
+
+    if (paginatedServers.length === 0) {
+      return (
+        <div
+          className={`${styles.motionRoot} ${
+            viewMode === "row" ? styles.motionRootRow : styles.motionRootColumn
+          }`}
+          style={motionRootStyle}
+        >
+          <div className={`text-body-secondary ${styles.motionEmpty}`}>
+            No devices match the filters.
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <div
+          className={`${styles.motionRoot} ${
+            viewMode === "row" ? styles.motionRootRow : styles.motionRootColumn
+          }`}
+          style={motionRootStyle}
+        >
+          <div
+            className={`${styles.motionLanes} ${
+              viewMode === "row" ? styles.motionLanesRow : styles.motionLanesColumn
+            }`}
+          >
+            {motionLanes.map((laneServers, laneIndex) => {
+              const basePerItemSeconds = viewMode === "row" ? 6 : 7;
+              const duration = Number(
+                (Math.max(1, laneServers.length) * basePerItemSeconds + laneIndex).toFixed(2)
+              );
+              const laneStyle = {
+                "--motion-scroll-duration": `${duration}s`,
+              } as CSSProperties;
+              return (
+                <div
+                  key={`lane-${laneIndex}`}
+                  className={`${styles.motionLane} ${
+                    viewMode === "row" ? styles.motionLaneRow : styles.motionLaneColumn
+                  }`}
+                >
+                  <div className={styles.motionViewport}>
+                    <div
+                      className={`${styles.motionTrack} ${
+                        viewMode === "row"
+                          ? styles.motionTrackHorizontal
+                          : styles.motionTrackVertical
+                      }`}
+                      style={laneStyle}
+                    >
+                      {MOTION_LOOP_SEGMENTS.map((segmentIndex) => (
+                        <div
+                          key={`lane-${laneIndex}-segment-${segmentIndex}`}
+                          className={`${styles.motionTrackSegment} ${
+                            viewMode === "row"
+                              ? styles.motionTrackSegmentRow
+                              : styles.motionTrackSegmentColumn
+                          }`}
+                        >
+                          {laneServers.map((server, cardIndex) => {
+                            const validation = getValidationState(server);
+                            const indicator = getStatusIndicator(
+                              validation,
+                              testResults[server.alias]
+                            );
+                            const visual = getVisualState(validation, indicator);
+                            const tinted = visual.cardClass !== styles.cardStateDanger;
+                            const tintStyle = getTintStyle(server.color, tinted);
+                            return (
+                              <article
+                                key={`${laneIndex}-${segmentIndex}-${cardIndex}-${server.alias}`}
+                                data-server-card
+                                className={`${styles.motionCard} ${
+                                  viewMode === "row"
+                                    ? styles.motionCardRow
+                                    : styles.motionCardColumn
+                                } ${styles.cardDefault} ${visual.cardClass} ${
+                                  tintStyle ? styles.cardTinted : ""
+                                }`}
+                                style={tintStyle}
+                              >
+                                <div className={styles.motionCardHeader}>
+                                  <div className={styles.motionIdentity}>
+                                    <span
+                                      className={styles.aliasEmojiPreview}
+                                      aria-hidden="true"
+                                    >
+                                      {server.logoEmoji || "💻"}
+                                    </span>
+                                    <span className={styles.motionAlias}>
+                                      {server.alias || "device"}
+                                    </span>
+                                  </div>
+                                  <span
+                                    className={`${styles.statusDot} ${statusDotClass(
+                                      indicator.tone
+                                    )}`}
+                                    aria-hidden="true"
+                                  />
+                                </div>
+                                <div className={styles.motionCardMeta}>
+                                  <span>
+                                    {(server.user || "root").trim() || "root"}@
+                                    {(server.host || "example.com").trim() ||
+                                      "example.com"}
+                                    :{(server.port || "22").trim() || "22"}
+                                  </span>
+                                  <span>
+                                    {(server.primaryDomain || "localhost").trim() ||
+                                      "localhost"}
+                                  </span>
+                                </div>
+                                <div className={`text-body-secondary ${styles.motionCardHint}`}>
+                                  {indicator.label}
+                                </div>
+                                <div className={styles.motionCardActions}>
+                                  {!isCustomerMode ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => openDetailModal(server.alias)}
+                                      className={styles.actionButtonSecondary}
+                                    >
+                                      <i
+                                        className="fa-solid fa-circle-info"
+                                        aria-hidden="true"
+                                      />
+                                      <span>Detail</span>
+                                    </button>
+                                  ) : null}
+                                  {onOpenDetailSearch ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => onOpenDetailSearch(server.alias)}
+                                      className={styles.actionButtonSecondary}
+                                    >
+                                      <i
+                                        className="fa-solid fa-scale-balanced"
+                                        aria-hidden="true"
+                                      />
+                                      <span>Compare</span>
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {!isCustomerMode ? detailModal : null}
+      </>
+    );
+  }
+
   if (viewMode === "list" || viewMode === "matrix") {
     if (isCustomerMode) {
       return (
@@ -1979,6 +2175,7 @@ export default function ServerCollectionView({
           return (
             <div
               key={server.alias}
+              data-server-card
               className={`${styles.serverCard} ${styles.cardDefault} ${
                 tintStyle ? styles.cardTinted : ""
               }`}
@@ -2154,6 +2351,7 @@ export default function ServerCollectionView({
           return (
             <div
               key={server.alias}
+              data-server-card
               className={`${styles.serverCard} ${styles.cardDefault} ${
                 visual.cardClass
               } ${tintStyle ? styles.cardTinted : ""}`}
