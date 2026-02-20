@@ -34,6 +34,15 @@ type DeploymentCredentialsFormProps = {
   deviceMode?: "customer" | "expert";
   onDeviceModeChange?: (mode: "customer" | "expert") => void;
   onOpenDetailSearch?: (alias?: string) => void;
+  primaryDomainOptions?: string[];
+  onRequestAddPrimaryDomain?: (request?: {
+    alias?: string;
+    value?: string;
+    kind?: "local" | "fqdn" | "subdomain";
+    parentFqdn?: string;
+    subLabel?: string;
+    reason?: "missing" | "unknown";
+  }) => void;
   compact?: boolean;
 };
 
@@ -65,6 +74,8 @@ export default function DeploymentCredentialsForm({
   deviceMode,
   onDeviceModeChange,
   onOpenDetailSearch,
+  primaryDomainOptions = [],
+  onRequestAddPrimaryDomain,
   compact = false,
 }: DeploymentCredentialsFormProps) {
   const Wrapper = compact ? "div" : "section";
@@ -804,6 +815,8 @@ export default function DeploymentCredentialsForm({
               onRequestedDetailAliasHandled={() => setRequestedDetailAlias(null)}
               deviceMode={deviceMode}
               onOpenDetailSearch={onOpenDetailSearch}
+              primaryDomainOptions={primaryDomainOptions}
+              onRequestAddPrimaryDomain={onRequestAddPrimaryDomain}
             />
           </div>
         </div>

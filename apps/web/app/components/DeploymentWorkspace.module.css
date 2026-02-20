@@ -207,20 +207,10 @@
 }
 
 .domainPanel {
-  display: flex;
+  display: grid;
   flex: 1;
   min-height: 0;
-}
-
-.domainCard {
-  width: min(760px, 100%);
-  border-radius: 16px;
-  border: 1px solid var(--bs-border-color-translucent);
-  background: var(--bs-body-bg);
-  box-shadow: var(--deployer-shadow);
-  padding: 16px;
-  display: grid;
-  gap: 10px;
+  gap: 12px;
   align-content: start;
 }
 
@@ -228,6 +218,109 @@
   margin: 0;
   font-size: 12px;
   color: var(--deployer-muted-ink);
+}
+
+.primaryDomainSelectorRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.domainTableFilters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.domainFilterInput {
+  max-width: 340px;
+}
+
+.domainFilterSelect {
+  width: auto;
+  min-width: 150px;
+}
+
+.domainTableWrap {
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  overflow: auto;
+  min-height: 0;
+}
+
+.domainTable {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+}
+
+.domainTable th,
+.domainTable td {
+  border-bottom: 1px solid var(--bs-border-color-translucent);
+  padding: 10px 12px;
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.domainTable th {
+  background: var(--bs-tertiary-bg);
+  color: var(--deployer-muted-ink);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+}
+
+.domainTableEmpty {
+  text-align: center;
+  color: var(--deployer-muted-ink);
+}
+
+.domainRemoveButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  padding: 5px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.domainActionRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.domainActionButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  padding: 5px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.domainActionButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.domainRemoveButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .serverModeHint {
@@ -943,6 +1036,24 @@
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.domainPopupTypeRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.domainPopupPrompt {
+  margin: 0;
+  font-size: 12px;
+  color: var(--bs-warning-text-emphasis);
+}
+
+.domainPopupFieldGrid {
+  display: grid;
+  gap: 8px;
 }
 
 .primaryDomainCheckButton {

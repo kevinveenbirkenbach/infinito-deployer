@@ -80,6 +80,227 @@ type RoleAppConfigResponse = {
   imported_paths?: number;
 };
 
+type DomainKind = "local" | "fqdn" | "subdomain";
+
+type DomainEntry = {
+  id: string;
+  kind: DomainKind;
+  domain: string;
+  parentFqdn: string | null;
+};
+
+type DomainFilterKind = "all" | DomainKind;
+type PrimaryDomainAddRequest = {
+  alias?: string;
+  value?: string;
+  kind?: DomainKind;
+  parentFqdn?: string;
+  subLabel?: string;
+  reason?: "missing" | "unknown";
+};
+
+const DEFAULT_PRIMARY_DOMAIN = "localhost";
+const GROUP_VARS_DOMAIN_CATALOG_KEY = "INFINITO_DOMAINS";
+
+function normalizeDomainName(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeDomainLabel(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/^-+|-+$/g, "");
+}
+
+function isValidDomainToken(value: string): boolean {
+  return Boolean(value) && /^[a-z0-9][a-z0-9._-]*$/.test(value);
+}
+
+function isLikelyFqdn(value: string): boolean {
+  const normalized = normalizeDomainName(value);
+  if (!normalized || normalized.includes(" ") || !normalized.includes(".")) {
+    return false;
+  }
+  const labels = normalized.split(".").filter(Boolean);
+  if (labels.length < 2) return false;
+  return labels.every(
+    (label) =>
+      /^[a-z0-9-]+$/.test(label) && !label.startsWith("-") && !label.endsWith("-")
+  );
+}
+
+function inferDomainKind(value: string): DomainKind {
+  const normalized = normalizeDomainName(value);
+  if (!normalized || normalized === DEFAULT_PRIMARY_DOMAIN || !normalized.includes(".")) {
+    return "local";
+  }
+  const labels = normalized.split(".").filter(Boolean);
+  if (labels.length <= 2) return "fqdn";
+  return "subdomain";
+}
+
+function buildDomainEntryId(
+  kind: DomainKind,
+  domain: string,
+  parentFqdn: string | null
+): string {
+  const parentPart = parentFqdn ? `:${parentFqdn}` : "";
+  return `${kind}:${domain}${parentPart}`;
+}
+
+function buildDomainCatalogPayload(entries: DomainEntry[]): Array<Record<string, string>> {
+  return (Array.isArray(entries) ? entries : []).map((entry) => {
+    const row: Record<string, string> = {
+      type: entry.kind,
+      domain: entry.domain,
+    };
+    if (entry.kind === "subdomain" && entry.parentFqdn) {
+      row.parent_fqdn = entry.parentFqdn;
+    }
+    return row;
+  });
+}
+
+function parseDomainCatalogFromGroupVars(data: Record<string, unknown>): DomainEntry[] {
+  const rawCatalog = data[GROUP_VARS_DOMAIN_CATALOG_KEY];
+  const rawItems = Array.isArray(rawCatalog) ? rawCatalog : [];
+  const staged: Array<{ kind: DomainKind; domain: string; parentFqdn: string | null }> = [];
+
+  rawItems.forEach((item) => {
+    if (typeof item === "string") {
+      const domain = normalizeDomainName(item);
+      if (!domain) return;
+      staged.push({
+        kind: inferDomainKind(domain),
+        domain,
+        parentFqdn: null,
+      });
+      return;
+    }
+    if (!item || typeof item !== "object" || Array.isArray(item)) return;
+    const node = item as Record<string, unknown>;
+    const domain = normalizeDomainName(node.domain ?? node.value ?? node.name);
+    if (!domain) return;
+    const rawKind = normalizeDomainName(node.type ?? node.kind);
+    const kind: DomainKind =
+      rawKind === "local" || rawKind === "fqdn" || rawKind === "subdomain"
+        ? (rawKind as DomainKind)
+        : inferDomainKind(domain);
+    const parentFqdn = normalizeDomainName(
+      node.parent_fqdn ?? node.parentFqdn ?? node.parent
+    );
+    staged.push({
+      kind,
+      domain,
+      parentFqdn: parentFqdn || null,
+    });
+  });
+
+  const fallbackPrimary = normalizeDomainName(readPrimaryDomainFromGroupVars(data));
+  if (fallbackPrimary) {
+    staged.push({
+      kind: inferDomainKind(fallbackPrimary),
+      domain: fallbackPrimary,
+      parentFqdn: null,
+    });
+  }
+
+  const entries: DomainEntry[] = [];
+  const seenDomains = new Set<string>();
+  const fqdnDomains = new Set<string>();
+
+  const pushEntry = (
+    kind: DomainKind,
+    domain: string,
+    parentFqdn: string | null = null
+  ) => {
+    const normalizedDomain = normalizeDomainName(domain);
+    if (!normalizedDomain || seenDomains.has(normalizedDomain)) return;
+    if (kind === "local" && !isValidDomainToken(normalizedDomain)) return;
+    if (kind === "fqdn" && !isLikelyFqdn(normalizedDomain)) return;
+    if (kind === "subdomain") {
+      if (!normalizedDomain.includes(".")) return;
+      const normalizedParent = normalizeDomainName(
+        parentFqdn || normalizedDomain.split(".").slice(1).join(".")
+      );
+      if (!normalizedParent || !isLikelyFqdn(normalizedParent)) return;
+      if (!seenDomains.has(normalizedParent)) {
+        pushEntry("fqdn", normalizedParent, null);
+      }
+      entries.push({
+        id: buildDomainEntryId("subdomain", normalizedDomain, normalizedParent),
+        kind: "subdomain",
+        domain: normalizedDomain,
+        parentFqdn: normalizedParent,
+      });
+      seenDomains.add(normalizedDomain);
+      return;
+    }
+    entries.push({
+      id: buildDomainEntryId(kind, normalizedDomain, null),
+      kind,
+      domain: normalizedDomain,
+      parentFqdn: null,
+    });
+    seenDomains.add(normalizedDomain);
+    if (kind === "fqdn") {
+      fqdnDomains.add(normalizedDomain);
+    }
+  };
+
+  staged.forEach((entry) => {
+    if (entry.kind === "subdomain") {
+      const parentFqdn =
+        normalizeDomainName(entry.parentFqdn || "") ||
+        normalizeDomainName(entry.domain.split(".").slice(1).join("."));
+      if (parentFqdn && !fqdnDomains.has(parentFqdn)) {
+        pushEntry("fqdn", parentFqdn, null);
+      }
+      pushEntry("subdomain", entry.domain, parentFqdn || null);
+      return;
+    }
+    pushEntry(entry.kind, entry.domain, null);
+  });
+
+  if (!seenDomains.has(DEFAULT_PRIMARY_DOMAIN)) {
+    entries.unshift({
+      id: buildDomainEntryId("local", DEFAULT_PRIMARY_DOMAIN, null),
+      kind: "local",
+      domain: DEFAULT_PRIMARY_DOMAIN,
+      parentFqdn: null,
+    });
+    seenDomains.add(DEFAULT_PRIMARY_DOMAIN);
+  }
+
+  const typeOrder: Record<DomainKind, number> = { local: 0, fqdn: 1, subdomain: 2 };
+  return entries
+    .slice()
+    .sort(
+      (a, b) =>
+        typeOrder[a.kind] - typeOrder[b.kind] ||
+        a.domain.localeCompare(b.domain, undefined, { sensitivity: "base" })
+    );
+}
+
+function normalizePrimaryDomainSelection(
+  value: unknown,
+  entries: DomainEntry[]
+): string {
+  const desired = normalizeDomainName(value);
+  if (!desired) return DEFAULT_PRIMARY_DOMAIN;
+  const lookup = new Map<string, string>();
+  (Array.isArray(entries) ? entries : []).forEach((entry) => {
+    const domain = normalizeDomainName(entry.domain);
+    if (!domain) return;
+    if (!lookup.has(domain)) {
+      lookup.set(domain, entry.domain);
+    }
+  });
+  return lookup.get(desired) || DEFAULT_PRIMARY_DOMAIN;
+}
+
 function createDeviceStyle(
   color: string,
   {
@@ -179,7 +400,7 @@ export default function DeploymentWorkspace({
     {
       alias: initial.alias,
       description: initial.description,
-      primaryDomain: initial.primaryDomain || "",
+      primaryDomain: initial.primaryDomain || DEFAULT_PRIMARY_DOMAIN,
       requirementServerType: initial.requirementServerType || "vps",
       requirementStorageGb: initial.requirementStorageGb || "200",
       requirementLocation: initial.requirementLocation || "Germany",
@@ -231,7 +452,9 @@ export default function DeploymentWorkspace({
   const pendingAliasFromQueryRef = useRef("");
 
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
-  const [workspacePrimaryDomain, setWorkspacePrimaryDomain] = useState("");
+  const [workspacePrimaryDomain, setWorkspacePrimaryDomain] = useState(
+    DEFAULT_PRIMARY_DOMAIN
+  );
   const [inventoryReady, setInventoryReady] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
@@ -250,16 +473,41 @@ export default function DeploymentWorkspace({
   const [detailSearchTargetAlias, setDetailSearchTargetAlias] = useState<
     string | null
   >(null);
-  const [primaryDomainDraft, setPrimaryDomainDraft] = useState("");
+  const [primaryDomainDraft, setPrimaryDomainDraft] = useState(
+    DEFAULT_PRIMARY_DOMAIN
+  );
   const [primaryDomainModalError, setPrimaryDomainModalError] = useState<
     string | null
   >(null);
   const [primaryDomainModalSaving, setPrimaryDomainModalSaving] = useState(false);
-  const [primaryDomainCheckBusy, setPrimaryDomainCheckBusy] = useState(false);
-  const [primaryDomainCheckResult, setPrimaryDomainCheckResult] = useState<{
+  const [domainEntries, setDomainEntries] = useState<DomainEntry[]>([
+    {
+      id: buildDomainEntryId("local", DEFAULT_PRIMARY_DOMAIN, null),
+      kind: "local",
+      domain: DEFAULT_PRIMARY_DOMAIN,
+      parentFqdn: null,
+    },
+  ]);
+  const [domainFilterQuery, setDomainFilterQuery] = useState("");
+  const [domainFilterKind, setDomainFilterKind] = useState<DomainFilterKind>("all");
+  const [domainPopupOpen, setDomainPopupOpen] = useState(false);
+  const [domainPopupType, setDomainPopupType] = useState<DomainKind>("fqdn");
+  const [domainPopupFqdnValue, setDomainPopupFqdnValue] = useState("");
+  const [domainPopupFqdnCheckBusy, setDomainPopupFqdnCheckBusy] = useState(false);
+  const [domainPopupFqdnCheckResult, setDomainPopupFqdnCheckResult] = useState<{
     available: boolean;
     note: string;
   } | null>(null);
+  const [domainPopupLocalValue, setDomainPopupLocalValue] = useState(
+    DEFAULT_PRIMARY_DOMAIN
+  );
+  const [domainPopupSubLabel, setDomainPopupSubLabel] = useState("");
+  const [domainPopupParentFqdn, setDomainPopupParentFqdn] = useState("");
+  const [domainPopupError, setDomainPopupError] = useState<string | null>(null);
+  const [domainPopupPrompt, setDomainPopupPrompt] = useState<string | null>(null);
+  const [domainPopupTargetAlias, setDomainPopupTargetAlias] = useState<
+    string | null
+  >(null);
   const [activePanel, setActivePanel] = useState<PanelKey>("intro");
   const handleModeChange = useCallback(
     (mode: "customer" | "expert") => {
@@ -354,14 +602,6 @@ export default function DeploymentWorkspace({
     [baseUrl]
   );
 
-  const readWorkspacePrimaryDomain = useCallback(
-    async (targetWorkspaceId: string): Promise<string> => {
-      const data = await readGroupVarsAll(targetWorkspaceId);
-      return readPrimaryDomainFromGroupVars(data);
-    },
-    [readGroupVarsAll]
-  );
-
   const writeGroupVarsAll = useCallback(
     async (targetWorkspaceId: string, data: Record<string, unknown>) => {
       const path = encodeWorkspacePath(GROUP_VARS_ALL_PATH);
@@ -380,16 +620,199 @@ export default function DeploymentWorkspace({
     [baseUrl]
   );
 
-  const checkPrimaryDomainAvailability = useCallback(async () => {
-    const domain = String(primaryDomainDraft || "").trim().toLowerCase();
-    if (!domain) {
-      setPrimaryDomainModalError("Please enter a domain.");
-      setPrimaryDomainCheckResult(null);
+  const primaryDomainOptions = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    domainEntries.forEach((entry) => {
+      const domain = normalizeDomainName(entry.domain);
+      if (!domain || seen.has(domain)) return;
+      seen.add(domain);
+      out.push(entry.domain);
+    });
+    if (!seen.has(DEFAULT_PRIMARY_DOMAIN)) {
+      out.unshift(DEFAULT_PRIMARY_DOMAIN);
+    }
+    return out;
+  }, [domainEntries]);
+
+  const fqdnDomainOptions = useMemo(
+    () =>
+      domainEntries
+        .filter((entry) => entry.kind === "fqdn")
+        .map((entry) => normalizeDomainName(entry.domain))
+        .filter(Boolean),
+    [domainEntries]
+  );
+
+  const domainUsageByName = useMemo(() => {
+    const usage = new Map<string, number>();
+    servers.forEach((server) => {
+      const value = normalizeDomainName(server.primaryDomain);
+      if (!value) return;
+      usage.set(value, (usage.get(value) || 0) + 1);
+    });
+    return usage;
+  }, [servers]);
+
+  const filteredDomainEntries = useMemo(() => {
+    const query = normalizeDomainName(domainFilterQuery);
+    return domainEntries.filter((entry) => {
+      if (domainFilterKind !== "all" && entry.kind !== domainFilterKind) {
+        return false;
+      }
+      if (!query) return true;
+      const parent = normalizeDomainName(entry.parentFqdn || "");
+      return (
+        entry.domain.includes(query) ||
+        entry.kind.includes(query) ||
+        parent.includes(query)
+      );
+    });
+  }, [domainEntries, domainFilterKind, domainFilterQuery]);
+
+  const persistWorkspaceDomainSettings = useCallback(
+    async (options?: {
+      entries?: DomainEntry[];
+      primaryDomain?: string;
+    }) => {
+      const sourceEntries = Array.isArray(options?.entries)
+        ? options.entries
+        : domainEntries;
+      const sourcePrimaryDomain =
+        typeof options?.primaryDomain === "string"
+          ? options.primaryDomain
+          : primaryDomainDraft;
+      const nextEntries = parseDomainCatalogFromGroupVars({
+        [GROUP_VARS_DOMAIN_CATALOG_KEY]: buildDomainCatalogPayload(sourceEntries),
+        DOMAIN_PRIMARY: sourcePrimaryDomain || DEFAULT_PRIMARY_DOMAIN,
+      });
+      const nextDomain = normalizePrimaryDomainSelection(
+        sourcePrimaryDomain,
+        nextEntries
+      );
+      setPrimaryDomainModalSaving(true);
+      setPrimaryDomainModalError(null);
+      try {
+        if (workspaceId) {
+          const data = await readGroupVarsAll(workspaceId);
+          const nextData = {
+            ...data,
+            DOMAIN_PRIMARY: nextDomain,
+            [GROUP_VARS_DOMAIN_CATALOG_KEY]: buildDomainCatalogPayload(nextEntries),
+          };
+          await writeGroupVarsAll(workspaceId, nextData);
+        }
+        setDomainEntries(nextEntries);
+        setWorkspacePrimaryDomain(nextDomain);
+        setPrimaryDomainDraft(nextDomain);
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : `Failed to write ${GROUP_VARS_ALL_PATH}.`;
+        setPrimaryDomainModalError(message);
+      } finally {
+        setPrimaryDomainModalSaving(false);
+      }
+    },
+    [
+      workspaceId,
+      domainEntries,
+      primaryDomainDraft,
+      readGroupVarsAll,
+      writeGroupVarsAll,
+    ]
+  );
+
+  const openDomainPopup = useCallback(
+    (preferredType: DomainKind = "fqdn", request?: PrimaryDomainAddRequest) => {
+      const alias = String(request?.alias || "").trim();
+      const requestedDomain = normalizeDomainName(request?.value);
+      const requestedParentFqdn = normalizeDomainName(request?.parentFqdn);
+      const requestedSubLabel = normalizeDomainLabel(request?.subLabel);
+      const reason = request?.reason;
+      setDomainPopupOpen(true);
+      setDomainPopupError(null);
+      setDomainPopupFqdnCheckResult(null);
+      setDomainPopupTargetAlias(alias || null);
+      if (reason === "missing") {
+        setDomainPopupPrompt(
+          "Please select an existing domain or add a valid domain first."
+        );
+      } else if (reason === "unknown" && requestedDomain) {
+        setDomainPopupPrompt(
+          `"${requestedDomain}" is not in the list. Add it as a valid domain.`
+        );
+      } else {
+        setDomainPopupPrompt(null);
+      }
+      if (request?.kind === "subdomain" || preferredType === "subdomain") {
+        setDomainPopupType("subdomain");
+        setDomainPopupFqdnValue("");
+        setDomainPopupLocalValue(DEFAULT_PRIMARY_DOMAIN);
+        setDomainPopupSubLabel(requestedSubLabel);
+        if (requestedParentFqdn && fqdnDomainOptions.includes(requestedParentFqdn)) {
+          setDomainPopupParentFqdn(requestedParentFqdn);
+        } else if (fqdnDomainOptions.length > 0) {
+          setDomainPopupParentFqdn(fqdnDomainOptions[0]);
+        } else {
+          setDomainPopupParentFqdn("");
+        }
+        return;
+      }
+      if (requestedDomain) {
+        if (requestedDomain.includes(".")) {
+          setDomainPopupType("fqdn");
+          setDomainPopupFqdnValue(requestedDomain);
+          setDomainPopupSubLabel("");
+          setDomainPopupParentFqdn("");
+          setDomainPopupLocalValue(DEFAULT_PRIMARY_DOMAIN);
+        } else {
+          setDomainPopupType("local");
+          setDomainPopupLocalValue(requestedDomain);
+          setDomainPopupFqdnValue("");
+          setDomainPopupSubLabel("");
+          setDomainPopupParentFqdn("");
+        }
+        return;
+      }
+      setDomainPopupType(preferredType);
+      setDomainPopupFqdnValue("");
+      if (preferredType === "local") {
+        setDomainPopupLocalValue(DEFAULT_PRIMARY_DOMAIN);
+      } else {
+        setDomainPopupLocalValue(DEFAULT_PRIMARY_DOMAIN);
+      }
+      setDomainPopupParentFqdn("");
+      setDomainPopupSubLabel("");
+    },
+    [fqdnDomainOptions]
+  );
+
+  const closeDomainPopup = useCallback(() => {
+    setDomainPopupOpen(false);
+    setDomainPopupError(null);
+    setDomainPopupFqdnValue("");
+    setDomainPopupFqdnCheckBusy(false);
+    setDomainPopupFqdnCheckResult(null);
+    setDomainPopupSubLabel("");
+    setDomainPopupParentFqdn("");
+    setDomainPopupLocalValue(DEFAULT_PRIMARY_DOMAIN);
+    setDomainPopupType("fqdn");
+    setDomainPopupPrompt(null);
+    setDomainPopupTargetAlias(null);
+  }, []);
+
+  const checkDomainPopupFqdn = useCallback(async () => {
+    const domain = normalizeDomainName(domainPopupFqdnValue);
+    if (!isLikelyFqdn(domain)) {
+      setDomainPopupError("Enter a valid FQDN (for example: shop.example.org).");
+      setDomainPopupFqdnCheckResult(null);
       return;
     }
-    setPrimaryDomainCheckBusy(true);
-    setPrimaryDomainModalError(null);
-    setPrimaryDomainCheckResult(null);
+    setDomainPopupFqdnCheckBusy(true);
+    setDomainPopupError(null);
+    setDomainPopupFqdnCheckResult(null);
     try {
       const res = await fetch(
         `${baseUrl}/api/providers/domain-availability?domain=${encodeURIComponent(
@@ -411,13 +834,12 @@ export default function DeploymentWorkspace({
         throw new Error(message);
       }
       const data = (await res.json()) as {
-        domain?: string;
         available?: boolean;
         note?: string;
       };
       const available = Boolean(data?.available);
       const note = String(data?.note || "").trim();
-      setPrimaryDomainCheckResult({
+      setDomainPopupFqdnCheckResult({
         available,
         note:
           note ||
@@ -426,69 +848,212 @@ export default function DeploymentWorkspace({
             : "Domain is likely already registered."),
       });
     } catch (err: any) {
-      setPrimaryDomainModalError(
+      setDomainPopupError(
         err?.message ?? "Domain availability check failed."
       );
-      setPrimaryDomainCheckResult(null);
+      setDomainPopupFqdnCheckResult(null);
     } finally {
-      setPrimaryDomainCheckBusy(false);
+      setDomainPopupFqdnCheckBusy(false);
     }
-  }, [baseUrl, primaryDomainDraft]);
+  }, [baseUrl, domainPopupFqdnValue]);
 
-  const saveWorkspacePrimaryDomain = useCallback(async () => {
-    if (!workspaceId) return;
-    const nextDomain = String(primaryDomainDraft || "").trim().toLowerCase();
-    if (!nextDomain) {
-      setPrimaryDomainModalError("Please enter a domain.");
+  const addDomainFromPopup = useCallback(() => {
+    let nextDomain = "";
+    let nextParentFqdn: string | null = null;
+
+    if (domainPopupType === "local") {
+      const localValue = normalizeDomainName(domainPopupLocalValue);
+      if (!localValue || !isValidDomainToken(localValue)) {
+        setDomainPopupError(
+          "Enter a valid local domain (letters, numbers, dot, underscore, hyphen)."
+        );
+        return;
+      }
+      nextDomain = localValue;
+    } else if (domainPopupType === "fqdn") {
+      nextDomain = normalizeDomainName(domainPopupFqdnValue);
+      if (!isLikelyFqdn(nextDomain)) {
+        setDomainPopupError("Enter a valid FQDN (for example: shop.example.org).");
+        return;
+      }
+    } else {
+      const subLabel = normalizeDomainLabel(domainPopupSubLabel);
+      const parentFqdn = normalizeDomainName(domainPopupParentFqdn);
+      if (!subLabel || !parentFqdn) {
+        setDomainPopupError("Provide subdomain label and parent FQDN.");
+        return;
+      }
+      if (!fqdnDomainOptions.includes(parentFqdn)) {
+        setDomainPopupError("Subdomains must belong to an existing FQDN.");
+        return;
+      }
+      nextDomain = `${subLabel}.${parentFqdn}`;
+      nextParentFqdn = parentFqdn;
+    }
+
+    const applyDomainToTargetAlias = (domain: string) => {
+      const targetAlias = String(domainPopupTargetAlias || "").trim();
+      if (!targetAlias) return false;
+      setServers((prev) =>
+        normalizePersistedDeviceMeta(
+          prev.map((server) =>
+            server.alias === targetAlias
+              ? { ...server, primaryDomain: domain }
+              : server
+          )
+        )
+      );
+      if (workspaceId) {
+        void fetch(`${baseUrl}/api/providers/primary-domain`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspace_id: workspaceId,
+            alias: targetAlias,
+            primary_domain: domain,
+          }),
+        });
+      }
+      return true;
+    };
+
+    const duplicate = domainEntries.some(
+      (entry) => normalizeDomainName(entry.domain) === nextDomain
+    );
+    if (duplicate) {
+      if (applyDomainToTargetAlias(nextDomain)) {
+        closeDomainPopup();
+        return;
+      }
+      setDomainPopupError("Domain already exists.");
       return;
     }
-    setPrimaryDomainModalSaving(true);
-    setPrimaryDomainModalError(null);
-    try {
-      const data = await readGroupVarsAll(workspaceId);
-      const nextData = { ...data, DOMAIN_PRIMARY: nextDomain };
-      await writeGroupVarsAll(workspaceId, nextData);
-      setWorkspacePrimaryDomain(nextDomain);
-    } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : `Failed to write ${GROUP_VARS_ALL_PATH}.`;
-      setPrimaryDomainModalError(message);
-    } finally {
-      setPrimaryDomainModalSaving(false);
-    }
-  }, [workspaceId, primaryDomainDraft, readGroupVarsAll, writeGroupVarsAll]);
+
+    const nextEntries = parseDomainCatalogFromGroupVars({
+      [GROUP_VARS_DOMAIN_CATALOG_KEY]: [
+        ...buildDomainCatalogPayload(domainEntries),
+        {
+          type: domainPopupType,
+          domain: nextDomain,
+          ...(nextParentFqdn ? { parent_fqdn: nextParentFqdn } : {}),
+        },
+      ],
+      DOMAIN_PRIMARY: primaryDomainDraft || workspacePrimaryDomain || DEFAULT_PRIMARY_DOMAIN,
+    });
+    setDomainPopupError(null);
+    const nextPrimaryDomain = normalizeDomainName(primaryDomainDraft)
+      ? primaryDomainDraft
+      : nextDomain;
+    void persistWorkspaceDomainSettings({
+      entries: nextEntries,
+      primaryDomain: nextPrimaryDomain,
+    });
+
+    applyDomainToTargetAlias(nextDomain);
+    closeDomainPopup();
+  }, [
+    baseUrl,
+    closeDomainPopup,
+    domainEntries,
+    domainPopupFqdnValue,
+    domainPopupLocalValue,
+    domainPopupParentFqdn,
+    domainPopupSubLabel,
+    domainPopupType,
+    domainPopupTargetAlias,
+    fqdnDomainOptions,
+    primaryDomainDraft,
+    persistWorkspaceDomainSettings,
+    workspaceId,
+    workspacePrimaryDomain,
+  ]);
+
+  const removeDomainEntry = useCallback(
+    (domain: string) => {
+      const targetDomain = normalizeDomainName(domain);
+      if (!targetDomain || targetDomain === DEFAULT_PRIMARY_DOMAIN) {
+        setPrimaryDomainModalError("localhost cannot be removed.");
+        return;
+      }
+      const hasLinkedSubdomains = domainEntries.some(
+        (entry) =>
+          entry.kind === "subdomain" &&
+          normalizeDomainName(entry.parentFqdn || "") === targetDomain
+      );
+      if (hasLinkedSubdomains) {
+        setPrimaryDomainModalError(
+          "Remove subdomains first. Each subdomain must belong to a FQDN."
+        );
+        return;
+      }
+      setPrimaryDomainModalError(null);
+      const nextEntries = domainEntries.filter(
+        (entry) => normalizeDomainName(entry.domain) !== targetDomain
+      );
+      const nextPrimaryDomain =
+        normalizeDomainName(primaryDomainDraft) === targetDomain
+          ? DEFAULT_PRIMARY_DOMAIN
+          : primaryDomainDraft;
+      void persistWorkspaceDomainSettings({
+        entries: nextEntries,
+        primaryDomain: nextPrimaryDomain,
+      });
+    },
+    [domainEntries, primaryDomainDraft, persistWorkspaceDomainSettings]
+  );
 
   useEffect(() => {
     if (!workspaceId) {
-      setWorkspacePrimaryDomain("");
+      setDomainEntries([
+        {
+          id: buildDomainEntryId("local", DEFAULT_PRIMARY_DOMAIN, null),
+          kind: "local",
+          domain: DEFAULT_PRIMARY_DOMAIN,
+          parentFqdn: null,
+        },
+      ]);
+      setWorkspacePrimaryDomain(DEFAULT_PRIMARY_DOMAIN);
       return;
     }
     let cancelled = false;
-    const loadPrimaryDomain = async () => {
+    const loadDomainSettings = async () => {
       try {
-        const domain = await readWorkspacePrimaryDomain(workspaceId);
+        const data = await readGroupVarsAll(workspaceId);
+        const entries = parseDomainCatalogFromGroupVars(data);
+        const domain = normalizePrimaryDomainSelection(
+          readPrimaryDomainFromGroupVars(data),
+          entries
+        );
         if (!cancelled) {
+          setDomainEntries(entries);
           setWorkspacePrimaryDomain(domain);
         }
       } catch {
         if (!cancelled) {
-          setWorkspacePrimaryDomain("");
+          setDomainEntries([
+            {
+              id: buildDomainEntryId("local", DEFAULT_PRIMARY_DOMAIN, null),
+              kind: "local",
+              domain: DEFAULT_PRIMARY_DOMAIN,
+              parentFqdn: null,
+            },
+          ]);
+          setWorkspacePrimaryDomain(DEFAULT_PRIMARY_DOMAIN);
         }
       }
     };
-    void loadPrimaryDomain();
+    void loadDomainSettings();
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, readWorkspacePrimaryDomain]);
+  }, [workspaceId, readGroupVarsAll]);
 
   useEffect(() => {
-    setPrimaryDomainDraft(workspacePrimaryDomain || "");
+    setPrimaryDomainDraft(
+      normalizePrimaryDomainSelection(workspacePrimaryDomain, domainEntries)
+    );
     setPrimaryDomainModalError(null);
-    setPrimaryDomainCheckResult(null);
-  }, [workspaceId, workspacePrimaryDomain]);
+  }, [workspaceId, workspacePrimaryDomain, domainEntries]);
 
   useEffect(() => {
     if (!activeAlias && servers.length > 0) {
@@ -521,6 +1086,59 @@ export default function DeploymentWorkspace({
     });
   }, [activeAlias]);
 
+  const persistPrimaryDomainForAlias = useCallback(
+    async (alias: string, primaryDomain: string) => {
+      const targetAlias = String(alias || "").trim();
+      if (!workspaceId || !targetAlias) return;
+      try {
+        await fetch(`${baseUrl}/api/providers/primary-domain`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspace_id: workspaceId,
+            alias: targetAlias,
+            primary_domain: normalizePrimaryDomainSelection(primaryDomain, domainEntries),
+          }),
+        });
+      } catch {
+        // Keep UI responsive if background sync fails.
+      }
+    },
+    [baseUrl, workspaceId, domainEntries]
+  );
+
+  useEffect(() => {
+    const fallbackPrimary = normalizePrimaryDomainSelection(
+      workspacePrimaryDomain,
+      domainEntries
+    );
+    const corrections: Array<{ alias: string; primaryDomain: string }> = [];
+    setServers((prev) => {
+      let changed = false;
+      const next = prev.map((server) => {
+        const currentPrimary = normalizeDomainName(server.primaryDomain);
+        if (currentPrimary) {
+          return server;
+        }
+        const normalizedPrimary = fallbackPrimary;
+        changed = true;
+        corrections.push({ alias: server.alias, primaryDomain: normalizedPrimary });
+        return { ...server, primaryDomain: normalizedPrimary };
+      });
+      return changed ? normalizePersistedDeviceMeta(next) : prev;
+    });
+    if (corrections.length > 0 && workspaceId) {
+      corrections.forEach(({ alias, primaryDomain }) => {
+        void persistPrimaryDomainForAlias(alias, primaryDomain);
+      });
+    }
+  }, [
+    domainEntries,
+    workspaceId,
+    workspacePrimaryDomain,
+    persistPrimaryDomainForAlias,
+  ]);
+
   const createServer = useCallback(
     (alias: string, existingServers: ServerState[] = []): ServerState => {
       const usedColors = new Set<string>();
@@ -534,7 +1152,7 @@ export default function DeploymentWorkspace({
       return {
         alias,
         description: "",
-        primaryDomain: "",
+        primaryDomain: DEFAULT_PRIMARY_DOMAIN,
         requirementServerType: "vps",
         requirementStorageGb: "200",
         requirementLocation: "Germany",
@@ -931,11 +1549,22 @@ export default function DeploymentWorkspace({
     setExpertConfirmOpen(false);
     setDetailSearchOpen(false);
     setDetailSearchTargetAlias(null);
-    setPrimaryDomainDraft("");
+    setPrimaryDomainDraft(DEFAULT_PRIMARY_DOMAIN);
     setPrimaryDomainModalError(null);
     setPrimaryDomainModalSaving(false);
-    setPrimaryDomainCheckBusy(false);
-    setPrimaryDomainCheckResult(null);
+    setDomainFilterQuery("");
+    setDomainFilterKind("all");
+    setDomainPopupOpen(false);
+    setDomainPopupError(null);
+    setDomainPopupType("fqdn");
+    setDomainPopupFqdnValue("");
+    setDomainPopupFqdnCheckBusy(false);
+    setDomainPopupFqdnCheckResult(null);
+    setDomainPopupLocalValue(DEFAULT_PRIMARY_DOMAIN);
+    setDomainPopupSubLabel("");
+    setDomainPopupParentFqdn("");
+    setDomainPopupPrompt(null);
+    setDomainPopupTargetAlias(null);
     setConnectRequestKey(0);
     setCancelRequestKey(0);
   }, [workspaceId]);
@@ -1006,6 +1635,17 @@ export default function DeploymentWorkspace({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [expertConfirmOpen]);
+
+  useEffect(() => {
+    if (!domainPopupOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeDomainPopup();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [domainPopupOpen, closeDomainPopup]);
 
   const applySelectedRolesByAlias = useCallback(
     (rolesByAlias: Record<string, string[]>) => {
@@ -1631,7 +2271,7 @@ export default function DeploymentWorkspace({
         const patch: ServerState = {
           alias,
           description: "",
-          primaryDomain: "",
+          primaryDomain: DEFAULT_PRIMARY_DOMAIN,
           requirementServerType,
           requirementStorageGb,
           requirementLocation,
@@ -1941,88 +2581,150 @@ export default function DeploymentWorkspace({
       title: "Domain",
       content: (
         <div className={styles.domainPanel}>
-          <div className={styles.domainCard}>
-            <div className={styles.primaryDomainTitleRow}>
-              <i
-                className={`fa-solid fa-globe ${styles.primaryDomainIcon}`}
-                aria-hidden="true"
-              />
-              <h3 className={styles.primaryDomainTitle}>Primary Domain</h3>
-            </div>
-            <p className={styles.primaryDomainText}>
-              This is the main domain for your deployment (for example for service
-              hostnames and DNS setup). It is stored in{" "}
-              <code>group_vars/all.yml</code> as <code>DOMAIN_PRIMARY</code> and
-              reused across devices.
-            </p>
-            <p className={styles.domainCurrent}>
-              Current value:{" "}
-              <code>{String(workspacePrimaryDomain || "").trim() || "not set"}</code>
-            </p>
+          <div className={styles.domainTableFilters}>
             <input
-              value={primaryDomainDraft}
-              onChange={(event) => {
-                setPrimaryDomainDraft(event.target.value);
-                if (primaryDomainModalError) setPrimaryDomainModalError(null);
-                if (primaryDomainCheckResult) setPrimaryDomainCheckResult(null);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  if (!primaryDomainModalSaving && !primaryDomainCheckBusy) {
-                    void saveWorkspacePrimaryDomain();
-                  }
-                }
-              }}
-              placeholder="example.org"
-              className={`form-control ${styles.primaryDomainInput}`}
+              value={domainFilterQuery}
+              onChange={(event) => setDomainFilterQuery(event.target.value)}
+              placeholder="Filter domains"
+              className={`form-control ${styles.domainFilterInput}`}
             />
-            {primaryDomainModalError ? (
-              <p className={styles.primaryDomainError}>{primaryDomainModalError}</p>
-            ) : null}
-            <div className={styles.primaryDomainCheckRow}>
-              <button
-                type="button"
-                onClick={() => void checkPrimaryDomainAvailability()}
-                disabled={primaryDomainModalSaving || primaryDomainCheckBusy}
-                className={`${styles.modeActionButton} ${styles.primaryDomainCheckButton}`}
-              >
-                {primaryDomainCheckBusy ? "Checking..." : "Check availability"}
-              </button>
-              {primaryDomainCheckResult ? (
-                <p
-                  className={`${styles.primaryDomainCheckNote} ${
-                    primaryDomainCheckResult.available
-                      ? styles.primaryDomainCheckAvailable
-                      : styles.primaryDomainCheckTaken
-                  }`}
-                >
-                  {primaryDomainCheckResult.note}
-                </p>
-              ) : null}
-            </div>
-            <div className={styles.primaryDomainActions}>
-              <button
-                type="button"
-                onClick={() => {
-                  setPrimaryDomainDraft(workspacePrimaryDomain || "");
-                  setPrimaryDomainModalError(null);
-                  setPrimaryDomainCheckResult(null);
-                }}
-                disabled={primaryDomainModalSaving || primaryDomainCheckBusy}
-                className={styles.modeActionButton}
-              >
-                Reset
-              </button>
-              <button
-                type="button"
-                onClick={() => void saveWorkspacePrimaryDomain()}
-                disabled={primaryDomainModalSaving || primaryDomainCheckBusy}
-                className={`${styles.modeActionButton} ${styles.modeActionButtonSuccess}`}
-              >
-                {primaryDomainModalSaving ? "Saving..." : "Save"}
-              </button>
-            </div>
+            <select
+              value={domainFilterKind}
+              onChange={(event) =>
+                setDomainFilterKind(event.target.value as DomainFilterKind)
+              }
+              className={`form-select ${styles.domainFilterSelect}`}
+            >
+              <option value="all">All types</option>
+              <option value="local">Local</option>
+              <option value="fqdn">FQDN</option>
+              <option value="subdomain">Subdomain</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => openDomainPopup()}
+              className={styles.modeActionButton}
+            >
+              <i className="fa-solid fa-plus" aria-hidden="true" />
+              <span>Add new</span>
+            </button>
+          </div>
+
+          {primaryDomainModalError ? (
+            <p className={styles.primaryDomainError}>{primaryDomainModalError}</p>
+          ) : null}
+
+          <div className={styles.domainTableWrap}>
+            <table className={styles.domainTable}>
+              <thead>
+                <tr>
+                  <th>Default</th>
+                  <th>Domain</th>
+                  <th>Type</th>
+                  <th>Parent FQDN</th>
+                  <th>Devices</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredDomainEntries.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className={styles.domainTableEmpty}>
+                      No domains match the current filter.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredDomainEntries.map((entry) => {
+                    const domainKey = normalizeDomainName(entry.domain);
+                    const inUse = (domainUsageByName.get(domainKey) || 0) > 0;
+                    const hasChildren = domainEntries.some(
+                      (item) =>
+                        item.kind === "subdomain" &&
+                        normalizeDomainName(item.parentFqdn || "") === domainKey
+                    );
+                    const removeBlocked =
+                      domainKey === DEFAULT_PRIMARY_DOMAIN || hasChildren || inUse;
+                    const removeTitle =
+                      domainKey === DEFAULT_PRIMARY_DOMAIN
+                        ? "localhost is required."
+                        : hasChildren
+                        ? "Remove subdomains first."
+                        : inUse
+                        ? "Reassign devices before removing this domain."
+                        : "Remove domain";
+                    const addSubdomainParent =
+                      entry.kind === "fqdn"
+                        ? normalizeDomainName(entry.domain)
+                        : entry.kind === "subdomain"
+                        ? normalizeDomainName(entry.parentFqdn || "")
+                        : "";
+                    const addSubdomainBlocked = !addSubdomainParent;
+                    const addSubdomainTitle = addSubdomainBlocked
+                      ? "Subdomains require a FQDN parent."
+                      : `Add subdomain under ${addSubdomainParent}`;
+                    return (
+                      <tr key={entry.id}>
+                        <td>
+                          <input
+                            type="radio"
+                            name="workspace-primary-domain-radio"
+                            checked={
+                              normalizeDomainName(primaryDomainDraft) === domainKey
+                            }
+                            onChange={() => {
+                              setPrimaryDomainDraft(entry.domain);
+                              setPrimaryDomainModalError(null);
+                              void persistWorkspaceDomainSettings({
+                                entries: domainEntries,
+                                primaryDomain: entry.domain,
+                              });
+                            }}
+                            aria-label={`Set ${entry.domain} as workspace primary domain`}
+                          />
+                        </td>
+                        <td>
+                          <code>{entry.domain}</code>
+                        </td>
+                        <td>{entry.kind}</td>
+                        <td>
+                          {entry.parentFqdn ? <code>{entry.parentFqdn}</code> : "—"}
+                        </td>
+                        <td>{domainUsageByName.get(domainKey) || 0}</td>
+                        <td>
+                          <div className={styles.domainActionRow}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openDomainPopup("subdomain", {
+                                  kind: "subdomain",
+                                  parentFqdn: addSubdomainParent,
+                                })
+                              }
+                              disabled={addSubdomainBlocked}
+                              title={addSubdomainTitle}
+                              className={styles.domainActionButton}
+                            >
+                              <i className="fa-solid fa-sitemap" aria-hidden="true" />
+                              <span>Add subdomain</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeDomainEntry(entry.domain)}
+                              disabled={removeBlocked}
+                              title={removeTitle}
+                              className={styles.domainRemoveButton}
+                            >
+                              <i className="fa-solid fa-trash" aria-hidden="true" />
+                              <span>Remove</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       ),
@@ -2048,6 +2750,10 @@ export default function DeploymentWorkspace({
             onOpenCredentialsAliasHandled={() => setOpenCredentialsAlias(null)}
             deviceMode={deviceMode}
             onDeviceModeChange={handleModeChange}
+            primaryDomainOptions={primaryDomainOptions}
+            onRequestAddPrimaryDomain={(request) =>
+              openDomainPopup("fqdn", request)
+            }
             onOpenDetailSearch={(alias) => {
               const targetAlias = String(alias || "").trim();
               setDetailSearchTargetAlias(targetAlias || null);
@@ -2713,6 +3419,176 @@ export default function DeploymentWorkspace({
               >
                 <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
                 <span>Enable</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {domainPopupOpen ? (
+        <div
+          className={styles.primaryDomainOverlay}
+          onClick={() => {
+            if (primaryDomainModalSaving) return;
+            closeDomainPopup();
+          }}
+        >
+          <div
+            className={styles.primaryDomainCard}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.primaryDomainTitleRow}>
+              <i
+                className={`fa-solid fa-circle-plus ${styles.primaryDomainIcon}`}
+                aria-hidden="true"
+              />
+              <h3 className={styles.primaryDomainTitle}>Add Domain</h3>
+            </div>
+            <p className={styles.primaryDomainText}>
+              Choose how to add the domain entry. Subdomains must belong to an
+              existing FQDN.
+            </p>
+            {domainPopupPrompt ? (
+              <p className={styles.domainPopupPrompt}>{domainPopupPrompt}</p>
+            ) : null}
+
+            <div className={styles.domainPopupTypeRow}>
+              <button
+                type="button"
+                onClick={() => {
+                  setDomainPopupType("fqdn");
+                  setDomainPopupError(null);
+                  setDomainPopupFqdnCheckResult(null);
+                }}
+                className={`${styles.modeActionButton} ${
+                  domainPopupType === "fqdn" ? styles.modeActionButtonSuccess : ""
+                }`}
+              >
+                <i className="fa-solid fa-globe" aria-hidden="true" />
+                <span>FQDN</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDomainPopupType("local");
+                  setDomainPopupError(null);
+                  setDomainPopupFqdnCheckResult(null);
+                }}
+                className={`${styles.modeActionButton} ${
+                  domainPopupType === "local" ? styles.modeActionButtonSuccess : ""
+                }`}
+              >
+                <i className="fa-solid fa-house" aria-hidden="true" />
+                <span>Local</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDomainPopupType("subdomain");
+                  setDomainPopupError(null);
+                  setDomainPopupFqdnCheckResult(null);
+                }}
+                className={`${styles.modeActionButton} ${
+                  domainPopupType === "subdomain" ? styles.modeActionButtonSuccess : ""
+                }`}
+              >
+                <i className="fa-solid fa-sitemap" aria-hidden="true" />
+                <span>Subdomain</span>
+              </button>
+            </div>
+
+            {domainPopupType === "fqdn" ? (
+              <div className={styles.domainPopupFieldGrid}>
+                <input
+                  value={domainPopupFqdnValue}
+                  onChange={(event) => {
+                    setDomainPopupFqdnValue(event.target.value);
+                    if (domainPopupError) setDomainPopupError(null);
+                    if (domainPopupFqdnCheckResult) {
+                      setDomainPopupFqdnCheckResult(null);
+                    }
+                  }}
+                  placeholder="FQDN (example: shop.example.org)"
+                  className={`form-control ${styles.primaryDomainInput}`}
+                />
+                <div className={styles.primaryDomainCheckRow}>
+                  <button
+                    type="button"
+                    onClick={() => void checkDomainPopupFqdn()}
+                    disabled={domainPopupFqdnCheckBusy}
+                    className={`${styles.modeActionButton} ${styles.primaryDomainCheckButton}`}
+                  >
+                    <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />
+                    <span>
+                      {domainPopupFqdnCheckBusy ? "Checking..." : "Check availability"}
+                    </span>
+                  </button>
+                  {domainPopupFqdnCheckResult ? (
+                    <p
+                      className={`${styles.primaryDomainCheckNote} ${
+                        domainPopupFqdnCheckResult.available
+                          ? styles.primaryDomainCheckAvailable
+                          : styles.primaryDomainCheckTaken
+                      }`}
+                    >
+                      {domainPopupFqdnCheckResult.note}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {domainPopupType === "local" ? (
+              <input
+                value={domainPopupLocalValue}
+                onChange={(event) => setDomainPopupLocalValue(event.target.value)}
+                placeholder="localhost"
+                className={`form-control ${styles.primaryDomainInput}`}
+              />
+            ) : null}
+
+            {domainPopupType === "subdomain" ? (
+              <div className={styles.domainPopupFieldGrid}>
+                <input
+                  value={domainPopupSubLabel}
+                  onChange={(event) => setDomainPopupSubLabel(event.target.value)}
+                  placeholder="Subdomain label (example: api)"
+                  className={`form-control ${styles.primaryDomainInput}`}
+                />
+                <select
+                  value={domainPopupParentFqdn}
+                  onChange={(event) => setDomainPopupParentFqdn(event.target.value)}
+                  className={`form-select ${styles.primaryDomainInput}`}
+                >
+                  <option value="">Select parent FQDN</option>
+                  {fqdnDomainOptions.map((fqdn) => (
+                    <option key={fqdn} value={fqdn}>
+                      {fqdn}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
+            {domainPopupError ? (
+              <p className={styles.primaryDomainError}>{domainPopupError}</p>
+            ) : null}
+
+            <div className={styles.primaryDomainActions}>
+              <button
+                type="button"
+                onClick={closeDomainPopup}
+                className={styles.modeActionButton}
+              >
+                <i className="fa-solid fa-xmark" aria-hidden="true" />
+                <span>Cancel</span>
+              </button>
+              <button
+                type="button"
+                onClick={addDomainFromPopup}
+                className={`${styles.modeActionButton} ${styles.modeActionButtonSuccess}`}
+              >
+                <i className="fa-solid fa-plus" aria-hidden="true" />
+                <span>Add</span>
               </button>
             </div>
           </div>

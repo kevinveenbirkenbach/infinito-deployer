@@ -5,7 +5,7 @@ export function createInitialState() {
   return {
     alias: "device",
     description: "",
-    primaryDomain: "",
+    primaryDomain: "localhost",
     requirementServerType: "vps",
     requirementStorageGb: "200",
     requirementLocation: "Germany",

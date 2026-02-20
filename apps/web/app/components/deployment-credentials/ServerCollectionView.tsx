@@ -1,7 +1,7 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   CSSProperties,
   ChangeEvent as ReactChangeEvent,
@@ -54,6 +54,15 @@ type ServerCollectionViewProps = {
   onRequestPurge: (aliases: string[]) => void;
   requestedDetailAlias?: string | null;
   onRequestedDetailAliasHandled?: () => void;
+  primaryDomainOptions?: string[];
+  onRequestAddPrimaryDomain?: (request?: {
+    alias?: string;
+    value?: string;
+    kind?: "local" | "fqdn" | "subdomain";
+    parentFqdn?: string;
+    subLabel?: string;
+    reason?: "missing" | "unknown";
+  }) => void;
 };
 
 type ValidationState = {
@@ -61,6 +70,7 @@ type ValidationState = {
   hostMissing: boolean;
   userMissing: boolean;
   portError: string | null;
+  primaryDomainError: string | null;
   colorError: string | null;
   logoMissing: boolean;
   credentialsMissing: boolean;
@@ -88,6 +98,13 @@ type StatusPopover = {
   tooltip: string;
 };
 
+type PrimaryDomainMenu = {
+  alias: string;
+  top: number;
+  left: number;
+  width: number;
+};
+
 const ALIAS_PATTERN = /^[a-z0-9_-]+$/;
 
 export default function ServerCollectionView({
@@ -108,6 +125,8 @@ export default function ServerCollectionView({
   onRequestPurge,
   requestedDetailAlias = null,
   onRequestedDetailAliasHandled,
+  primaryDomainOptions = [],
+  onRequestAddPrimaryDomain,
 }: ServerCollectionViewProps) {
   const viewConfig = SERVER_VIEW_CONFIG[viewMode];
   const isCustomerMode = deviceMode === "customer";
@@ -124,12 +143,38 @@ export default function ServerCollectionView({
     null
   );
   const [statusPopover, setStatusPopover] = useState<StatusPopover | null>(null);
+  const [primaryDomainMenu, setPrimaryDomainMenu] = useState<PrimaryDomainMenu | null>(
+    null
+  );
   const [detailActionBusy, setDetailActionBusy] = useState<"keygen" | null>(null);
   const [detailActionError, setDetailActionError] = useState<string | null>(null);
   const [detailActionStatus, setDetailActionStatus] = useState<string | null>(null);
   const [keyInputModeByAlias, setKeyInputModeByAlias] = useState<
     Record<string, "import" | "generate">
   >({});
+
+  const normalizedPrimaryDomainOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    (Array.isArray(primaryDomainOptions) ? primaryDomainOptions : []).forEach((entry) => {
+      const value = String(entry || "").trim().toLowerCase();
+      if (!value || seen.has(value)) return;
+      seen.add(value);
+      out.push(value);
+    });
+    if (!seen.has("localhost")) {
+      out.unshift("localhost");
+    }
+    return out;
+  }, [primaryDomainOptions]);
+
+  const primaryDomainByLower = useMemo(
+    () =>
+      new Map(
+        normalizedPrimaryDomainOptions.map((value) => [value.toLowerCase(), value])
+      ),
+    [normalizedPrimaryDomainOptions]
+  );
 
   useEffect(() => {
     setAliasDrafts((prev) => {
@@ -175,12 +220,16 @@ export default function ServerCollectionView({
     if (statusPopover && !aliases.has(statusPopover.alias)) {
       setStatusPopover(null);
     }
+    if (primaryDomainMenu && !aliases.has(primaryDomainMenu.alias)) {
+      setPrimaryDomainMenu(null);
+    }
   }, [
     paginatedServers,
     openEmojiAlias,
     detailAlias,
     actionMenu,
     statusPopover,
+    primaryDomainMenu,
   ]);
 
   useEffect(() => {
@@ -239,6 +288,16 @@ export default function ServerCollectionView({
       if (!inBulkPortal && !inBulkTrigger) {
         setBulkMenu(null);
       }
+
+      const inPrimaryDomainMenu = Boolean(
+        (target as HTMLElement).closest(`.${styles.primaryDomainDropdown}`)
+      );
+      const inPrimaryDomainTrigger = Boolean(
+        (target as HTMLElement).closest(`.${styles.primaryDomainDropdownTrigger}`)
+      );
+      if (!inPrimaryDomainMenu && !inPrimaryDomainTrigger) {
+        setPrimaryDomainMenu(null);
+      }
     };
 
     const handleEscape = (event: KeyboardEvent) => {
@@ -247,6 +306,7 @@ export default function ServerCollectionView({
       setActionMenu(null);
       setBulkMenu(null);
       setStatusPopover(null);
+      setPrimaryDomainMenu(null);
       setDetailAlias(null);
     };
 
@@ -254,6 +314,7 @@ export default function ServerCollectionView({
       setActionMenu(null);
       setBulkMenu(null);
       setStatusPopover(null);
+      setPrimaryDomainMenu(null);
     };
 
     document.addEventListener("mousedown", handleOutsideClick);
@@ -318,6 +379,24 @@ export default function ServerCollectionView({
     if (!/^\d+$/.test(value)) return "Port must be an integer.";
     const parsed = Number(value);
     if (parsed < 1 || parsed > 65535) return "Port must be between 1 and 65535.";
+    return null;
+  };
+
+  const resolvePrimaryDomainSelection = useCallback(
+    (value: string) => {
+      const normalized = String(value || "").trim().toLowerCase();
+      if (!normalized) return null;
+      return primaryDomainByLower.get(normalized) || null;
+    },
+    [primaryDomainByLower]
+  );
+
+  const getPrimaryDomainError = (primaryDomainValue: string) => {
+    const normalized = String(primaryDomainValue || "").trim().toLowerCase();
+    if (!normalized) return "Primary domain is required.";
+    if (!primaryDomainByLower.has(normalized)) {
+      return "Choose a domain from the list or add a new one.";
+    }
     return null;
   };
 
@@ -387,6 +466,7 @@ export default function ServerCollectionView({
       hostMissing: !String(server.host || "").trim(),
       userMissing: !String(server.user || "").trim(),
       portError: getPortError(server.port),
+      primaryDomainError: getPrimaryDomainError(server.primaryDomain),
       colorError: getColorError(server.color),
       logoMissing: Boolean(getLogoError(server.logoEmoji)),
       credentialsMissing: !hasCredentials(server),
@@ -400,6 +480,7 @@ export default function ServerCollectionView({
         validation.hostMissing ||
         validation.userMissing ||
         validation.portError ||
+        validation.primaryDomainError ||
         validation.colorError ||
         validation.logoMissing ||
         validation.passwordConfirmError
@@ -423,7 +504,8 @@ export default function ServerCollectionView({
       return {
         tone: "orange",
         label: "Invalid configuration",
-        tooltip: "Fix alias, host, user, port, color and logo fields first.",
+        tooltip:
+          "Fix alias, host, user, port, primary domain, color and logo fields first.",
         missingCredentials: false,
       };
     }
@@ -712,6 +794,59 @@ export default function ServerCollectionView({
     });
   };
 
+  const commitPrimaryDomain = (server: ServerState, value?: string) => {
+    const typed = String(value ?? server.primaryDomain ?? "").trim().toLowerCase();
+    const resolved = resolvePrimaryDomainSelection(typed);
+    if (!resolved) {
+      onRequestAddPrimaryDomain?.({
+        alias: server.alias,
+        value: typed,
+        kind: typed && !typed.includes(".") ? "local" : "fqdn",
+        reason: typed ? "unknown" : "missing",
+      });
+      return;
+    }
+    if (resolved !== String(server.primaryDomain || "")) {
+      onPatchServer(server.alias, { primaryDomain: resolved });
+    }
+    emitCredentialBlur({ ...server, primaryDomain: resolved }, "primaryDomain");
+  };
+
+  const openPrimaryDomainMenuFor = (alias: string, target: HTMLElement) => {
+    const rect = target.getBoundingClientRect();
+    setPrimaryDomainMenu({
+      alias,
+      top: rect.bottom + 6,
+      left: rect.left,
+      width: Math.max(220, rect.width),
+    });
+  };
+
+  const activePrimaryDomainServer = useMemo(
+    () =>
+      primaryDomainMenu
+        ? paginatedServers.find((server) => server.alias === primaryDomainMenu.alias) ||
+          null
+        : null,
+    [paginatedServers, primaryDomainMenu]
+  );
+
+  const activePrimaryDomainOptions = useMemo(() => {
+    const query = String(activePrimaryDomainServer?.primaryDomain || "")
+      .trim()
+      .toLowerCase();
+    if (!query) return normalizedPrimaryDomainOptions;
+    return normalizedPrimaryDomainOptions.filter((domain) =>
+      domain.toLowerCase().includes(query)
+    );
+  }, [activePrimaryDomainServer, normalizedPrimaryDomainOptions]);
+
+  const selectPrimaryDomainFromMenu = (server: ServerState, domain: string) => {
+    onPatchServer(server.alias, { primaryDomain: domain });
+    emitCredentialBlur({ ...server, primaryDomain: domain }, "primaryDomain");
+    setPrimaryDomainMenu(null);
+  };
+
   const onPortFieldBlur = (server: ServerState) => {
     const normalizedPort = normalizePortValue(server.port) || "22";
     ensurePortDefault(server.alias, server.port);
@@ -873,6 +1008,68 @@ export default function ServerCollectionView({
         )
       : null;
 
+  const primaryDomainMenuOverlay =
+    primaryDomainMenu &&
+    activePrimaryDomainServer &&
+    typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className={styles.primaryDomainDropdown}
+            style={{
+              top: primaryDomainMenu.top,
+              left: primaryDomainMenu.left,
+              width: primaryDomainMenu.width,
+            }}
+            role="listbox"
+          >
+            <div className={styles.primaryDomainDropdownList}>
+              {activePrimaryDomainOptions.length === 0 ? (
+                <span className={styles.primaryDomainDropdownEmpty}>
+                  No matching domains.
+                </span>
+              ) : (
+                activePrimaryDomainOptions.map((domain) => (
+                  <button
+                    key={domain}
+                    type="button"
+                    className={styles.primaryDomainDropdownItem}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() =>
+                      selectPrimaryDomainFromMenu(activePrimaryDomainServer, domain)
+                    }
+                  >
+                    {domain}
+                  </button>
+                ))
+              )}
+            </div>
+            <button
+              type="button"
+              className={styles.primaryDomainDropdownAdd}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                setPrimaryDomainMenu(null);
+                const typed = String(
+                  activePrimaryDomainServer.primaryDomain || ""
+                )
+                  .trim()
+                  .toLowerCase();
+                onRequestAddPrimaryDomain?.({
+                  alias: activePrimaryDomainServer.alias,
+                  value: typed,
+                  kind: typed && !typed.includes(".") ? "local" : "fqdn",
+                  reason: typed ? "unknown" : "missing",
+                });
+              }}
+            >
+              <i className="fa-solid fa-plus" aria-hidden="true" />
+              <span>Add new</span>
+            </button>
+          </div>,
+          document.body
+        )
+      : null;
+
   const detailValidation = detailServer
     ? getValidationState(detailServer, { enforcePasswordConfirm: true })
     : null;
@@ -1008,17 +1205,34 @@ export default function ServerCollectionView({
                   <label className={`text-body-tertiary ${styles.fieldLabel}`}>
                     Primary domain
                   </label>
-                  <input
-                    value={detailServer.primaryDomain || ""}
-                    onChange={(event) =>
-                      onPatchServer(detailServer.alias, {
-                        primaryDomain: event.target.value,
-                      })
-                    }
-                    onBlur={() => emitCredentialBlur(detailServer, "primaryDomain")}
-                    placeholder="example.org"
-                    className={styles.fieldInput}
-                  />
+                  <div className={styles.primaryDomainInputRow}>
+                    <input
+                      value={detailServer.primaryDomain || ""}
+                      onChange={(event) =>
+                        onPatchServer(detailServer.alias, {
+                          primaryDomain: event.target.value,
+                        })
+                      }
+                      onFocus={(event) =>
+                        openPrimaryDomainMenuFor(detailServer.alias, event.currentTarget)
+                      }
+                      onClick={(event) =>
+                        openPrimaryDomainMenuFor(detailServer.alias, event.currentTarget)
+                      }
+                      onBlur={(event) =>
+                        commitPrimaryDomain(detailServer, event.currentTarget.value)
+                      }
+                      placeholder="localhost"
+                      className={`${styles.fieldInput} ${
+                        styles.primaryDomainDropdownTrigger
+                      } ${
+                        detailValidation?.primaryDomainError ? styles.inputError : ""
+                      }`}
+                    />
+                  </div>
+                  {detailValidation?.primaryDomainError ? (
+                    <p className="text-danger">{detailValidation.primaryDomainError}</p>
+                  ) : null}
                 </div>
 
                 <div className={styles.fieldWrap}>
@@ -1695,15 +1909,38 @@ export default function ServerCollectionView({
                         />
                       </td>
                       <td>
-                        <input
-                          value={server.primaryDomain || ""}
-                          onChange={(event) =>
-                            onPatchServer(server.alias, { primaryDomain: event.target.value })
-                          }
-                          onBlur={() => emitCredentialBlur(server, "primaryDomain")}
-                          placeholder="example.org"
-                          className={styles.inputSmall}
-                        />
+                        <div className={styles.fieldColumn}>
+                          <div className={styles.primaryDomainInputRow}>
+                            <input
+                              value={server.primaryDomain || ""}
+                              onChange={(event) =>
+                                onPatchServer(server.alias, {
+                                  primaryDomain: event.target.value,
+                                })
+                              }
+                              onFocus={(event) =>
+                                openPrimaryDomainMenuFor(server.alias, event.currentTarget)
+                              }
+                              onClick={(event) =>
+                                openPrimaryDomainMenuFor(server.alias, event.currentTarget)
+                              }
+                              onBlur={(event) =>
+                                commitPrimaryDomain(server, event.currentTarget.value)
+                              }
+                              placeholder="localhost"
+                              className={`${styles.inputSmall} ${
+                                styles.primaryDomainDropdownTrigger
+                              } ${
+                                validation.primaryDomainError ? styles.inputError : ""
+                              }`}
+                            />
+                          </div>
+                          {validation.primaryDomainError ? (
+                            <span className={`text-danger ${styles.aliasErrorText}`}>
+                              {validation.primaryDomainError}
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                       <td>{renderStatusCell(server, indicator)}</td>
                       <td>{renderActionCell(server)}</td>
@@ -1717,6 +1954,7 @@ export default function ServerCollectionView({
         {actionMenuOverlay}
         {bulkMenuOverlay}
         {statusPopoverOverlay}
+        {primaryDomainMenuOverlay}
         {detailModal}
       </>
     );
@@ -2056,15 +2294,32 @@ export default function ServerCollectionView({
                   <label className={`text-body-tertiary ${styles.fieldLabel}`}>
                     Primary domain
                   </label>
-                  <input
-                    value={server.primaryDomain || ""}
-                    onChange={(event) =>
-                      onPatchServer(server.alias, { primaryDomain: event.target.value })
-                    }
-                    onBlur={() => emitCredentialBlur(server, "primaryDomain")}
-                    placeholder="example.org"
-                    className={styles.fieldInput}
-                  />
+                  <div className={styles.primaryDomainInputRow}>
+                    <input
+                      value={server.primaryDomain || ""}
+                      onChange={(event) =>
+                        onPatchServer(server.alias, { primaryDomain: event.target.value })
+                      }
+                      onFocus={(event) =>
+                        openPrimaryDomainMenuFor(server.alias, event.currentTarget)
+                      }
+                      onClick={(event) =>
+                        openPrimaryDomainMenuFor(server.alias, event.currentTarget)
+                      }
+                      onBlur={(event) =>
+                        commitPrimaryDomain(server, event.currentTarget.value)
+                      }
+                      placeholder="localhost"
+                      className={`${styles.fieldInput} ${
+                        styles.primaryDomainDropdownTrigger
+                      } ${
+                        validation.primaryDomainError ? styles.inputError : ""
+                      }`}
+                    />
+                  </div>
+                  {validation.primaryDomainError ? (
+                    <p className="text-danger">{validation.primaryDomainError}</p>
+                  ) : null}
                 </div>
               </div>
 
@@ -2089,6 +2344,7 @@ export default function ServerCollectionView({
       {actionMenuOverlay}
       {bulkMenuOverlay}
       {statusPopoverOverlay}
+      {primaryDomainMenuOverlay}
       {detailModal}
     </>
   );

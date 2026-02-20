@@ -2,6 +2,7 @@ const HEX_COLOR_PATTERN = /^#?([A-Fa-f0-9]{6})$/;
 const DEFAULT_REQUIREMENT_SERVER_TYPE = "vps";
 const DEFAULT_REQUIREMENT_STORAGE_GB = "200";
 const DEFAULT_REQUIREMENT_LOCATION = "Germany";
+const DEFAULT_PRIMARY_DOMAIN = "localhost";
 
 function normalizeDeviceColor(value) {
   const raw = String(value || "").trim();
@@ -45,7 +46,7 @@ export function createServerPlaceholder(alias) {
   return {
     alias: String(alias || "").trim(),
     description: "",
-    primaryDomain: "",
+    primaryDomain: DEFAULT_PRIMARY_DOMAIN,
     requirementServerType: DEFAULT_REQUIREMENT_SERVER_TYPE,
     requirementStorageGb: DEFAULT_REQUIREMENT_STORAGE_GB,
     requirementLocation: DEFAULT_REQUIREMENT_LOCATION,
@@ -76,9 +77,20 @@ export function normalizePersistedDeviceMeta(servers) {
     const normalizedRequirementLocation =
       normalizeRequirementLocation(server?.requirementLocation) ||
       DEFAULT_REQUIREMENT_LOCATION;
+    const normalizedPrimaryDomain = String(server?.primaryDomain ?? "")
+      .trim()
+      .toLowerCase();
+    const hasPrimaryDomain = Boolean(
+      server &&
+        typeof server === "object" &&
+        Object.prototype.hasOwnProperty.call(server, "primaryDomain")
+    );
     return {
       ...server,
       description: String(server?.description || ""),
+      primaryDomain:
+        normalizedPrimaryDomain ||
+        (hasPrimaryDomain ? "" : DEFAULT_PRIMARY_DOMAIN),
       requirementServerType: normalizedRequirementServerType,
       requirementStorageGb: normalizedRequirementStorageGb,
       requirementLocation: normalizedRequirementLocation,
