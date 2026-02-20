@@ -119,27 +119,24 @@ export default function Page() {
       >
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {[
-            "Documentation",
-            "Solutions",
+            "Support",
             "Source Code",
             "Follow Us",
             "Contact",
             "Imprint",
           ].map((label) => (
-            <button
+            <span
               key={label}
               style={{
-                padding: "6px 10px",
-                borderRadius: 999,
-                border: "1px solid var(--bs-border-color)",
-                background: "var(--bs-body-bg)",
-                color: "var(--bs-body-color)",
+                color: "var(--bs-secondary-color)",
                 fontSize: 12,
+                textDecoration: "underline",
+                textUnderlineOffset: "2px",
                 cursor: "pointer",
               }}
             >
               {label}
-            </button>
+            </span>
           ))}
         </div>
         <span className="text-body-secondary" style={{ fontSize: 12 }}>

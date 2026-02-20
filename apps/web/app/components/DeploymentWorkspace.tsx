@@ -125,44 +125,44 @@ function readPrimaryDomainFromGroupVars(data: Record<string, unknown>): string {
 type PanelKey =
   | "intro"
   | "store"
+  | "domain"
   | "server"
   | "inventory"
   | "deploy"
-  | "billing"
-  | "support";
+  | "billing";
 
 const PANEL_QUERY_TO_KEY: Record<string, PanelKey> = {
   intro: "intro",
   software: "store",
+  domain: "domain",
   hardware: "server",
   device: "server",
   inventory: "inventory",
   setup: "deploy",
   billing: "billing",
-  support: "support",
 };
 
 const PANEL_KEY_TO_QUERY: Record<
   PanelKey,
-  "intro" | "software" | "hardware" | "inventory" | "setup" | "billing" | "support"
+  "intro" | "software" | "domain" | "hardware" | "inventory" | "setup" | "billing"
 > = {
   intro: "intro",
   store: "software",
+  domain: "domain",
   server: "hardware",
   inventory: "inventory",
   deploy: "setup",
   billing: "billing",
-  support: "support",
 };
 
 const PANEL_ICON_BY_KEY: Record<PanelKey, string> = {
   intro: "fa-circle-info",
   store: "fa-cubes",
+  domain: "fa-globe",
   server: "fa-server",
   inventory: "fa-box-archive",
   deploy: "fa-screwdriver-wrench",
   billing: "fa-file-invoice",
-  support: "fa-life-ring",
 };
 
 const GROUP_VARS_ALL_PATH = "group_vars/all.yml";
@@ -229,7 +229,6 @@ export default function DeploymentWorkspace({
   const lastDeploymentSelectionRef = useRef<string[] | null>(null);
   const uiQueryReadyRef = useRef(false);
   const pendingAliasFromQueryRef = useRef("");
-  const primaryDomainPromptInFlightRef = useRef(false);
 
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [workspacePrimaryDomain, setWorkspacePrimaryDomain] = useState("");
@@ -251,7 +250,6 @@ export default function DeploymentWorkspace({
   const [detailSearchTargetAlias, setDetailSearchTargetAlias] = useState<
     string | null
   >(null);
-  const [primaryDomainModalOpen, setPrimaryDomainModalOpen] = useState(false);
   const [primaryDomainDraft, setPrimaryDomainDraft] = useState("");
   const [primaryDomainModalError, setPrimaryDomainModalError] = useState<
     string | null
@@ -382,38 +380,6 @@ export default function DeploymentWorkspace({
     [baseUrl]
   );
 
-  const ensureWorkspacePrimaryDomain = useCallback(async () => {
-    if (!workspaceId) return;
-    if (primaryDomainPromptInFlightRef.current) return;
-
-    primaryDomainPromptInFlightRef.current = true;
-    try {
-      const data = await readGroupVarsAll(workspaceId);
-      const existingDomain = readPrimaryDomainFromGroupVars(data);
-      setWorkspacePrimaryDomain(existingDomain);
-      if (existingDomain) {
-        setPrimaryDomainDraft(existingDomain);
-        setPrimaryDomainModalError(null);
-        setPrimaryDomainCheckResult(null);
-        setPrimaryDomainModalOpen(false);
-        return;
-      }
-      setPrimaryDomainModalError(null);
-      setPrimaryDomainDraft((prev) => prev || "");
-      setPrimaryDomainCheckResult(null);
-      setPrimaryDomainModalOpen(true);
-    } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : `Failed to read or write ${GROUP_VARS_ALL_PATH}.`;
-      setPrimaryDomainModalError(message);
-      setPrimaryDomainModalOpen(true);
-    } finally {
-      primaryDomainPromptInFlightRef.current = false;
-    }
-  }, [workspaceId, readGroupVarsAll]);
-
   const checkPrimaryDomainAvailability = useCallback(async () => {
     const domain = String(primaryDomainDraft || "").trim().toLowerCase();
     if (!domain) {
@@ -483,7 +449,6 @@ export default function DeploymentWorkspace({
       const nextData = { ...data, DOMAIN_PRIMARY: nextDomain };
       await writeGroupVarsAll(workspaceId, nextData);
       setWorkspacePrimaryDomain(nextDomain);
-      setPrimaryDomainModalOpen(false);
     } catch (err) {
       const message =
         err instanceof Error
@@ -518,6 +483,12 @@ export default function DeploymentWorkspace({
       cancelled = true;
     };
   }, [workspaceId, readWorkspacePrimaryDomain]);
+
+  useEffect(() => {
+    setPrimaryDomainDraft(workspacePrimaryDomain || "");
+    setPrimaryDomainModalError(null);
+    setPrimaryDomainCheckResult(null);
+  }, [workspaceId, workspacePrimaryDomain]);
 
   useEffect(() => {
     if (!activeAlias && servers.length > 0) {
@@ -960,7 +931,6 @@ export default function DeploymentWorkspace({
     setExpertConfirmOpen(false);
     setDetailSearchOpen(false);
     setDetailSearchTargetAlias(null);
-    setPrimaryDomainModalOpen(false);
     setPrimaryDomainDraft("");
     setPrimaryDomainModalError(null);
     setPrimaryDomainModalSaving(false);
@@ -968,7 +938,6 @@ export default function DeploymentWorkspace({
     setPrimaryDomainCheckResult(null);
     setConnectRequestKey(0);
     setCancelRequestKey(0);
-    primaryDomainPromptInFlightRef.current = false;
   }, [workspaceId]);
 
   useEffect(() => {
@@ -1009,11 +978,6 @@ export default function DeploymentWorkspace({
   }, [activePanel, deviceMode, activeAlias]);
 
   useEffect(() => {
-    if (activePanel !== "server") return;
-    void ensureWorkspacePrimaryDomain();
-  }, [activePanel, ensureWorkspacePrimaryDomain]);
-
-  useEffect(() => {
     if (!deployRolePickerOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setDeployRolePickerOpen(false);
@@ -1042,21 +1006,6 @@ export default function DeploymentWorkspace({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [expertConfirmOpen]);
-
-  useEffect(() => {
-    if (!primaryDomainModalOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.key === "Escape" &&
-        !primaryDomainModalSaving &&
-        !primaryDomainCheckBusy
-      ) {
-        setPrimaryDomainModalOpen(false);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [primaryDomainModalOpen, primaryDomainModalSaving, primaryDomainCheckBusy]);
 
   const applySelectedRolesByAlias = useCallback(
     (rolesByAlias: Record<string, string[]>) => {
@@ -1988,6 +1937,97 @@ export default function DeploymentWorkspace({
       ),
     },
     {
+      key: "domain",
+      title: "Domain",
+      content: (
+        <div className={styles.domainPanel}>
+          <div className={styles.domainCard}>
+            <div className={styles.primaryDomainTitleRow}>
+              <i
+                className={`fa-solid fa-globe ${styles.primaryDomainIcon}`}
+                aria-hidden="true"
+              />
+              <h3 className={styles.primaryDomainTitle}>Primary Domain</h3>
+            </div>
+            <p className={styles.primaryDomainText}>
+              This is the main domain for your deployment (for example for service
+              hostnames and DNS setup). It is stored in{" "}
+              <code>group_vars/all.yml</code> as <code>DOMAIN_PRIMARY</code> and
+              reused across devices.
+            </p>
+            <p className={styles.domainCurrent}>
+              Current value:{" "}
+              <code>{String(workspacePrimaryDomain || "").trim() || "not set"}</code>
+            </p>
+            <input
+              value={primaryDomainDraft}
+              onChange={(event) => {
+                setPrimaryDomainDraft(event.target.value);
+                if (primaryDomainModalError) setPrimaryDomainModalError(null);
+                if (primaryDomainCheckResult) setPrimaryDomainCheckResult(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  if (!primaryDomainModalSaving && !primaryDomainCheckBusy) {
+                    void saveWorkspacePrimaryDomain();
+                  }
+                }
+              }}
+              placeholder="example.org"
+              className={`form-control ${styles.primaryDomainInput}`}
+            />
+            {primaryDomainModalError ? (
+              <p className={styles.primaryDomainError}>{primaryDomainModalError}</p>
+            ) : null}
+            <div className={styles.primaryDomainCheckRow}>
+              <button
+                type="button"
+                onClick={() => void checkPrimaryDomainAvailability()}
+                disabled={primaryDomainModalSaving || primaryDomainCheckBusy}
+                className={`${styles.modeActionButton} ${styles.primaryDomainCheckButton}`}
+              >
+                {primaryDomainCheckBusy ? "Checking..." : "Check availability"}
+              </button>
+              {primaryDomainCheckResult ? (
+                <p
+                  className={`${styles.primaryDomainCheckNote} ${
+                    primaryDomainCheckResult.available
+                      ? styles.primaryDomainCheckAvailable
+                      : styles.primaryDomainCheckTaken
+                  }`}
+                >
+                  {primaryDomainCheckResult.note}
+                </p>
+              ) : null}
+            </div>
+            <div className={styles.primaryDomainActions}>
+              <button
+                type="button"
+                onClick={() => {
+                  setPrimaryDomainDraft(workspacePrimaryDomain || "");
+                  setPrimaryDomainModalError(null);
+                  setPrimaryDomainCheckResult(null);
+                }}
+                disabled={primaryDomainModalSaving || primaryDomainCheckBusy}
+                className={styles.modeActionButton}
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveWorkspacePrimaryDomain()}
+                disabled={primaryDomainModalSaving || primaryDomainCheckBusy}
+                className={`${styles.modeActionButton} ${styles.modeActionButtonSuccess}`}
+              >
+                {primaryDomainModalSaving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
       key: "server",
       title: "Hardware",
       content: (
@@ -2446,19 +2486,6 @@ export default function DeploymentWorkspace({
         </div>
       ),
     },
-    {
-      key: "support",
-      title: "Support",
-      content: (
-        <div className={styles.placeholderPanel}>
-          <h3 className={styles.placeholderTitle}>Support wird vorbereitet</h3>
-          <p className={styles.placeholderCopy}>
-            Hier folgt ein Bereich fuer Supportkanaele, SLA-Optionen und offene
-            Vorgangstickets.
-          </p>
-        </div>
-      ),
-    },
   ];
 
   const enabledPanels = panels.filter((panel) => !panel.disabled);
@@ -2491,9 +2518,6 @@ export default function DeploymentWorkspace({
                 onClick={() => {
                   if (isDisabled) return;
                   setActivePanel(panel.key);
-                  if (panel.key === "server") {
-                    void ensureWorkspacePrimaryDomain();
-                  }
                 }}
                 disabled={isDisabled}
                 title={isDisabled ? panel.disabledReason : undefined}
@@ -2689,95 +2713,6 @@ export default function DeploymentWorkspace({
               >
                 <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
                 <span>Enable</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-      {primaryDomainModalOpen ? (
-        <div
-          onClick={() => {
-            if (primaryDomainModalSaving || primaryDomainCheckBusy) return;
-            setPrimaryDomainModalOpen(false);
-          }}
-          className={styles.primaryDomainOverlay}
-        >
-          <div
-            onClick={(event) => event.stopPropagation()}
-            className={styles.primaryDomainCard}
-          >
-            <div className={styles.primaryDomainTitleRow}>
-              <i
-                className={`fa-solid fa-globe ${styles.primaryDomainIcon}`}
-                aria-hidden="true"
-              />
-              <h3 className={styles.primaryDomainTitle}>Set Primary Domain</h3>
-            </div>
-            <p className={styles.primaryDomainText}>
-              This is the main domain for your deployment (for example for service
-              hostnames and DNS setup). It is stored in{" "}
-              <code>group_vars/all.yml</code> as <code>DOMAIN_PRIMARY</code> and
-              reused across devices.
-            </p>
-            <input
-              value={primaryDomainDraft}
-              onChange={(event) => {
-                setPrimaryDomainDraft(event.target.value);
-                if (primaryDomainModalError) setPrimaryDomainModalError(null);
-                if (primaryDomainCheckResult) setPrimaryDomainCheckResult(null);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  if (!primaryDomainModalSaving && !primaryDomainCheckBusy) {
-                    void saveWorkspacePrimaryDomain();
-                  }
-                }
-              }}
-              placeholder="example.org"
-              autoFocus
-              className={`form-control ${styles.primaryDomainInput}`}
-            />
-            {primaryDomainModalError ? (
-              <p className={styles.primaryDomainError}>{primaryDomainModalError}</p>
-            ) : null}
-            <div className={styles.primaryDomainCheckRow}>
-              <button
-                type="button"
-                onClick={() => void checkPrimaryDomainAvailability()}
-                disabled={primaryDomainModalSaving || primaryDomainCheckBusy}
-                className={`${styles.modeActionButton} ${styles.primaryDomainCheckButton}`}
-              >
-                {primaryDomainCheckBusy ? "Checking..." : "Check availability"}
-              </button>
-              {primaryDomainCheckResult ? (
-                <p
-                  className={`${styles.primaryDomainCheckNote} ${
-                    primaryDomainCheckResult.available
-                      ? styles.primaryDomainCheckAvailable
-                      : styles.primaryDomainCheckTaken
-                  }`}
-                >
-                  {primaryDomainCheckResult.note}
-                </p>
-              ) : null}
-            </div>
-            <div className={styles.primaryDomainActions}>
-              <button
-                type="button"
-                onClick={() => setPrimaryDomainModalOpen(false)}
-                disabled={primaryDomainModalSaving || primaryDomainCheckBusy}
-                className={`${styles.modeActionButton} ${styles.modeActionButtonDanger}`}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void saveWorkspacePrimaryDomain()}
-                disabled={primaryDomainModalSaving || primaryDomainCheckBusy}
-                className={`${styles.modeActionButton} ${styles.modeActionButtonSuccess}`}
-              >
-                {primaryDomainModalSaving ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
