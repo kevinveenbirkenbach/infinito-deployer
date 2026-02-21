@@ -13,118 +13,26 @@ import Picker from "@emoji-mart/react";
 import CountryFlagSelectPlugin from "./CountryFlagSelectPlugin";
 import { SERVER_VIEW_CONFIG } from "./types";
 import styles from "./styles.module.css";
-import {
-  hexToRgba,
-  normalizeDeviceColor,
-  normalizeDeviceEmoji,
-} from "./device-visuals";
+import { normalizeDeviceColor } from "./device-visuals";
 import type {
-  ConnectionResult,
-  ServerState,
-  ServerViewMode,
-} from "./types";
-
-type ServerCollectionViewProps = {
-  viewMode: ServerViewMode;
-  deviceMode?: "customer" | "expert";
-  onOpenDetailSearch?: (alias?: string) => void;
-  paginatedServers: ServerState[];
-  computedColumns: number;
-  laneCount?: number;
-  laneSize?: number;
-  aliasCounts: Record<string, number>;
-  testResults: Record<string, ConnectionResult>;
-  workspaceId: string | null;
-  onAliasChange: (alias: string, nextAlias: string) => void;
-  onPatchServer: (alias: string, patch: Partial<ServerState>) => void;
-  onOpenDetail: (alias: string) => void;
-  onGenerateKey: (alias: string) => Promise<void> | void;
-  onCredentialFieldBlur: (payload: {
-    server: ServerState;
-    field:
-      | "host"
-      | "port"
-      | "user"
-      | "password"
-      | "passwordConfirm"
-      | "privateKey"
-      | "keyPassphrase"
-      | "primaryDomain";
-    passwordConfirm?: string;
-  }) => Promise<void> | void;
-  onRequestDelete: (aliases: string[]) => void;
-  onRequestPurge: (aliases: string[]) => void;
-  requestedDetailAlias?: string | null;
-  onRequestedDetailAliasHandled?: () => void;
-  primaryDomainOptions?: string[];
-  onRequestAddPrimaryDomain?: (request?: {
-    alias?: string;
-    value?: string;
-    kind?: "local" | "fqdn" | "subdomain";
-    parentFqdn?: string;
-    subLabel?: string;
-    reason?: "missing" | "unknown";
-  }) => void;
-};
-
-type ValidationState = {
-  aliasError: string | null;
-  hostMissing: boolean;
-  userMissing: boolean;
-  portError: string | null;
-  primaryDomainError: string | null;
-  colorError: string | null;
-  logoMissing: boolean;
-  credentialsMissing: boolean;
-  passwordConfirmError: string | null;
-};
-
-type StatusIndicator = {
-  tone: "green" | "yellow" | "orange";
-  label: string;
-  tooltip: string;
-  missingCredentials: boolean;
-};
-
-type OverlayMenu = {
-  alias: string;
-  top: number;
-  left: number;
-};
-
-type StatusPopover = {
-  alias: string;
-  top: number;
-  left: number;
-  label: string;
-  tooltip: string;
-};
-
-type PrimaryDomainMenu = {
-  alias: string;
-  top: number;
-  left: number;
-  width: number;
-};
-
-const ALIAS_PATTERN = /^[a-z0-9_-]+$/;
-const MOTION_LOOP_SEGMENTS = [0, 1, 2] as const;
-
-function buildMotionLanes(servers: ServerState[], laneCount: number): ServerState[][] {
-  const safeLaneCount = Math.max(1, Math.floor(Number(laneCount) || 1));
-  const lanes = Array.from({ length: safeLaneCount }, () => [] as ServerState[]);
-  servers.forEach((server, index) => {
-    lanes[index % safeLaneCount].push(server);
-  });
-  if (servers.length > 0) {
-    lanes.forEach((lane, laneIndex) => {
-      if (lane.length === 0) {
-        lane.push(servers[laneIndex % servers.length]);
-      }
-    });
-  }
-  return lanes;
-}
+  OverlayMenu,
+  PrimaryDomainMenu,
+  ServerCollectionViewProps,
+  StatusIndicator,
+  StatusPopover,
+  ValidationState,
+} from "./ServerCollectionView.types";
+import {
+  MOTION_LOOP_SEGMENTS,
+  buildMotionLanes,
+  getAliasErrorFor,
+  getStatusIndicator,
+  getTintStyle,
+  getValidationState as buildValidationState,
+  hasFormIssues,
+  normalizePortValue,
+} from "./ServerCollectionView.utils";
+import type { ServerState } from "./types";
 
 export default function ServerCollectionView({
   viewMode,
@@ -377,32 +285,6 @@ export default function ServerCollectionView({
     setAliasDrafts((prev) => ({ ...prev, [alias]: value }));
   };
 
-  const getAliasErrorFor = (aliasValue: string, currentAlias: string) => {
-    if (!aliasValue) return "Alias is required.";
-    if (!ALIAS_PATTERN.test(aliasValue)) {
-      return "Alias allows only a-z, 0-9, _ and -.";
-    }
-    const duplicateCount = aliasCounts[aliasValue] ?? 0;
-    const duplicates =
-      aliasValue === currentAlias ? duplicateCount > 1 : duplicateCount > 0;
-    if (duplicates) return "Alias already exists.";
-    return null;
-  };
-
-  const getAliasError = (server: ServerState) => {
-    const aliasValue = String(aliasDrafts[server.alias] ?? server.alias).trim();
-    return getAliasErrorFor(aliasValue, server.alias);
-  };
-
-  const getPortError = (portValue: string) => {
-    const value = String(portValue ?? "").trim();
-    if (!value) return "Port is required.";
-    if (!/^\d+$/.test(value)) return "Port must be an integer.";
-    const parsed = Number(value);
-    if (parsed < 1 || parsed > 65535) return "Port must be between 1 and 65535.";
-    return null;
-  };
-
   const resolvePrimaryDomainSelection = useCallback(
     (value: string) => {
       const normalized = String(value || "").trim().toLowerCase();
@@ -411,39 +293,6 @@ export default function ServerCollectionView({
     },
     [primaryDomainByLower]
   );
-
-  const getPrimaryDomainError = (primaryDomainValue: string) => {
-    const normalized = String(primaryDomainValue || "").trim().toLowerCase();
-    if (!normalized) return "Primary domain is required.";
-    if (!primaryDomainByLower.has(normalized)) {
-      return "Choose a domain from the list or add a new one.";
-    }
-    return null;
-  };
-
-  const getPasswordConfirmError = (
-    server: ServerState,
-    enforcePasswordConfirm: boolean
-  ) => {
-    if (!enforcePasswordConfirm) return null;
-    if (server.authMethod !== "password") return null;
-    const password = String(server.password || "");
-    if (!password) return null;
-    const confirm = String(passwordConfirmDrafts[server.alias] ?? "");
-    if (!confirm) return "Please confirm the password.";
-    if (confirm !== password) return "Passwords do not match.";
-    return null;
-  };
-
-  const normalizePortValue = (
-    value: string | number | null | undefined
-  ): string => {
-    const digits = String(value ?? "").replace(/[^\d]/g, "");
-    if (!digits) return "";
-    const parsed = Number.parseInt(digits, 10);
-    if (!Number.isInteger(parsed)) return "";
-    return String(Math.min(65535, Math.max(1, parsed)));
-  };
 
   const patchPort = (alias: string, value: string) => {
     onPatchServer(alias, { port: normalizePortValue(value) });
@@ -454,115 +303,19 @@ export default function ServerCollectionView({
     onPatchServer(alias, { port: normalized || "22" });
   };
 
-  const getColorError = (colorValue: string) => {
-    const normalized = normalizeDeviceColor(colorValue);
-    if (!normalized) return "Color must be a HEX value (e.g. #87CEEB).";
-    return null;
-  };
-
-  const getLogoError = (logoValue: string) => {
-    const normalized = normalizeDeviceEmoji(logoValue);
-    if (!normalized) return "Logo emoji is required.";
-    return null;
-  };
-
-  const hasCredentials = (server: ServerState) => {
-    if (server.authMethod === "private_key") {
-      return Boolean(String(server.privateKey || "").trim());
-    }
-    return Boolean(String(server.password || "").trim());
-  };
-
   const getValidationState = (
     server: ServerState,
     options?: { enforcePasswordConfirm?: boolean }
   ): ValidationState => {
-    const aliasError = getAliasError(server);
-    const passwordConfirmError = getPasswordConfirmError(
-      server,
-      Boolean(options?.enforcePasswordConfirm)
-    );
-    return {
-      aliasError,
-      hostMissing: !String(server.host || "").trim(),
-      userMissing: !String(server.user || "").trim(),
-      portError: getPortError(server.port),
-      primaryDomainError: getPrimaryDomainError(server.primaryDomain),
-      colorError: getColorError(server.color),
-      logoMissing: Boolean(getLogoError(server.logoEmoji)),
-      credentialsMissing: !hasCredentials(server),
-      passwordConfirmError,
-    };
-  };
-
-  const hasFormIssues = (validation: ValidationState) =>
-    Boolean(
-      validation.aliasError ||
-        validation.hostMissing ||
-        validation.userMissing ||
-        validation.portError ||
-        validation.primaryDomainError ||
-        validation.colorError ||
-        validation.logoMissing ||
-        validation.passwordConfirmError
-    );
-
-  const getStatusIndicator = (
-    validation: ValidationState,
-    status: ConnectionResult | undefined
-  ): StatusIndicator => {
-    if (validation.credentialsMissing) {
-      return {
-        tone: "orange",
-        label: "Missing credentials",
-        tooltip:
-          "No credentials configured. Set a password or private key before testing.",
-        missingCredentials: true,
-      };
-    }
-
-    if (hasFormIssues(validation)) {
-      return {
-        tone: "orange",
-        label: "Invalid configuration",
-        tooltip:
-          "Fix alias, host, user, port, primary domain, color and logo fields first.",
-        missingCredentials: false,
-      };
-    }
-
-    if (!status) {
-      return {
-        tone: "yellow",
-        label: "Not tested",
-        tooltip: "No connection test result yet.",
-        missingCredentials: false,
-      };
-    }
-
-    if (status.ping_ok && status.ssh_ok) {
-      return {
-        tone: "green",
-        label: "Reachable",
-        tooltip: "Ping and SSH checks succeeded.",
-        missingCredentials: false,
-      };
-    }
-
-    const detail: string[] = [];
-    if (!status.ping_ok) {
-      detail.push(status.ping_error?.trim() || "Ping check failed.");
-    }
-    if (!status.ssh_ok) {
-      detail.push(status.ssh_error?.trim() || "SSH check failed.");
-    }
-
-    return {
-      tone: "orange",
-      label: !status.ping_ok ? "Ping failed" : "Connection failed",
-      tooltip: detail.join(" ") || "Connection test failed.",
-      missingCredentials: false,
-    };
+    const aliasDraft = String(aliasDrafts[server.alias] ?? server.alias).trim();
+    const passwordConfirmDraft = String(passwordConfirmDrafts[server.alias] ?? "");
+    return buildValidationState(server, {
+      aliasDraft,
+      aliasCounts,
+      primaryDomainByLower,
+      passwordConfirmDraft,
+      enforcePasswordConfirm: Boolean(options?.enforcePasswordConfirm),
+    });
   };
 
   const getVisualState = (
@@ -587,28 +340,6 @@ export default function ServerCollectionView({
     };
   };
 
-  const getTintStyle = (
-    colorValue: string,
-    tintable: boolean
-  ): CSSProperties | undefined => {
-    if (!tintable) return undefined;
-    const background = hexToRgba(colorValue, 0.16);
-    const border = hexToRgba(colorValue, 0.58);
-    const status = hexToRgba(colorValue, 0.22);
-    if (!background && !border) return undefined;
-    return {
-      ...(background
-        ? { "--device-row-bg": background, "--device-card-bg": background }
-        : {}),
-      ...(border
-        ? {
-            "--device-row-border": border,
-            "--device-card-border": border,
-          }
-        : {}),
-      ...(status ? { "--device-status-bg": status } : {}),
-    } as CSSProperties;
-  };
 
   const syncAliasDraftState = (fromAlias: string, toAlias: string) => {
     setAliasDrafts((prev) => {
@@ -644,7 +375,7 @@ export default function ServerCollectionView({
 
   const tryRenameAlias = (server: ServerState, rawValue: string) => {
     const trimmed = String(rawValue ?? "").trim();
-    const error = getAliasErrorFor(trimmed, server.alias);
+    const error = getAliasErrorFor(trimmed, server.alias, aliasCounts);
     if (error || trimmed === server.alias) return false;
     onAliasChange(server.alias, trimmed);
     syncAliasDraftState(server.alias, trimmed);

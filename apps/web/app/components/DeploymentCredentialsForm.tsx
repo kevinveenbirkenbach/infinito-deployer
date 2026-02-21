@@ -3,83 +3,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import styles from "./DeploymentCredentialsForm.module.css";
-import ModeToggle from "./ModeToggle";
-import RemoveServerModal from "./deployment-credentials/RemoveServerModal";
-import ServerCollectionView from "./deployment-credentials/ServerCollectionView";
+import DeploymentCredentialsFormTemplate from "./deployment-credentials/DeploymentCredentialsFormTemplate";
 import {
-  SERVER_VIEW_CONFIG,
-  SERVER_VIEW_MODES,
-} from "./deployment-credentials/types";
+  HW_QUERY_KEYS,
+  LANE_SERVER_VIEW_MODES,
+  LIST_LIKE_SERVER_VIEW_MODES,
+  ROW_FILTER_OPTIONS,
+  SERVER_VIEW_MODE_SET,
+  SINGLE_COLUMN_SERVER_VIEW_MODES,
+} from "./deployment-credentials/DeploymentCredentialsForm.constants";
+import type {
+  CredentialBlurPayload,
+  DeploymentCredentialsFormProps,
+  PendingServerAction,
+} from "./deployment-credentials/DeploymentCredentialsForm.types";
+import { SERVER_VIEW_CONFIG } from "./deployment-credentials/types";
 import type {
   ConnectionResult,
   ServerState,
   ServerViewMode,
 } from "./deployment-credentials/types";
 import { encodePath, sanitizeAliasFilename } from "./workspace-panel/utils";
-
-type DeploymentCredentialsFormProps = {
-  baseUrl: string;
-  workspaceId: string | null;
-  servers: ServerState[];
-  connectionResults: Record<string, ConnectionResult>;
-  activeAlias: string;
-  onActiveAliasChange: (alias: string) => void;
-  onUpdateServer: (alias: string, patch: Partial<ServerState>) => void;
-  onConnectionResult: (alias: string, result: ConnectionResult) => void;
-  onRemoveServer: (alias: string) => Promise<void> | void;
-  onCleanupServer: (alias: string) => Promise<void> | void;
-  onAddServer: (aliasHint?: string) => void;
-  openCredentialsAlias?: string | null;
-  onOpenCredentialsAliasHandled?: () => void;
-  deviceMode?: "customer" | "expert";
-  onDeviceModeChange?: (mode: "customer" | "expert") => void;
-  onOpenDetailSearch?: (alias?: string) => void;
-  primaryDomainOptions?: string[];
-  onRequestAddPrimaryDomain?: (request?: {
-    alias?: string;
-    value?: string;
-    kind?: "local" | "fqdn" | "subdomain";
-    parentFqdn?: string;
-    subLabel?: string;
-    reason?: "missing" | "unknown";
-  }) => void;
-  compact?: boolean;
-};
-
-const SERVER_VIEW_ICONS: Record<ServerViewMode, string> = {
-  detail: "fa-solid fa-table-cells-large",
-  list: "fa-solid fa-list",
-  mini: "fa-solid fa-border-all",
-  matrix: "fa-solid fa-table",
-  row: "fa-solid fa-grip-lines",
-  column: "fa-solid fa-columns",
-};
-
-const ROW_FILTER_OPTIONS: number[] = [1, 2, 3, 5, 10, 20, 100, 500, 1000];
-const HW_QUERY_KEYS = {
-  view: "hw_view",
-  rows: "hw_rows",
-} as const;
-const DEFAULT_SERVER_VIEW_MODES: ServerViewMode[] = [
-  "detail",
-  "list",
-  "mini",
-  "matrix",
-];
-const ANIMATED_SERVER_VIEW_MODES: ServerViewMode[] = ["row", "column"];
-const SERVER_VIEW_MODE_SET = new Set<ServerViewMode>(SERVER_VIEW_MODES);
-const SINGLE_COLUMN_SERVER_VIEW_MODES = new Set<ServerViewMode>([
-  "list",
-  "matrix",
-  "row",
-  "column",
-]);
-const LIST_LIKE_SERVER_VIEW_MODES = new Set<ServerViewMode>(["list", "matrix"]);
-const LANE_SERVER_VIEW_MODES = new Set<ServerViewMode>(["row", "column"]);
-
-function formatViewLabel(mode: ServerViewMode): string {
-  return mode.charAt(0).toUpperCase() + mode.slice(1);
-}
 
 export default function DeploymentCredentialsForm({
   baseUrl,
@@ -133,10 +77,7 @@ export default function DeploymentCredentialsForm({
   const [filtersPos, setFiltersPos] = useState({ top: 0, left: 0 });
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
 
-  const [pendingAction, setPendingAction] = useState<{
-    mode: "delete" | "purge";
-    aliases: string[];
-  } | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingServerAction>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const uiQueryReadyRef = useRef(false);
@@ -804,19 +745,7 @@ export default function DeploymentCredentialsForm({
     });
   };
 
-  const handleCredentialFieldBlur = async (payload: {
-    server: ServerState;
-    field:
-      | "host"
-      | "port"
-      | "user"
-      | "password"
-      | "passwordConfirm"
-      | "privateKey"
-      | "keyPassphrase"
-      | "primaryDomain";
-    passwordConfirm?: string;
-  }) => {
+  const handleCredentialFieldBlur = async (payload: CredentialBlurPayload) => {
     const { server, field, passwordConfirm: confirmValue } = payload;
 
     if (server.authMethod === "password" && (field === "password" || field === "passwordConfirm")) {
@@ -903,207 +832,89 @@ export default function DeploymentCredentialsForm({
       setActionBusy(false);
     }
   };
+  const handleQueryDraftChange = (value: string) => {
+    setQueryDraft(value);
+    setQuery(value);
+  };
+
+  const toggleFilters = () => {
+    if (filtersOpen) {
+      setFiltersOpen(false);
+    } else {
+      openFilters();
+    }
+  };
+
+  const toggleViewMenu = () => {
+    setViewMenuOpen((prev) => !prev);
+  };
+
+  const selectViewMode = (mode: ServerViewMode) => {
+    setViewMode(mode);
+    setViewMenuOpen(false);
+  };
+
+  const handleCancelAction = () => {
+    if (actionBusy) return;
+    setPendingAction(null);
+    setActionError(null);
+  };
 
   return (
-    <Wrapper className={wrapperClassName}>
-      {!compact ? (
-        <div className={styles.header}>
-            <div className={styles.headerLeft}>
-            <h2 className={`text-body ${styles.title}`}>Device</h2>
-            <p className={`text-body-secondary ${styles.subtitle}`}>
-              Configure device connections for deployments. Secrets can be stored in
-              the workspace vault and are never persisted in browser storage.
-            </p>
-          </div>
-          <div className={`text-body-secondary ${styles.headerRight}`}>
-            API Base: <code>{baseUrl}</code>
-          </div>
-        </div>
-      ) : null}
-
-      <div className={`${styles.main} ${compact ? styles.mainCompact : ""}`}>
-        <div ref={scrollRef} className={styles.scrollArea}>
-          <div ref={controlsRef} className={styles.controls}>
-            <div className={styles.controlsRow}>
-              <input
-                value={queryDraft}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setQueryDraft(value);
-                  setQuery(value);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    applySearch();
-                  }
-                }}
-                placeholder="Search devices"
-                aria-label="Search devices"
-                className={`form-control ${styles.search}`}
-              />
-              <button
-                ref={filtersButtonRef}
-                onClick={() => {
-                  if (filtersOpen) {
-                    setFiltersOpen(false);
-                  } else {
-                    openFilters();
-                  }
-                }}
-                className={`${styles.toolbarButton} ${styles.filterButton}`}
-                aria-expanded={filtersOpen}
-              >
-                <i className="fa-solid fa-filter" aria-hidden="true" />
-                <span>Filters</span>
-                <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-              </button>
-              <button
-                onClick={addServerFromSearch}
-                className={`${styles.toolbarButton} ${styles.addButton}`}
-              >
-                <i className="fa-solid fa-plus" aria-hidden="true" />
-                <span>Add</span>
-              </button>
-              <div className={styles.controlsRight}>
-                {deviceMode && onDeviceModeChange ? (
-                  <div className={styles.deviceModeControl}>
-                    <ModeToggle mode={deviceMode} onModeChange={onDeviceModeChange} />
-                  </div>
-                ) : null}
-                <div className={styles.viewModeControl}>
-                  <button
-                    ref={viewButtonRef}
-                    onClick={() => setViewMenuOpen((prev) => !prev)}
-                    className={`${styles.modeButton} ${styles.modeButtonActive}`}
-                    aria-haspopup="menu"
-                    aria-expanded={viewMenuOpen}
-                  >
-                    <i className={SERVER_VIEW_ICONS[viewMode]} aria-hidden="true" />
-                    <span>{formatViewLabel(viewMode)}</span>
-                    <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-                  </button>
-                  {viewMenuOpen ? (
-                    <div
-                      ref={viewPopoverRef}
-                      className={styles.viewModeMenu}
-                      role="menu"
-                    >
-                      {DEFAULT_SERVER_VIEW_MODES.map((mode) => {
-                        const active = viewMode === mode;
-                        return (
-                          <button
-                            key={mode}
-                            onClick={() => {
-                              setViewMode(mode);
-                              setViewMenuOpen(false);
-                            }}
-                            className={`${styles.viewModeMenuItem} ${
-                              active ? styles.viewModeMenuItemActive : ""
-                            }`}
-                          >
-                            <i className={SERVER_VIEW_ICONS[mode]} aria-hidden="true" />
-                            <span>{formatViewLabel(mode)}</span>
-                          </button>
-                        );
-                      })}
-                      <span
-                        className={`text-body-tertiary ${styles.viewModeMenuSectionLabel}`}
-                      >
-                        Animated
-                      </span>
-                      {ANIMATED_SERVER_VIEW_MODES.map((mode) => {
-                        const active = viewMode === mode;
-                        return (
-                          <button
-                            key={mode}
-                            onClick={() => {
-                              setViewMode(mode);
-                              setViewMenuOpen(false);
-                            }}
-                            className={`${styles.viewModeMenuItem} ${
-                              active ? styles.viewModeMenuItemActive : ""
-                            }`}
-                          >
-                            <i className={SERVER_VIEW_ICONS[mode]} aria-hidden="true" />
-                            <span>{formatViewLabel(mode)}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div ref={contentRef} className={styles.contentWrap}>
-            <ServerCollectionView
-              viewMode={viewMode}
-              paginatedServers={paginatedServers}
-              computedColumns={computedColumns}
-              laneCount={laneCount}
-              laneSize={laneSize}
-              aliasCounts={aliasCounts}
-              testResults={connectionResults}
-              workspaceId={workspaceId}
-              onAliasChange={handleAliasChange}
-              onPatchServer={updateServer}
-              onOpenDetail={openDetailViewForAlias}
-              onGenerateKey={generateServerKey}
-              onCredentialFieldBlur={handleCredentialFieldBlur}
-              onRequestDelete={requestDeleteServers}
-              onRequestPurge={requestPurgeServers}
-              requestedDetailAlias={requestedDetailAlias}
-              onRequestedDetailAliasHandled={() => setRequestedDetailAlias(null)}
-              deviceMode={deviceMode}
-              onOpenDetailSearch={onOpenDetailSearch}
-              primaryDomainOptions={primaryDomainOptions}
-              onRequestAddPrimaryDomain={onRequestAddPrimaryDomain}
-            />
-          </div>
-        </div>
-
-        <div className={`text-body-secondary ${styles.pagination}`}>
-          <button
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            disabled={currentPage <= 1}
-            className={`${styles.pageButton} ${
-              currentPage <= 1 ? styles.pageButtonDisabled : styles.pageButtonEnabled
-            }`}
-          >
-            Prev
-          </button>
-          <span>
-            Page {currentPage} / {pageCount}
-          </span>
-          <button
-            onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))}
-            disabled={currentPage >= pageCount}
-            className={`${styles.pageButton} ${
-              currentPage >= pageCount ? styles.pageButtonDisabled : styles.pageButtonEnabled
-            }`}
-          >
-            Next
-          </button>
-        </div>
-      </div>
-
-      <RemoveServerModal
-        mode={pendingAction?.mode ?? null}
-        targets={pendingAction?.aliases ?? []}
-        removeBusy={actionBusy}
-        removeError={actionError}
-        onCancel={() => {
-          if (actionBusy) return;
-          setPendingAction(null);
-          setActionError(null);
-        }}
-        onConfirm={() => {
-          void confirmServerAction();
-        }}
-      />
-      {filtersOverlay}
-    </Wrapper>
+    <DeploymentCredentialsFormTemplate
+      compact={compact}
+      baseUrl={baseUrl}
+      wrapperTag={Wrapper}
+      wrapperClassName={wrapperClassName}
+      scrollRef={scrollRef}
+      controlsRef={controlsRef}
+      contentRef={contentRef}
+      filtersButtonRef={filtersButtonRef}
+      viewButtonRef={viewButtonRef}
+      viewPopoverRef={viewPopoverRef}
+      queryDraft={queryDraft}
+      onQueryDraftChange={handleQueryDraftChange}
+      onApplySearch={applySearch}
+      filtersOpen={filtersOpen}
+      onToggleFilters={toggleFilters}
+      onAddServer={addServerFromSearch}
+      deviceMode={deviceMode}
+      onDeviceModeChange={onDeviceModeChange}
+      viewMode={viewMode}
+      viewMenuOpen={viewMenuOpen}
+      onToggleViewMenu={toggleViewMenu}
+      onSelectViewMode={selectViewMode}
+      paginatedServers={paginatedServers}
+      computedColumns={computedColumns}
+      laneCount={laneCount}
+      laneSize={laneSize}
+      aliasCounts={aliasCounts}
+      connectionResults={connectionResults}
+      workspaceId={workspaceId}
+      onAliasChange={handleAliasChange}
+      onPatchServer={updateServer}
+      onOpenDetail={openDetailViewForAlias}
+      onGenerateKey={generateServerKey}
+      onCredentialFieldBlur={handleCredentialFieldBlur}
+      onRequestDelete={requestDeleteServers}
+      onRequestPurge={requestPurgeServers}
+      requestedDetailAlias={requestedDetailAlias}
+      onRequestedDetailAliasHandled={() => setRequestedDetailAlias(null)}
+      onOpenDetailSearch={onOpenDetailSearch}
+      primaryDomainOptions={primaryDomainOptions}
+      onRequestAddPrimaryDomain={onRequestAddPrimaryDomain}
+      currentPage={currentPage}
+      pageCount={pageCount}
+      onPrevPage={() => setPage((prev) => Math.max(1, prev - 1))}
+      onNextPage={() => setPage((prev) => Math.min(pageCount, prev + 1))}
+      pendingAction={pendingAction}
+      actionBusy={actionBusy}
+      actionError={actionError}
+      onCancelAction={handleCancelAction}
+      onConfirmAction={() => {
+        void confirmServerAction();
+      }}
+      filtersOverlay={filtersOverlay}
+    />
   );
 }
