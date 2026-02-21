@@ -1,0 +1,257 @@
+from __future__ import annotations
+
+import os
+import shutil
+import uuid
+from pathlib import Path
+from typing import Any
+
+from fastapi import HTTPException
+
+from services.job_runner.util import atomic_write_text, safe_mkdir
+from .paths import workspace_dir, workspaces_root
+from .vault import _ensure_secrets_dirs
+from .workspace_context import (
+    _HIDDEN_FILES,
+    _ensure_workspace_root,
+    _load_meta,
+    _now_iso,
+    _safe_resolve,
+    _sanitize_workspace_id,
+    _sanitize_workspace_state,
+    _to_entry,
+    _workspace_last_modified_iso,
+    _write_meta,
+)
+
+
+class WorkspaceServiceManagementMixin:
+    def __init__(self) -> None:
+        _ensure_workspace_root()
+
+    def create(
+        self, *, owner_id: str | None = None, owner_email: str | None = None
+    ) -> dict[str, Any]:
+        _ensure_workspace_root()
+        workspace_id = uuid.uuid4().hex[:12]
+        root = workspace_dir(workspace_id)
+        safe_mkdir(root)
+        safe_mkdir(root / "host_vars")
+        safe_mkdir(root / "group_vars")
+        _ensure_secrets_dirs(root)
+
+        meta = {
+            "workspace_id": workspace_id,
+            "created_at": _now_iso(),
+            "inventory_generated_at": None,
+            "selected_roles": [],
+            "deploy_target": None,
+            "host": None,
+            "user": None,
+            "auth_method": None,
+            "owner_id": (owner_id or "").strip() or None,
+            "owner_email": (owner_email or "").strip() or None,
+            "state": "draft",
+            "updated_at": _now_iso(),
+        }
+        _write_meta(root, meta)
+        return meta
+
+    def ensure(self, workspace_id: str) -> Path:
+        workspace_key = _sanitize_workspace_id(workspace_id)
+        root = workspace_dir(workspace_key)
+        if not root.is_dir():
+            raise HTTPException(status_code=404, detail="workspace not found")
+        return root
+
+    def assert_workspace_access(
+        self, workspace_id: str, user_id: str | None
+    ) -> dict[str, Any]:
+        root = self.ensure(workspace_id)
+        meta = _load_meta(root)
+        owner_id = str(meta.get("owner_id") or "").strip() or None
+        actor_id = (user_id or "").strip() or None
+
+        if owner_id:
+            if actor_id != owner_id:
+                raise HTTPException(status_code=404, detail="workspace not found")
+        elif actor_id:
+            raise HTTPException(status_code=404, detail="workspace not found")
+
+        return meta
+
+    def list_for_user(self, user_id: str) -> list[dict[str, Any]]:
+        owner_id = (user_id or "").strip()
+        if not owner_id:
+            return []
+
+        root = workspaces_root()
+        if not root.is_dir():
+            return []
+
+        workspaces: list[dict[str, Any]] = []
+        for child in sorted(root.iterdir()):
+            if not child.is_dir():
+                continue
+            workspace_id = child.name
+            try:
+                _sanitize_workspace_id(workspace_id)
+            except HTTPException:
+                continue
+
+            meta = _load_meta(child)
+            if str(meta.get("owner_id") or "").strip() != owner_id:
+                continue
+            workspaces.append(
+                {
+                    "workspace_id": workspace_id,
+                    "name": str(meta.get("name") or workspace_id),
+                    "created_at": str(meta.get("created_at") or ""),
+                    "last_modified_at": _workspace_last_modified_iso(child),
+                    "state": _sanitize_workspace_state(meta.get("state")),
+                }
+            )
+
+        workspaces.sort(
+            key=lambda item: str(item.get("last_modified_at") or ""),
+            reverse=True,
+        )
+        return workspaces
+
+    def delete(self, workspace_id: str) -> None:
+        root = self.ensure(workspace_id)
+        try:
+            shutil.rmtree(root)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"failed to delete workspace: {exc}"
+            ) from exc
+
+    def set_workspace_state(self, workspace_id: str, state: str) -> None:
+        root = self.ensure(workspace_id)
+        meta = _load_meta(root)
+        meta["state"] = _sanitize_workspace_state(state)
+        meta["updated_at"] = _now_iso()
+        _write_meta(root, meta)
+
+    def list_files(self, workspace_id: str) -> list[dict[str, Any]]:
+        root = self.ensure(workspace_id)
+        entries: list[dict[str, Any]] = []
+
+        for dirpath, _dirnames, filenames in os.walk(root):
+            current_dir = Path(dirpath)
+            if current_dir != root:
+                directory_entry = _to_entry(root, current_dir, True)
+                if directory_entry:
+                    entries.append(directory_entry)
+
+            for filename in filenames:
+                if filename in _HIDDEN_FILES:
+                    continue
+                file_entry = _to_entry(root, current_dir / filename, False)
+                if file_entry:
+                    entries.append(file_entry)
+
+        entries.sort(
+            key=lambda entry: (0 if entry.get("is_dir") else 1, entry.get("path") or "")
+        )
+        return entries
+
+    def read_file(self, workspace_id: str, rel_path: str) -> str:
+        root = self.ensure(workspace_id)
+        target = _safe_resolve(root, rel_path)
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail="file not found")
+        try:
+            return target.read_text(encoding="utf-8", errors="replace")
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"failed to read file: {exc}"
+            ) from exc
+
+    def read_file_bytes(self, workspace_id: str, rel_path: str) -> bytes:
+        root = self.ensure(workspace_id)
+        target = _safe_resolve(root, rel_path)
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail="file not found")
+        try:
+            return target.read_bytes()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"failed to read file: {exc}"
+            ) from exc
+
+    def write_file(self, workspace_id: str, rel_path: str, content: str) -> None:
+        root = self.ensure(workspace_id)
+        target = _safe_resolve(root, rel_path)
+        safe_mkdir(target.parent)
+        try:
+            atomic_write_text(target, content)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"failed to write file: {exc}"
+            ) from exc
+
+    def create_dir(self, workspace_id: str, rel_path: str) -> str:
+        root = self.ensure(workspace_id)
+        raw = (rel_path or "").strip().lstrip("/")
+        if not raw:
+            raise HTTPException(status_code=400, detail="path required")
+        if raw.endswith("/"):
+            raw = raw.rstrip("/")
+
+        target = _safe_resolve(root, raw)
+        if target.exists():
+            raise HTTPException(status_code=409, detail="target already exists")
+
+        try:
+            safe_mkdir(target)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"failed to create directory: {exc}"
+            ) from exc
+        return target.relative_to(root).as_posix()
+
+    def rename_file(self, workspace_id: str, rel_path: str, new_path: str) -> str:
+        root = self.ensure(workspace_id)
+        source = _safe_resolve(root, rel_path)
+        if not source.exists():
+            raise HTTPException(status_code=404, detail="file not found")
+
+        raw_new_path = (new_path or "").strip().lstrip("/")
+        if not raw_new_path or raw_new_path.endswith("/"):
+            raise HTTPException(status_code=400, detail="invalid new path")
+
+        destination = _safe_resolve(root, raw_new_path)
+        if source.is_dir() and source in destination.parents:
+            raise HTTPException(
+                status_code=400, detail="cannot move directory into itself"
+            )
+        if destination.exists():
+            raise HTTPException(status_code=409, detail="target already exists")
+        if not destination.parent.exists():
+            raise HTTPException(status_code=400, detail="target directory missing")
+
+        try:
+            source.rename(destination)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"failed to rename file: {exc}"
+            ) from exc
+        return destination.relative_to(root).as_posix()
+
+    def delete_file(self, workspace_id: str, rel_path: str) -> None:
+        root = self.ensure(workspace_id)
+        target = _safe_resolve(root, rel_path)
+        if not target.exists():
+            raise HTTPException(status_code=404, detail="file not found")
+
+        try:
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"failed to delete file: {exc}"
+            ) from exc
