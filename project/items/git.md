@@ -1,322 +1,203 @@
 # Inventory – History (Git), Autosave & Unsaved Changes Guard
 
-## Goal
+## Redefined
 
-Add a full **History system** to the Inventory workspace based on a local Git repository.
+This item is redefined from prose-only specification to an executable checklist.
 
-The system must:
+Status legend:
 
-- Automatically create commits on meaningful changes
-- Provide history access from multiple UI entry points
-- Allow file- and folder-scoped history inspection
-- Allow deterministic restore of files or entire workspace states
-- Prevent accidental data loss when leaving the page
+- `[x]` implemented
+- `[ ]` open
 
-The solution must remain:
+Execution order:
 
-- deterministic
-- secure (no plaintext secret leakage)
-- performant (no excessive commit spam)
-- workspace-isolated
+1. Git foundation
+2. Autosave + deterministic commits
+3. History API + UI
+4. Restore + unsaved changes guard
+5. Hardening + tests
 
 ---
 
-# 1. Local Git Repository Per Workspace
+## 0. Current Baseline
 
-## 1.1 Repository Location
-
-Each workspace must contain its own Git repository:
-
-- `.git/` lives in the workspace root (or inventory root)
-- Repository is initialized automatically on first autosave
-
-## 1.2 What Is Versioned
-
-The repository must track:
-
-- `inventory.yml`
-- `host_vars/**`
-- `group_vars/**`
-- workspace configuration files
-- other reproducibility-relevant files
-
-Secrets policy:
-
-- Vault-encrypted values are versioned
-- Plaintext secrets must never be committed
-- `secrets/credentials.kdbx` may be versioned (configurable), but no plaintext passwords ever stored
-
-**Acceptance Criteria**
-
-- First autosave initializes a Git repository
-- After each commit, `git status` is clean
-- No plaintext secrets appear in history
+- [x] Workspace file CRUD exists (`list/read/write/rename/delete`)
+- [x] Manual file save exists in editor
+- [ ] Workspace-local Git repository per workspace
+- [ ] History API endpoints
+- [ ] History UI entry points (Inventory + Workspace menu)
+- [ ] File/folder scoped history in context menu
+- [ ] Diff + restore workflow
+- [ ] Unsaved changes leave guard
+- [ ] Playwright coverage for this feature set
 
 ---
 
-# 2. Autosave & Commit Model
+## 1. Git Foundation (MVP)
 
-## 2.1 Autosave Triggers
+- [ ] Initialize `.git` in workspace root on first write/autosave
+- [ ] Add deterministic `.gitignore` rules for non-versioned runtime files
+- [ ] Track reproducibility-relevant files (`inventory.yml`, `host_vars/**`, `group_vars/**`, workspace config)
+- [ ] Enforce workspace isolation for all git operations
+- [ ] Ensure `git status` is clean immediately after each successful commit
 
-Autosave must occur after:
+Acceptance:
 
-- File save in editor (PUT file)
-- File create / rename / delete
-- ZIP upload (single bulk commit)
-- Context actions (vault value change, key passphrase change, etc.)
+- [ ] First autosave initializes git repository
+- [ ] No cross-workspace git access
 
-## 2.2 Debounce Strategy (Editor)
+---
 
-Editor changes must be debounced:
+## 2. Autosave & Commit Model (MVP)
 
-- No commit per keystroke
-- Commit after 800–1500ms idle
-- Explicit Save triggers immediate commit
+- [ ] Editor autosave debounce (800-1500ms idle)
+- [ ] Explicit Save triggers immediate flush + commit
+- [ ] Non-editor operations commit immediately (create/rename/delete)
+- [ ] ZIP upload creates exactly one bulk commit
+- [ ] Inventory generation creates exactly one bulk commit
+- [ ] Credential generation creates exactly one bulk commit
 
-Non-editor file operations commit immediately.
+Deterministic commit messages:
 
-## 2.3 Bulk Operations
-
-Certain operations produce exactly one commit:
-
-- ZIP upload
-- Inventory generation
-- Credential generation (single combined commit)
-
-## 2.4 Commit Message Convention
-
-Commit messages must follow a deterministic format:
-
-Examples:
-
-- `edit: host_vars/main.yml`
-- `create: group_vars/app.yml`
-- `delete: host_vars/old.yml`
-- `rename: a.yml -> b.yml`
-- `bulk: zip import`
-- `context: change vault value (HOST_ADMIN_PASSWORD)`
+- [ ] `edit: <path>`
+- [ ] `create: <path>`
+- [ ] `delete: <path>`
+- [ ] `rename: <from> -> <to>`
+- [ ] `bulk: zip import`
+- [ ] `context: <action>`
 
 Optional metadata:
 
-- server=<id>
-- role=<id>
+- [ ] `server=<id>`
+- [ ] `role=<id>`
 
-**Acceptance Criteria**
+Acceptance:
 
-- Editor typing does not create excessive commits
-- Each user-visible operation creates exactly one logical commit
-- Commit list is readable and meaningful
-
----
-
-# 3. History UI Access Points
-
-## 3.1 Inventory Bottom Menu
-
-- Add a bottom menu entry: **History**
-- Opens History modal/panel
-- Shows commit list
-- Supports diff preview
-- Supports restore actions
-
-## 3.2 Workspace Menu Integration
-
-History must also be accessible from the **Workspace menu**:
-
-- Global entry: **History**
-- Opens the same History modal
-- Uses the same component/state
-
-**Acceptance Criteria**
-
-- History accessible from Inventory bottom menu AND Workspace menu
-- Both open identical History interface
+- [ ] No commit spam during typing
+- [ ] One logical user action equals one logical commit
 
 ---
 
-# 4. Context Menu: Per File / Folder History
+## 3. Backend History API (MVP)
 
-Right-click context actions must exist for:
-
-- Any file
-- Any folder
-
-## 4.1 Context Entries
-
-- **History**
-  - Opens History modal filtered to selected path
-- **Diff vs current**
-  - Shows changes between selected commit and current state for that path
-- **Restore this**
-  - Restores file or folder from selected commit
-
-## 4.2 Folder Semantics
-
-- Folder history aggregates commits affecting any file in subtree
-- Folder restore restores recursively
-
-**Acceptance Criteria**
-
-- File history shows only commits affecting that file
-- Folder history shows recursive changes
-- Restore is deterministic and safe
-
----
-
-# 5. Diff & Restore
-
-## 5.1 Diff View
-
-History modal must support:
-
-- File-level change list
-- Unified diff preview
-- Masking of secrets in diffs
-
-Masking rules identical to log masking rules.
-
-## 5.2 Restore Entire Workspace
-
-- Restore commit replaces entire workspace state
-- After restore:
-  - File tree refreshes
-  - Editor updates
-  - Validation runs (YAML/JSON)
-
-## 5.3 Restore Single File
-
-- Restore only selected file
-- Does not affect other files
-
-**Acceptance Criteria**
-
-- Restore is atomic
-- Invalid states are detected and reported
-- No silent corruption
-
----
-
-# 6. Unsaved Changes Guard (Before Leave / Close)
-
-The system must prevent accidental data loss.
-
-## 6.1 Dirty State Tracking
-
-The frontend must track:
-
-- Dirty state (unsaved changes)
-- Saving in progress state
-- Successful backend acknowledgement
-
-## 6.2 Behavior
-
-If user attempts:
-
-- Tab close
-- Reload
-- Navigation away
-- Route change
-
-Then:
-
-If clean → no prompt.
-
-If unsaved changes exist:
-
-- Show warning dialog
-- Provide:
-  - **Save and leave**
-  - **Cancel**
-
-## 6.3 Browser Constraints
-
-Due to browser security limitations:
-
-- For tab close / hard reload:
-  - Use native `beforeunload` prompt
-  - No custom buttons possible
-- For internal navigation (router changes):
-  - Use custom modal with:
-    - Save and leave
-    - Cancel
-
-## 6.4 Save Behavior
-
-If user selects "Save and leave":
-
-- Flush all debounced saves immediately
-- Wait for backend confirmation (best-effort)
-- Then allow navigation
-
-If "Cancel":
-
-- Stay on page
-- No data loss
-
-**Acceptance Criteria**
-
-- No warning when state is clean
-- Warning appears when unsaved changes exist
-- Save-and-leave flushes pending operations
-- Cancel prevents leaving
-
----
-
-# 7. Backend API
-
-Required endpoints:
-
-- `GET /api/workspaces/{id}/history`
-- `GET /api/workspaces/{id}/history/{sha}`
-- `GET /api/workspaces/{id}/history/{sha}/diff`
-- `POST /api/workspaces/{id}/history/{sha}/restore`
-- `POST /api/workspaces/{id}/history/{sha}/restore-file`
+- [ ] `GET /api/workspaces/{id}/history`
+- [ ] `GET /api/workspaces/{id}/history/{sha}`
+- [ ] `GET /api/workspaces/{id}/history/{sha}/diff`
+- [ ] `POST /api/workspaces/{id}/history/{sha}/restore`
+- [ ] `POST /api/workspaces/{id}/history/{sha}/restore-file`
 
 Rules:
 
-- Workspace isolation enforced
-- Invalid SHA returns clear error
-- Restore operations are atomic
+- [ ] Invalid SHA returns clear 4xx error
+- [ ] Restore operations are atomic
+- [ ] Workspace isolation enforced for all endpoints
 
 ---
 
-# 8. Security Requirements
+## 4. History UI (MVP)
 
-- No plaintext secrets in Git history
-- Diff view applies secret masking
-- Workspace isolation enforced
-- No cross-workspace history access
-- Restore never bypasses validation
+Global entry points:
 
----
+- [ ] Inventory bottom menu includes `History`
+- [ ] Workspace menu includes `History`
+- [ ] Both open the same history component/state
 
-# 9. Performance Requirements
+History modal/panel:
 
-- Commit operations lightweight (debounced)
-- History list loads <1s on warm cache
-- Folder history queries efficient
-- No UI blocking during autosave
+- [ ] Commit list
+- [ ] Commit detail
+- [ ] Diff preview
+- [ ] Restore actions
 
----
+Context menu:
 
-# 10. UI Tests (Playwright – Required)
-
-- History button visible (Inventory + Workspace menu)
-- Editing file creates debounced commit
-- File context → history filtered correctly
-- Folder context → recursive history
-- Diff modal shows masked diff
-- Restore updates workspace state
-- Unsaved changes guard triggers correctly
-- Save-and-leave flushes pending changes
-
-**Acceptance Criteria**
-
-- Tests pass headless in CI
-- No real secrets used
+- [ ] File: `History`
+- [ ] File: `Diff vs current`
+- [ ] File: `Restore this`
+- [ ] Folder: `History` (recursive)
+- [ ] Folder: `Diff vs current` (recursive)
+- [ ] Folder: `Restore this` (recursive)
 
 ---
 
-# Status
+## 5. Diff & Restore Hardening
 
-🟩 Done
+- [ ] Unified diff preview
+- [ ] File-level change list
+- [ ] Secret masking in diffs (same masking rules as logs)
+- [ ] Restore entire workspace at commit
+- [ ] Restore single file from commit
+- [ ] Refresh file tree and editor after restore
+- [ ] Run YAML/JSON validation after restore
+- [ ] Report invalid state explicitly (no silent corruption)
+
+---
+
+## 6. Unsaved Changes Guard
+
+State tracking:
+
+- [ ] Dirty state tracked
+- [ ] Saving-in-progress tracked
+- [ ] Backend save acknowledgement tracked
+
+Behavior:
+
+- [ ] `beforeunload` prompt when unsaved changes exist
+- [ ] No prompt when clean
+- [ ] Internal route-change guard with modal
+- [ ] Modal action `Save and leave`
+- [ ] Modal action `Cancel`
+- [ ] `Save and leave` flushes all pending debounced writes before leaving
+
+---
+
+## 7. Security
+
+- [ ] No plaintext secrets in git history
+- [ ] Diff output masks sensitive values
+- [ ] Restore flow cannot bypass validation
+- [ ] No cross-workspace history access
+
+---
+
+## 8. Performance
+
+- [ ] Commit path remains lightweight under normal editing
+- [ ] History list warm-load target: <1s
+- [ ] Folder history queries are efficient on larger workspaces
+- [ ] UI remains responsive during autosave/commit
+
+---
+
+## 9. Tests (Required)
+
+Playwright:
+
+- [ ] History button visible (Inventory + Workspace menu)
+- [ ] Editing file creates debounced commit
+- [ ] File context history filter works
+- [ ] Folder context recursive history works
+- [ ] Diff modal shows masked output
+- [ ] Restore updates workspace state
+- [ ] Unsaved changes guard triggers correctly
+- [ ] Save-and-leave flushes pending changes
+
+Backend/unit:
+
+- [ ] Invalid SHA handling
+- [ ] Restore atomicity
+- [ ] Workspace isolation
+- [ ] Secret masking behavior
+
+CI acceptance:
+
+- [ ] Tests pass headless in CI
+- [ ] No real secrets used in fixtures
+
+---
+
+## Status
+
+- Overall: 🟨 Redefined
+- Completion: 0% (feature scope), baseline exists but core history/autosave guard is open
