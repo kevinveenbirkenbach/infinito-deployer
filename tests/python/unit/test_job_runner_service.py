@@ -40,7 +40,6 @@ class TestJobRunnerService(unittest.TestCase):
         # Adjust fields if your schema differs, but keep it valid.
         return DeploymentRequest(
             workspace_id=self.workspace_id,
-            deploy_target="server",
             host="localhost",
             user="tester",
             auth={"method": "password", "password": "x"},
@@ -52,7 +51,6 @@ class TestJobRunnerService(unittest.TestCase):
 
         return DeploymentRequest(
             workspace_id=self.workspace_id,
-            deploy_target="server",
             host="localhost",
             user="tester",
             auth={"method": "password", "password": "supersecret"},
@@ -64,7 +62,6 @@ class TestJobRunnerService(unittest.TestCase):
 
         return DeploymentRequest(
             workspace_id=self.workspace_id,
-            deploy_target="server",
             host="localhost",
             user="tester",
             auth={"method": "private_key", "private_key": "KEYDATA"},
@@ -223,7 +220,6 @@ class TestJobRunnerService(unittest.TestCase):
 
         req = DeploymentRequest(
             workspace_id=self.workspace_id,
-            deploy_target="server",
             host="localhost",
             user="tester",
             auth={"method": "password", "password": "x"},

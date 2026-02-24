@@ -365,7 +365,6 @@ class WorkspaceServiceInventoryMixin:
         safe_mkdir(root / "host_vars")
         safe_mkdir(root / "group_vars")
 
-        deploy_target = (payload.get("deploy_target") or "").strip()
         alias = (payload.get("alias") or "").strip()
         host = (payload.get("host") or "").strip()
         port = payload.get("port")
@@ -373,10 +372,8 @@ class WorkspaceServiceInventoryMixin:
         auth_method = payload.get("auth_method")
         selected_roles = payload.get("selected_roles") or []
 
-        if not deploy_target or not host or not user:
-            raise HTTPException(
-                status_code=400, detail="deploy_target, host, and user are required"
-            )
+        if not host or not user:
+            raise HTTPException(status_code=400, detail="host and user are required")
         if not alias:
             alias = host
         if not selected_roles:
@@ -459,7 +456,6 @@ class WorkspaceServiceInventoryMixin:
             {
                 "inventory_generated_at": _now_iso(),
                 "selected_roles": list(cleaned_roles),
-                "deploy_target": deploy_target,
                 "host": host,
                 "port": port,
                 "user": user,

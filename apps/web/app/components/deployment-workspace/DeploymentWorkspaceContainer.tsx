@@ -1673,23 +1673,15 @@ export default function DeploymentWorkspace({
         body: JSON.stringify(deploymentPlan.payload),
       });
       if (!res.ok) {
-        let message = `HTTP ${res.status}`;
-        try {
-          const data = await res.json();
-          if (data?.detail) {
-            message = data.detail;
-          }
-        } catch {
-          const text = await res.text();
-          if (text) message = text;
-        }
-        throw new Error(message);
+        throw new Error(await parseApiError(res));
       }
       const data = await res.json();
       const created = String(data?.job_id ?? "");
       if (created) {
         setLiveJobId(created);
+        setLiveError(null);
         setDeployViewTab("terminal");
+        setConnectRequestKey((prev) => prev + 1);
         onJobCreated?.(created);
       }
     } catch (err: any) {

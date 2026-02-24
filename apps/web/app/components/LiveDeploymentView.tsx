@@ -302,8 +302,9 @@ export default function LiveDeploymentView({
     if (typeof connectRequestKey !== "number") return;
     if (lastConnectRequestRef.current === connectRequestKey) return;
     lastConnectRequestRef.current = connectRequestKey;
-    connectTo(jobId);
-  }, [connectRequestKey, connectTo, jobId]);
+    const targetJobId = String(externalJobId ?? jobId).trim();
+    connectTo(targetJobId);
+  }, [connectRequestKey, connectTo, externalJobId, jobId]);
 
   const cancel = useCallback(async (rawJobId?: string) => {
     const targetJobId = String(rawJobId ?? jobId).trim();

@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from api.schemas.deployment import AuthMethod, DeployTarget
+from api.schemas.deployment import AuthMethod
 
 
 class WorkspaceCreateOut(BaseModel):
@@ -31,7 +31,6 @@ class WorkspaceDeleteOut(BaseModel):
 
 
 class WorkspaceGenerateIn(BaseModel):
-    deploy_target: DeployTarget
     alias: Optional[str] = Field(
         default=None, min_length=1, description="Inventory host alias"
     )

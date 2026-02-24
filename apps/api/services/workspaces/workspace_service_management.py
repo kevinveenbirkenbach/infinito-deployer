@@ -45,7 +45,6 @@ class WorkspaceServiceManagementMixin:
             "created_at": _now_iso(),
             "inventory_generated_at": None,
             "selected_roles": [],
-            "deploy_target": None,
             "host": None,
             "user": None,
             "auth_method": None,

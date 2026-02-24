@@ -26,10 +26,7 @@ def build_inventory_preview(req: DeploymentRequest) -> Tuple[str, List[str]]:
     warnings: List[str] = []
 
     # Heuristic warnings / unsafe defaults
-    if req.host.lower() in {"localhost", "127.0.0.1"} and req.deploy_target in {
-        "server",
-        "workstation",
-    }:
+    if req.host.lower() in {"localhost", "127.0.0.1"}:
         warnings.append(
             "Host is localhost/127.0.0.1. Ensure the deployment is intended to run locally."
         )
@@ -83,9 +80,6 @@ def build_inventory_preview(req: DeploymentRequest) -> Tuple[str, List[str]]:
     }
     if req.port:
         inventory["all"]["hosts"]["target"]["ansible_port"] = req.port
-
-    # Encode deploy_target also as group (useful for playbook/group_vars later)
-    inventory["all"]["children"] = {req.deploy_target: {"hosts": {"target": {}}}}
 
     inv_yaml = yaml.safe_dump(
         inventory,

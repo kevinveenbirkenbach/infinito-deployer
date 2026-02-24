@@ -5,7 +5,6 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-DeployTarget = Literal["server", "workstation"]
 AuthMethod = Literal["password", "private_key"]
 
 
@@ -54,7 +53,6 @@ class DeploymentRequest(BaseModel):
     workspace_id: str = Field(
         ..., min_length=1, description="Workspace ID (inventory source)"
     )
-    deploy_target: DeployTarget
     host: str = Field(..., min_length=1, description="localhost / IP / domain")
     port: Optional[int] = Field(default=None, ge=1, le=65535)
     user: str = Field(..., min_length=1, description="SSH user")

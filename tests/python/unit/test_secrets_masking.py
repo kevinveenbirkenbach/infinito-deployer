@@ -13,7 +13,6 @@ class TestSecretsMasking(unittest.TestCase):
     def _password_request(self) -> DeploymentRequest:
         return DeploymentRequest(
             workspace_id="abc123",
-            deploy_target="server",
             host="localhost",
             user="root",
             auth={"method": "password", "password": "hunter2"},
