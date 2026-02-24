@@ -40,6 +40,7 @@ export default function WorkspacePanelCards(props: any) {
     openInventoryCleanup,
     inventoryCleanupBusy,
     onUsersAction,
+    onOpenHistory,
   } = props;
 
   const [secretsMenuOpen, setSecretsMenuOpen] = useState(false);
@@ -193,6 +194,15 @@ export default function WorkspacePanelCards(props: any) {
     });
   };
 
+  const openHistoryModal = () => {
+    setSecretsMenuOpen(false);
+    setWorkspaceMenuOpen(false);
+    setUsersMenuOpen(false);
+    setUsersImportMenuOpen(false);
+    setUsersExportMenuOpen(false);
+    onOpenHistory?.();
+  };
+
   return (
     <div className={styles.cardsRoot}>
       <div className={`bg-body border ${styles.card}`}>
@@ -292,6 +302,18 @@ export default function WorkspacePanelCards(props: any) {
             {workspaceMenuOpen ? (
               <div className={styles.menuPanel}>
                 <ul className={styles.menuList}>
+                  <li>
+                    <button
+                      onClick={openHistoryModal}
+                      disabled={!workspaceId}
+                      className={styles.menuItem}
+                    >
+                      <span className={styles.menuItemLabel}>
+                        <i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />
+                        History...
+                      </span>
+                    </button>
+                  </li>
                   <li>
                     <button
                       onClick={() => {

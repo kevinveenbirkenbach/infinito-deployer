@@ -17,7 +17,7 @@ from .paths import workspaces_root
 WORKSPACE_META_FILENAME = "workspace.json"
 INVENTORY_FILENAME = "inventory.yml"
 
-_HIDDEN_FILES = {WORKSPACE_META_FILENAME}
+_HIDDEN_FILES = {WORKSPACE_META_FILENAME, ".git"}
 _ID_RE = re.compile(r"^[a-z0-9]{6,32}$")
 _ROLE_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _VAULT_BLOCK_START_RE = re.compile(r"^([ \t]*).*!vault\s*\|.*$")

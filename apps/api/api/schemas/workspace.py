@@ -62,6 +62,41 @@ class WorkspaceFileWriteIn(BaseModel):
     content: str
 
 
+class WorkspaceHistoryFileChangeOut(BaseModel):
+    status: str
+    path: str
+    old_path: Optional[str] = None
+
+
+class WorkspaceHistoryEntryOut(BaseModel):
+    sha: str
+    created_at: Optional[str] = None
+    summary: str
+    files: List[WorkspaceHistoryFileChangeOut] = Field(default_factory=list)
+
+
+class WorkspaceHistoryListOut(BaseModel):
+    commits: List[WorkspaceHistoryEntryOut] = Field(default_factory=list)
+
+
+class WorkspaceHistoryDiffOut(BaseModel):
+    sha: str
+    path: Optional[str] = None
+    against_current: bool = False
+    files: List[WorkspaceHistoryFileChangeOut] = Field(default_factory=list)
+    diff: str = ""
+
+
+class WorkspaceHistoryRestoreFileIn(BaseModel):
+    path: str = Field(..., min_length=1)
+
+
+class WorkspaceHistoryRestoreOut(BaseModel):
+    ok: bool
+    sha: str
+    path: Optional[str] = None
+
+
 class WorkspaceRoleAppConfigIn(BaseModel):
     content: str = Field(default="", description="YAML mapping for applications.<role>")
 

@@ -689,11 +689,11 @@ export function createWorkspacePanelCoreActions(ctx: any) {
   };
 
   const saveFile = async (editorValue: string, editorDirty: boolean) => {
-    if (!workspaceId || !activePath) return;
+    if (!workspaceId || !activePath) return false;
     const validationError = validateEditor(editorValue, activePath);
     if (validationError) {
       setEditorError(validationError);
-      return;
+      return false;
     }
     setEditorLoading(true);
     setEditorError(null);
@@ -723,8 +723,10 @@ export function createWorkspacePanelCoreActions(ctx: any) {
           onSelectedRolesByAliasChange(merged);
         }
       }
+      return true;
     } catch (err: any) {
       setEditorError(err?.message ?? "failed to save");
+      return false;
     } finally {
       setEditorLoading(false);
     }

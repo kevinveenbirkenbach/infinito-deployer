@@ -35,6 +35,7 @@ class WorkspaceServiceSecurityMixin:
         key_passphrase: str | None,
     ) -> bool:
         root = self.ensure(workspace_id)
+        changed_fields: list[str] = []
         kp = _open_kdbx(
             root,
             master_password,
@@ -45,13 +46,23 @@ class WorkspaceServiceSecurityMixin:
             _upsert_kdbx_entry(
                 kp, _vault_entry_title("server_password", alias), server_password
             )
+            changed_fields.append("server_password")
         if vault_password is not None:
             _upsert_kdbx_entry(kp, _vault_entry_title("vault_password"), vault_password)
+            changed_fields.append("vault_password")
         if key_passphrase is not None:
             _upsert_kdbx_entry(
                 kp, _vault_entry_title("key_passphrase", alias), key_passphrase
             )
+            changed_fields.append("key_passphrase")
         kp.save()
+        if changed_fields:
+            detail = ", ".join(changed_fields)
+            self._history_commit(
+                root,
+                f"context: change vault value ({detail})",
+                metadata={"server": alias or ""},
+            )
         return True
 
     def set_or_reset_vault_master_password(
@@ -73,6 +84,7 @@ class WorkspaceServiceSecurityMixin:
             )
 
         vault_path = _kdbx_path(root)
+        was_existing = vault_path.is_file()
         if not vault_path.is_file():
             _open_kdbx(
                 root,
@@ -80,6 +92,7 @@ class WorkspaceServiceSecurityMixin:
                 create_if_missing=True,
                 master_password_confirm=new_master_password,
             )
+            self._history_commit(root, "context: set vault master password")
             return
 
         if not (current_master_password or "").strip():
@@ -96,6 +109,8 @@ class WorkspaceServiceSecurityMixin:
         )
         kp.change_password(new_master_password)
         kp.save()
+        if was_existing:
+            self._history_commit(root, "context: reset vault master password")
 
     def change_vault_master_password(
         self,
@@ -170,6 +185,7 @@ class WorkspaceServiceSecurityMixin:
             kp, _vault_entry_title("vault_password"), next_vault_password
         )
         kp.save()
+        self._history_commit(root, "context: reset vault password")
         return {
             "updated_files": updated_files,
             "updated_values": updated_values,
@@ -265,6 +281,11 @@ class WorkspaceServiceSecurityMixin:
         }
         if with_passphrase and return_passphrase:
             response["passphrase"] = passphrase
+        self._history_commit(
+            root,
+            f"context: generate ssh key ({safe_alias})",
+            metadata={"server": alias},
+        )
         return response
 
     def change_key_passphrase(
@@ -314,6 +335,11 @@ class WorkspaceServiceSecurityMixin:
             kp, _vault_entry_title("key_passphrase", alias), new_passphrase
         )
         kp.save()
+        self._history_commit(
+            root,
+            f"context: change key passphrase ({_vault_alias(alias)})",
+            metadata={"server": alias},
+        )
 
     def vault_decrypt(
         self, workspace_id: str, *, master_password: str, vault_text: str

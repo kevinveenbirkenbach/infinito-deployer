@@ -169,6 +169,8 @@ class WorkspaceServiceArtifactsMixin:
             except Exception:
                 pass
 
+        self._history_commit(root, "bulk: credential generation")
+
     def build_zip(self, workspace_id: str) -> bytes:
         import zipfile
 
@@ -265,3 +267,4 @@ class WorkspaceServiceArtifactsMixin:
                     ) from exc
 
         self._refresh_meta_after_upload(root)
+        self._history_commit(root, "bulk: zip import")

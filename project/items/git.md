@@ -23,74 +23,74 @@ Execution order:
 
 - [x] Workspace file CRUD exists (`list/read/write/rename/delete`)
 - [x] Manual file save exists in editor
-- [ ] Workspace-local Git repository per workspace
-- [ ] History API endpoints
-- [ ] History UI entry points (Inventory + Workspace menu)
-- [ ] File/folder scoped history in context menu
-- [ ] Diff + restore workflow
-- [ ] Unsaved changes leave guard
-- [ ] Playwright coverage for this feature set
+- [x] Workspace-local Git repository per workspace
+- [x] History API endpoints
+- [x] History UI entry points (Inventory + Workspace menu)
+- [x] File/folder scoped history in context menu
+- [x] Diff + restore workflow
+- [x] Unsaved changes leave guard
+- [x] Playwright coverage for this feature set
 
 ---
 
 ## 1. Git Foundation (MVP)
 
-- [ ] Initialize `.git` in workspace root on first write/autosave
-- [ ] Add deterministic `.gitignore` rules for non-versioned runtime files
-- [ ] Track reproducibility-relevant files (`inventory.yml`, `host_vars/**`, `group_vars/**`, workspace config)
-- [ ] Enforce workspace isolation for all git operations
-- [ ] Ensure `git status` is clean immediately after each successful commit
+- [x] Initialize `.git` in workspace root on first write/autosave
+- [x] Add deterministic `.gitignore` rules for non-versioned runtime files
+- [x] Track reproducibility-relevant files (`inventory.yml`, `host_vars/**`, `group_vars/**`, workspace config)
+- [x] Enforce workspace isolation for all git operations
+- [x] Ensure `git status` is clean immediately after each successful commit
 
 Acceptance:
 
-- [ ] First autosave initializes git repository
-- [ ] No cross-workspace git access
+- [x] First autosave initializes git repository
+- [x] No cross-workspace git access
 
 ---
 
 ## 2. Autosave & Commit Model (MVP)
 
-- [ ] Editor autosave debounce (800-1500ms idle)
-- [ ] Explicit Save triggers immediate flush + commit
-- [ ] Non-editor operations commit immediately (create/rename/delete)
-- [ ] ZIP upload creates exactly one bulk commit
-- [ ] Inventory generation creates exactly one bulk commit
-- [ ] Credential generation creates exactly one bulk commit
+- [x] Editor autosave debounce (800-1500ms idle)
+- [x] Explicit Save triggers immediate flush + commit
+- [x] Non-editor operations commit immediately (create/rename/delete)
+- [x] ZIP upload creates exactly one bulk commit
+- [x] Inventory generation creates exactly one bulk commit
+- [x] Credential generation creates exactly one bulk commit
 
 Deterministic commit messages:
 
-- [ ] `edit: <path>`
-- [ ] `create: <path>`
-- [ ] `delete: <path>`
-- [ ] `rename: <from> -> <to>`
-- [ ] `bulk: zip import`
-- [ ] `context: <action>`
+- [x] `edit: <path>`
+- [x] `create: <path>`
+- [x] `delete: <path>`
+- [x] `rename: <from> -> <to>`
+- [x] `bulk: zip import`
+- [x] `context: <action>`
 
 Optional metadata:
 
-- [ ] `server=<id>`
-- [ ] `role=<id>`
+- [x] `server=<id>`
+- [x] `role=<id>`
 
 Acceptance:
 
-- [ ] No commit spam during typing
-- [ ] One logical user action equals one logical commit
+- [x] No commit spam during typing
+- [x] One logical user action equals one logical commit
 
 ---
 
 ## 3. Backend History API (MVP)
 
-- [ ] `GET /api/workspaces/{id}/history`
-- [ ] `GET /api/workspaces/{id}/history/{sha}`
-- [ ] `GET /api/workspaces/{id}/history/{sha}/diff`
-- [ ] `POST /api/workspaces/{id}/history/{sha}/restore`
-- [ ] `POST /api/workspaces/{id}/history/{sha}/restore-file`
+- [x] `GET /api/workspaces/{id}/history`
+- [x] `GET /api/workspaces/{id}/history/{sha}`
+- [x] `GET /api/workspaces/{id}/history/{sha}/diff`
+- [x] `POST /api/workspaces/{id}/history/{sha}/restore`
+- [x] `POST /api/workspaces/{id}/history/{sha}/restore-file`
 
 Rules:
 
-- [ ] Invalid SHA returns clear 4xx error
-- [ ] Restore operations are atomic
-- [ ] Workspace isolation enforced for all endpoints
+- [x] Invalid SHA returns clear 4xx error
+- [x] Restore operations are atomic
+- [x] Workspace isolation enforced for all endpoints
 
 ---
 
@@ -98,38 +98,38 @@ Rules:
 
 Global entry points:
 
-- [ ] Inventory bottom menu includes `History`
-- [ ] Workspace menu includes `History`
-- [ ] Both open the same history component/state
+- [x] Inventory bottom menu includes `History`
+- [x] Workspace menu includes `History...`
+- [x] Both open the same history component/state
 
 History modal/panel:
 
-- [ ] Commit list
-- [ ] Commit detail
-- [ ] Diff preview
-- [ ] Restore actions
+- [x] Commit list
+- [x] Commit detail
+- [x] Diff preview
+- [x] Restore actions
 
 Context menu:
 
-- [ ] File: `History`
-- [ ] File: `Diff vs current`
-- [ ] File: `Restore this`
-- [ ] Folder: `History` (recursive)
-- [ ] Folder: `Diff vs current` (recursive)
-- [ ] Folder: `Restore this` (recursive)
+- [x] File: `History`
+- [x] File: `Diff vs current`
+- [x] File: `Restore this`
+- [x] Folder: `History` (recursive)
+- [x] Folder: `Diff vs current` (recursive)
+- [x] Folder: `Restore this` (recursive)
 
 ---
 
 ## 5. Diff & Restore Hardening
 
-- [ ] Unified diff preview
-- [ ] File-level change list
-- [ ] Secret masking in diffs (same masking rules as logs)
-- [ ] Restore entire workspace at commit
-- [ ] Restore single file from commit
-- [ ] Refresh file tree and editor after restore
-- [ ] Run YAML/JSON validation after restore
-- [ ] Report invalid state explicitly (no silent corruption)
+- [x] Unified diff preview
+- [x] File-level change list
+- [x] Secret masking in diffs (same masking rules as logs)
+- [x] Restore entire workspace at commit
+- [x] Restore single file from commit
+- [x] Refresh file tree and editor after restore
+- [x] Run YAML/JSON validation after restore
+- [x] Report invalid state explicitly (no silent corruption)
 
 ---
 
@@ -137,36 +137,36 @@ Context menu:
 
 State tracking:
 
-- [ ] Dirty state tracked
-- [ ] Saving-in-progress tracked
-- [ ] Backend save acknowledgement tracked
+- [x] Dirty state tracked
+- [x] Saving-in-progress tracked
+- [x] Backend save acknowledgement tracked
 
 Behavior:
 
-- [ ] `beforeunload` prompt when unsaved changes exist
-- [ ] No prompt when clean
-- [ ] Internal route-change guard with modal
-- [ ] Modal action `Save and leave`
-- [ ] Modal action `Cancel`
-- [ ] `Save and leave` flushes all pending debounced writes before leaving
+- [x] `beforeunload` prompt when unsaved changes exist
+- [x] No prompt when clean
+- [x] Internal route-change guard with modal
+- [x] Modal action `Save and leave`
+- [x] Modal action `Cancel`
+- [x] `Save and leave` flushes all pending debounced writes before leaving
 
 ---
 
 ## 7. Security
 
-- [ ] No plaintext secrets in git history
-- [ ] Diff output masks sensitive values
-- [ ] Restore flow cannot bypass validation
-- [ ] No cross-workspace history access
+- [x] No plaintext secrets in git history
+- [x] Diff output masks sensitive values
+- [x] Restore flow cannot bypass validation
+- [x] No cross-workspace history access
 
 ---
 
 ## 8. Performance
 
-- [ ] Commit path remains lightweight under normal editing
-- [ ] History list warm-load target: <1s
-- [ ] Folder history queries are efficient on larger workspaces
-- [ ] UI remains responsive during autosave/commit
+- [x] Commit path remains lightweight under normal editing
+- [x] History list warm-load target: <1s
+- [x] Folder history queries are efficient on larger workspaces
+- [x] UI remains responsive during autosave/commit
 
 ---
 
@@ -174,30 +174,30 @@ Behavior:
 
 Playwright:
 
-- [ ] History button visible (Inventory + Workspace menu)
-- [ ] Editing file creates debounced commit
-- [ ] File context history filter works
-- [ ] Folder context recursive history works
-- [ ] Diff modal shows masked output
-- [ ] Restore updates workspace state
-- [ ] Unsaved changes guard triggers correctly
-- [ ] Save-and-leave flushes pending changes
+- [x] History button visible (Inventory + Workspace menu)
+- [x] Editing file creates debounced commit
+- [x] File context history filter works
+- [x] Folder context recursive history works
+- [x] Diff modal shows masked output
+- [x] Restore updates workspace state
+- [x] Unsaved changes guard triggers correctly
+- [x] Save-and-leave flushes pending changes
 
 Backend/unit:
 
-- [ ] Invalid SHA handling
-- [ ] Restore atomicity
-- [ ] Workspace isolation
-- [ ] Secret masking behavior
+- [x] Invalid SHA handling
+- [x] Restore atomicity
+- [x] Workspace isolation
+- [x] Secret masking behavior
 
 CI acceptance:
 
 - [ ] Tests pass headless in CI
-- [ ] No real secrets used in fixtures
+- [x] No real secrets used in fixtures
 
 ---
 
 ## Status
 
-- Overall: 🟨 Redefined
-- Completion: 0% (feature scope), baseline exists but core history/autosave guard is open
+- Overall: 🟩 Implemented
+- Completion: 98% (CI headless run pending)

@@ -13,6 +13,9 @@ export default function WorkspacePanelOverlays(props: any) {
     renameFile,
     downloadFile,
     deleteFile,
+    openHistoryForPath,
+    openDiffCurrentForPath,
+    openRestoreForPath,
     setMasterChangeOpen,
     setMasterChangeMode,
     setMasterChangeError,
@@ -104,6 +107,46 @@ export default function WorkspacePanelOverlays(props: any) {
           >
             New folder…
           </button>
+          {contextMenu.path ? <div className={styles.separator} /> : null}
+          {contextMenu.path ? (
+            <button
+              onClick={() => {
+                const path = contextMenu.path;
+                if (!path) return;
+                setContextMenu(null);
+                openHistoryForPath(path, contextMenu.isDir);
+              }}
+              className={styles.contextButton}
+            >
+              History
+            </button>
+          ) : null}
+          {contextMenu.path ? (
+            <button
+              onClick={() => {
+                const path = contextMenu.path;
+                if (!path) return;
+                setContextMenu(null);
+                openDiffCurrentForPath(path, contextMenu.isDir);
+              }}
+              className={styles.contextButton}
+            >
+              Diff vs current
+            </button>
+          ) : null}
+          {contextMenu.path ? (
+            <button
+              onClick={() => {
+                const path = contextMenu.path;
+                if (!path) return;
+                setContextMenu(null);
+                openRestoreForPath(path, contextMenu.isDir);
+              }}
+              className={styles.contextButton}
+            >
+              Restore this
+            </button>
+          ) : null}
           {contextMenu.path ? <div className={styles.separator} /> : null}
           {contextMenu.path ? (
             <button

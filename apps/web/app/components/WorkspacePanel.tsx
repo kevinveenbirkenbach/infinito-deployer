@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { json as jsonLang } from "@codemirror/lang-json";
@@ -87,6 +87,21 @@ type UsersAction =
   | "import-yaml"
   | "export-csv"
   | "export-yaml";
+
+type HistoryOpenIntent = "history" | "diff-current" | "restore";
+
+type WorkspaceHistoryFileChange = {
+  status: string;
+  path: string;
+  old_path?: string | null;
+};
+
+type WorkspaceHistoryCommit = {
+  sha: string;
+  created_at?: string | null;
+  summary: string;
+  files: WorkspaceHistoryFileChange[];
+};
 
 const USER_CSV_HEADERS = [
   "username",
@@ -578,6 +593,28 @@ export default function WorkspacePanel({
     block: VaultBlock;
   } | null>(null);
   const editorViewRef = useRef<EditorView | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyDiffLoading, setHistoryDiffLoading] = useState(false);
+  const [historyRestoreBusy, setHistoryRestoreBusy] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyStatus, setHistoryStatus] = useState<string | null>(null);
+  const [historyScopePath, setHistoryScopePath] = useState<string | null>(null);
+  const [historyScopeIsDir, setHistoryScopeIsDir] = useState(false);
+  const [historyOpenIntent, setHistoryOpenIntent] = useState<HistoryOpenIntent>("history");
+  const [historyAgainstCurrent, setHistoryAgainstCurrent] = useState(false);
+  const [historyCommits, setHistoryCommits] = useState<WorkspaceHistoryCommit[]>([]);
+  const [historySelectedSha, setHistorySelectedSha] = useState<string | null>(null);
+  const [historyDiff, setHistoryDiff] = useState("");
+  const [historyDiffFiles, setHistoryDiffFiles] = useState<WorkspaceHistoryFileChange[]>([]);
+  const [saveInProgress, setSaveInProgress] = useState(false);
+  const [lastSaveAckAt, setLastSaveAckAt] = useState<string | null>(null);
+  const [leaveGuardOpen, setLeaveGuardOpen] = useState(false);
+  const [leaveGuardMessage, setLeaveGuardMessage] = useState<string | null>(null);
+  const autosaveTimerRef = useRef<number | null>(null);
+  const hostVarsSyncTimerRef = useRef<number | null>(null);
+  const pendingLeaveActionRef = useRef<(() => void) | null>(null);
+  const bypassLeaveGuardRef = useRef(false);
 
   const [masterChangeOpen, setMasterChangeOpen] = useState(false);
   const [masterChangeError, setMasterChangeError] = useState<string | null>(null);
@@ -695,6 +732,17 @@ export default function WorkspacePanel({
   const credentialServerAliases = useMemo(
     () => Object.keys(serverRolesByAlias),
     [serverRolesByAlias]
+  );
+  const historySelectedCommit = useMemo(
+    () => historyCommits.find((entry) => entry.sha === historySelectedSha) ?? null,
+    [historyCommits, historySelectedSha]
+  );
+  const historyDisplayedFiles = useMemo(
+    () =>
+      historyDiffFiles.length > 0
+        ? historyDiffFiles
+        : historySelectedCommit?.files ?? [],
+    [historyDiffFiles, historySelectedCommit]
   );
 
   const tree = useMemo(() => buildTree(files), [files]);
@@ -1292,8 +1340,21 @@ export default function WorkspacePanel({
   ]);
 
   useEffect(() => {
+    if (hostVarsSyncTimerRef.current != null) {
+      window.clearTimeout(hostVarsSyncTimerRef.current);
+      hostVarsSyncTimerRef.current = null;
+    }
     if (!workspaceId) return;
-    void syncHostVarsFromCredentials(editorDirty);
+
+    hostVarsSyncTimerRef.current = window.setTimeout(() => {
+      void syncHostVarsFromCredentials(editorDirty);
+    }, 1400);
+
+    return () => {
+      if (hostVarsSyncTimerRef.current == null) return;
+      window.clearTimeout(hostVarsSyncTimerRef.current);
+      hostVarsSyncTimerRef.current = null;
+    };
   }, [
     workspaceId,
     credentials.description,
@@ -1473,7 +1534,7 @@ export default function WorkspacePanel({
     }
   };
 
-  const readApiDetail = async (res: Response): Promise<string> => {
+  const readApiDetail = useCallback(async (res: Response): Promise<string> => {
     let message = `HTTP ${res.status}`;
     try {
       const data = await res.json();
@@ -1482,7 +1543,411 @@ export default function WorkspacePanel({
       // ignore response parse errors
     }
     return message;
-  };
+  }, []);
+
+  const hasUnsavedChanges = editorDirty || saveInProgress;
+
+  const clearAutosaveTimer = useCallback(() => {
+    if (autosaveTimerRef.current == null) return;
+    window.clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = null;
+  }, []);
+
+  const flushPendingEditorSave = useCallback(async (): Promise<boolean> => {
+    clearAutosaveTimer();
+    if (!workspaceId || !activePath || isKdbx) {
+      return true;
+    }
+    if (!editorDirty) {
+      return true;
+    }
+    setSaveInProgress(true);
+    try {
+      const ok = await saveFile(editorValue, editorDirty);
+      if (ok) {
+        setLastSaveAckAt(new Date().toISOString());
+      }
+      return Boolean(ok);
+    } finally {
+      setSaveInProgress(false);
+    }
+  }, [
+    activePath,
+    clearAutosaveTimer,
+    editorDirty,
+    editorValue,
+    isKdbx,
+    saveFile,
+    workspaceId,
+  ]);
+
+  const queueLeaveAction = useCallback(
+    (action: () => void, message?: string) => {
+      if (!hasUnsavedChanges) {
+        action();
+        return;
+      }
+      pendingLeaveActionRef.current = action;
+      setLeaveGuardMessage(
+        message || "Unsaved changes detected. Save your changes before leaving?"
+      );
+      setLeaveGuardOpen(true);
+    },
+    [hasUnsavedChanges]
+  );
+
+  const executePendingLeaveAction = useCallback(() => {
+    const action = pendingLeaveActionRef.current;
+    pendingLeaveActionRef.current = null;
+    setLeaveGuardOpen(false);
+    setLeaveGuardMessage(null);
+    action?.();
+  }, []);
+
+  const cancelPendingLeaveAction = useCallback(() => {
+    pendingLeaveActionRef.current = null;
+    setLeaveGuardOpen(false);
+    setLeaveGuardMessage(null);
+  }, []);
+
+  const saveAndExecutePendingLeaveAction = useCallback(async () => {
+    const ok = await flushPendingEditorSave();
+    if (!ok) {
+      setLeaveGuardMessage(
+        "Saving failed. Fix validation or API errors and try again."
+      );
+      return;
+    }
+    executePendingLeaveAction();
+  }, [executePendingLeaveAction, flushPendingEditorSave]);
+
+  const fetchHistoryCommits = useCallback(
+    async (scopePath: string | null, preserveSelection = false) => {
+      if (!workspaceId) return;
+      setHistoryLoading(true);
+      setHistoryError(null);
+      try {
+        const params = new URLSearchParams();
+        params.set("limit", "200");
+        if (scopePath) {
+          params.set("path", scopePath);
+        }
+        const res = await fetch(
+          `${baseUrl}/api/workspaces/${workspaceId}/history?${params.toString()}`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) {
+          throw new Error(await readApiDetail(res));
+        }
+        const data = await res.json();
+        const commits: WorkspaceHistoryCommit[] = Array.isArray(data?.commits)
+          ? data.commits.map((item: any) => ({
+              sha: String(item?.sha || ""),
+              created_at: item?.created_at ? String(item.created_at) : null,
+              summary: String(item?.summary || ""),
+              files: Array.isArray(item?.files)
+                ? item.files.map((file: any) => ({
+                    status: String(file?.status || "M"),
+                    path: String(file?.path || ""),
+                    old_path: file?.old_path ? String(file.old_path) : null,
+                  }))
+                : [],
+            }))
+          : [];
+
+        setHistoryCommits(commits.filter((entry) => entry.sha));
+        setHistorySelectedSha((prev) => {
+          if (
+            preserveSelection &&
+            prev &&
+            commits.some((entry) => entry.sha === prev)
+          ) {
+            return prev;
+          }
+          return commits[0]?.sha ?? null;
+        });
+        if (commits.length === 0) {
+          setHistoryDiff("");
+          setHistoryDiffFiles([]);
+        }
+      } catch (err: any) {
+        setHistoryCommits([]);
+        setHistorySelectedSha(null);
+        setHistoryDiff("");
+        setHistoryDiffFiles([]);
+        setHistoryError(err?.message ?? "Failed to load history.");
+      } finally {
+        setHistoryLoading(false);
+      }
+    },
+    [baseUrl, readApiDetail, workspaceId]
+  );
+
+  const loadHistoryDiff = useCallback(
+    async (sha: string, againstCurrent: boolean, scopePath: string | null) => {
+      if (!workspaceId || !sha) return;
+      setHistoryDiffLoading(true);
+      setHistoryError(null);
+      try {
+        const params = new URLSearchParams();
+        if (scopePath) {
+          params.set("path", scopePath);
+        }
+        if (againstCurrent) {
+          params.set("against_current", "true");
+        }
+        const query = params.toString();
+        const res = await fetch(
+          `${baseUrl}/api/workspaces/${workspaceId}/history/${encodeURIComponent(
+            sha
+          )}/diff${query ? `?${query}` : ""}`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) {
+          throw new Error(await readApiDetail(res));
+        }
+        const data = await res.json();
+        setHistoryDiff(String(data?.diff ?? ""));
+        setHistoryDiffFiles(
+          Array.isArray(data?.files)
+            ? data.files.map((file: any) => ({
+                status: String(file?.status || "M"),
+                path: String(file?.path || ""),
+                old_path: file?.old_path ? String(file.old_path) : null,
+              }))
+            : []
+        );
+      } catch (err: any) {
+        setHistoryDiff("");
+        setHistoryDiffFiles([]);
+        setHistoryError(err?.message ?? "Failed to load diff.");
+      } finally {
+        setHistoryDiffLoading(false);
+      }
+    },
+    [baseUrl, readApiDetail, workspaceId]
+  );
+
+  const openHistory = useCallback(
+    (path: string | null = null, isDir = false, intent: HistoryOpenIntent = "history") => {
+      const normalizedPath = String(path || "")
+        .trim()
+        .replace(/^\/+/, "");
+      const nextPath = normalizedPath || null;
+      setHistoryScopePath(nextPath);
+      setHistoryScopeIsDir(Boolean(nextPath) && isDir);
+      setHistoryOpenIntent(intent);
+      setHistoryAgainstCurrent(intent === "diff-current");
+      setHistoryError(null);
+      setHistoryStatus(null);
+      setHistoryOpen(true);
+      void fetchHistoryCommits(nextPath, false);
+    },
+    [fetchHistoryCommits]
+  );
+
+  const restoreHistoryWorkspace = useCallback(async () => {
+    if (!workspaceId || !historySelectedSha || historyRestoreBusy) return;
+    const confirmed = window.confirm(
+      `Restore entire workspace to commit ${historySelectedSha.slice(0, 12)}?`
+    );
+    if (!confirmed) return;
+
+    setHistoryRestoreBusy(true);
+    setHistoryError(null);
+    setHistoryStatus(null);
+    try {
+      const res = await fetch(
+        `${baseUrl}/api/workspaces/${workspaceId}/history/${encodeURIComponent(
+          historySelectedSha
+        )}/restore`,
+        { method: "POST" }
+      );
+      if (!res.ok) {
+        throw new Error(await readApiDetail(res));
+      }
+      await refreshFiles(workspaceId);
+      if (activePath) {
+        await loadFile(activePath);
+      }
+      setEditorDirty(false);
+      setHistoryStatus("Workspace restored.");
+      await fetchHistoryCommits(historyScopePath, true);
+    } catch (err: any) {
+      setHistoryError(err?.message ?? "Workspace restore failed.");
+    } finally {
+      setHistoryRestoreBusy(false);
+    }
+  }, [
+    activePath,
+    baseUrl,
+    fetchHistoryCommits,
+    historyRestoreBusy,
+    historyScopePath,
+    historySelectedSha,
+    loadFile,
+    readApiDetail,
+    refreshFiles,
+    workspaceId,
+  ]);
+
+  const restoreHistoryPath = useCallback(async () => {
+    if (!workspaceId || !historySelectedSha || !historyScopePath || historyRestoreBusy) {
+      return;
+    }
+    const label = historyScopeIsDir ? "folder" : "file";
+    const confirmed = window.confirm(
+      `Restore ${label} '${historyScopePath}' from commit ${historySelectedSha.slice(0, 12)}?`
+    );
+    if (!confirmed) return;
+
+    setHistoryRestoreBusy(true);
+    setHistoryError(null);
+    setHistoryStatus(null);
+    try {
+      const res = await fetch(
+        `${baseUrl}/api/workspaces/${workspaceId}/history/${encodeURIComponent(
+          historySelectedSha
+        )}/restore-file`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: historyScopePath }),
+        }
+      );
+      if (!res.ok) {
+        throw new Error(await readApiDetail(res));
+      }
+      await refreshFiles(workspaceId);
+      if (activePath) {
+        if (
+          activePath === historyScopePath ||
+          (historyScopeIsDir && activePath.startsWith(`${historyScopePath}/`))
+        ) {
+          await loadFile(activePath);
+        }
+      }
+      setEditorDirty(false);
+      setHistoryStatus(`${label[0].toUpperCase()}${label.slice(1)} restored.`);
+      await fetchHistoryCommits(historyScopePath, true);
+    } catch (err: any) {
+      setHistoryError(err?.message ?? "Path restore failed.");
+    } finally {
+      setHistoryRestoreBusy(false);
+    }
+  }, [
+    activePath,
+    baseUrl,
+    fetchHistoryCommits,
+    historyRestoreBusy,
+    historyScopeIsDir,
+    historyScopePath,
+    historySelectedSha,
+    loadFile,
+    readApiDetail,
+    refreshFiles,
+    workspaceId,
+  ]);
+
+  useEffect(() => {
+    if (!historyOpen || !historySelectedSha) return;
+    void loadHistoryDiff(historySelectedSha, historyAgainstCurrent, historyScopePath);
+  }, [
+    historyAgainstCurrent,
+    historyOpen,
+    historyScopePath,
+    historySelectedSha,
+    loadHistoryDiff,
+  ]);
+
+  useEffect(() => {
+    if (!workspaceId || !activePath || isKdbx) {
+      clearAutosaveTimer();
+      return;
+    }
+    if (!editorDirty) {
+      clearAutosaveTimer();
+      return;
+    }
+    clearAutosaveTimer();
+    autosaveTimerRef.current = window.setTimeout(() => {
+      void flushPendingEditorSave();
+    }, 1000);
+    return () => {
+      clearAutosaveTimer();
+    };
+  }, [
+    activePath,
+    clearAutosaveTimer,
+    editorDirty,
+    editorValue,
+    flushPendingEditorSave,
+    isKdbx,
+    workspaceId,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearAutosaveTimer();
+      if (hostVarsSyncTimerRef.current == null) return;
+      window.clearTimeout(hostVarsSyncTimerRef.current);
+      hostVarsSyncTimerRef.current = null;
+    };
+  }, [clearAutosaveTimer]);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    const onCaptureClick = (event: MouseEvent) => {
+      if (!hasUnsavedChanges || bypassLeaveGuardRef.current) return;
+      const target = event.target as Element | null;
+      if (!target) return;
+
+      const tabButton = target.closest('button[role="tab"]') as HTMLButtonElement | null;
+      if (tabButton && tabButton.getAttribute("aria-selected") !== "true") {
+        event.preventDefault();
+        event.stopPropagation();
+        queueLeaveAction(() => {
+          bypassLeaveGuardRef.current = true;
+          tabButton.click();
+          window.setTimeout(() => {
+            bypassLeaveGuardRef.current = false;
+          }, 0);
+        });
+        return;
+      }
+
+      const link = target.closest("a[href]") as HTMLAnchorElement | null;
+      if (!link) return;
+      if (link.target && link.target !== "_self") return;
+      const href = link.getAttribute("href") || "";
+      if (!href || href.startsWith("#") || href.toLowerCase().startsWith("javascript:")) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      queueLeaveAction(() => {
+        bypassLeaveGuardRef.current = true;
+        window.location.assign(link.href);
+      });
+    };
+
+    document.addEventListener("click", onCaptureClick, true);
+    return () => {
+      document.removeEventListener("click", onCaptureClick, true);
+    };
+  }, [hasUnsavedChanges, queueLeaveAction]);
 
   const readWorkspaceUsers = async (): Promise<{
     doc: Record<string, unknown>;
@@ -1907,10 +2372,14 @@ export default function WorkspacePanel({
             currentId={workspaceId}
             workspaces={workspaceList}
             onSelect={(id) => {
-              void selectWorkspace(id);
+              queueLeaveAction(() => {
+                void selectWorkspace(id);
+              });
             }}
             onCreate={() => {
-              void createWorkspace();
+              queueLeaveAction(() => {
+                void createWorkspace();
+              });
             }}
           />,
           workspaceSwitcherTarget
@@ -2084,29 +2553,35 @@ export default function WorkspacePanel({
           workspaceLoading={workspaceLoading}
           deletingWorkspaceId={deletingWorkspaceId}
           onCreateWorkspace={() => {
-            void createWorkspace();
+            queueLeaveAction(() => {
+              void createWorkspace();
+            });
           }}
           onSelectWorkspace={(id) => {
-            void selectWorkspace(id);
+            queueLeaveAction(() => {
+              void selectWorkspace(id);
+            });
           }}
           onDeleteWorkspace={(id) => {
-            void (async () => {
-              const targetId = String(id || "").trim();
-              if (!targetId) return;
-              const confirmed = window.confirm(
-                `Delete workspace '${targetId}'? This action cannot be undone.`
-              );
-              if (!confirmed) return;
-              setWorkspaceError(null);
-              setDeletingWorkspaceId(targetId);
-              try {
-                await deleteWorkspace(targetId);
-              } catch (err: any) {
-                setWorkspaceError(err?.message ?? "failed to delete workspace");
-              } finally {
-                setDeletingWorkspaceId(null);
-              }
-            })();
+            queueLeaveAction(() => {
+              void (async () => {
+                const targetId = String(id || "").trim();
+                if (!targetId) return;
+                const confirmed = window.confirm(
+                  `Delete workspace '${targetId}'? This action cannot be undone.`
+                );
+                if (!confirmed) return;
+                setWorkspaceError(null);
+                setDeletingWorkspaceId(targetId);
+                try {
+                  await deleteWorkspace(targetId);
+                } catch (err: any) {
+                  setWorkspaceError(err?.message ?? "failed to delete workspace");
+                } finally {
+                  setDeletingWorkspaceId(null);
+                }
+              })();
+            });
           }}
         />
         <div className={styles.editorSection}>
@@ -2117,7 +2592,7 @@ export default function WorkspacePanel({
             editorDirty={editorDirty}
             editorLoading={editorLoading}
             saveFile={() => {
-              void saveFile(editorValue, editorDirty);
+              void flushPendingEditorSave();
             }}
             loadFile={(path: string) => {
               void loadFile(path);
@@ -2186,6 +2661,9 @@ export default function WorkspacePanel({
             uploadStatus={uploadStatus}
             openInventoryCleanup={openOrphanCleanupDialog}
             inventoryCleanupBusy={orphanCleanupLoading || orphanCleanupBusy}
+            onOpenHistory={() => {
+              openHistory(null, false, "history");
+            }}
             onUsersAction={(action: UsersAction) => {
               void openUsersEditor(action);
             }}
@@ -2490,6 +2968,224 @@ export default function WorkspacePanel({
           </div>
         </div>
       ) : null}
+      {historyOpen ? (
+        <div
+          className={styles.historyOverlay}
+          onClick={() => {
+            if (historyRestoreBusy) return;
+            setHistoryOpen(false);
+          }}
+        >
+          <div
+            className={styles.historyModal}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.historyHeader}>
+              <div>
+                <h3 className={styles.historyTitle}>Workspace History</h3>
+                <p className={`text-body-secondary ${styles.historyHint}`}>
+                  {historyScopePath
+                    ? `Scope: ${historyScopePath}${historyScopeIsDir ? " (recursive)" : ""}`
+                    : "Scope: entire workspace"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(false)}
+                disabled={historyRestoreBusy}
+                className={styles.historyActionButton}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className={styles.historyToolbar}>
+              <button
+                type="button"
+                onClick={() => setHistoryAgainstCurrent(false)}
+                className={`${styles.historyActionButton} ${
+                  !historyAgainstCurrent ? styles.historyActionButtonActive : ""
+                }`}
+              >
+                Commit diff
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryAgainstCurrent(true)}
+                className={`${styles.historyActionButton} ${
+                  historyAgainstCurrent ? styles.historyActionButtonActive : ""
+                }`}
+              >
+                Diff vs current
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void fetchHistoryCommits(historyScopePath, true);
+                }}
+                disabled={historyLoading}
+                className={styles.historyActionButton}
+              >
+                {historyLoading ? "Refreshing..." : "Refresh"}
+              </button>
+              {historyScopePath ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void restoreHistoryPath();
+                  }}
+                  disabled={!historySelectedSha || historyRestoreBusy}
+                  className={styles.historyDangerButton}
+                >
+                  {historyRestoreBusy && historyOpenIntent === "restore"
+                    ? "Restoring..."
+                    : "Restore this"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  void restoreHistoryWorkspace();
+                }}
+                disabled={!historySelectedSha || historyRestoreBusy}
+                className={styles.historyDangerButton}
+              >
+                {historyRestoreBusy ? "Restoring..." : "Restore workspace"}
+              </button>
+            </div>
+
+            {historyError ? (
+              <p className={`text-danger ${styles.historyMessage}`}>{historyError}</p>
+            ) : null}
+            {historyStatus ? (
+              <p className={`text-success ${styles.historyMessage}`}>{historyStatus}</p>
+            ) : null}
+
+            <div className={styles.historyBody}>
+              <aside className={styles.historyCommitColumn}>
+                {historyLoading ? (
+                  <p className={`text-body-secondary ${styles.historyHint}`}>
+                    Loading commits...
+                  </p>
+                ) : historyCommits.length === 0 ? (
+                  <p className={`text-body-secondary ${styles.historyHint}`}>
+                    No commits found for this scope.
+                  </p>
+                ) : (
+                  <div className={styles.historyCommitList}>
+                    {historyCommits.map((entry) => (
+                      <button
+                        key={entry.sha}
+                        type="button"
+                        onClick={() => setHistorySelectedSha(entry.sha)}
+                        className={`${styles.historyCommitButton} ${
+                          historySelectedSha === entry.sha
+                            ? styles.historyCommitButtonActive
+                            : ""
+                        }`}
+                      >
+                        <span className={styles.historyCommitSummary}>{entry.summary}</span>
+                        <span className={styles.historyCommitMeta}>
+                          {entry.sha.slice(0, 12)}
+                          {entry.created_at
+                            ? ` • ${new Date(entry.created_at).toLocaleString()}`
+                            : ""}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </aside>
+
+              <section className={styles.historyDiffColumn}>
+                {historySelectedCommit ? (
+                  <>
+                    <div className={styles.historySelectedMeta}>
+                      <strong>{historySelectedCommit.summary}</strong>
+                      <span className={`text-body-secondary ${styles.historyHint}`}>
+                        {historySelectedCommit.sha}
+                      </span>
+                    </div>
+                    {historyDisplayedFiles.length > 0 ? (
+                      <ul className={styles.historyFileList}>
+                        {historyDisplayedFiles.map((file, index) => (
+                          <li key={`${file.status}:${file.path}:${index}`}>
+                            <code>{file.status}</code>{" "}
+                            {file.old_path
+                              ? `${file.old_path} -> ${file.path}`
+                              : file.path}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className={`text-body-secondary ${styles.historyHint}`}>
+                        No file-level changes in this view.
+                      </p>
+                    )}
+                    <div className={styles.historyDiffWrap}>
+                      {historyDiffLoading ? (
+                        <p className={`text-body-secondary ${styles.historyHint}`}>
+                          Loading diff...
+                        </p>
+                      ) : historyDiff ? (
+                        <pre className={styles.historyDiffText}>{historyDiff}</pre>
+                      ) : (
+                        <p className={`text-body-secondary ${styles.historyHint}`}>
+                          No diff output available.
+                        </p>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <p className={`text-body-secondary ${styles.historyHint}`}>
+                    Select a commit to inspect details.
+                  </p>
+                )}
+              </section>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {leaveGuardOpen ? (
+        <div
+          className={styles.leaveGuardOverlay}
+          onClick={cancelPendingLeaveAction}
+        >
+          <div
+            className={styles.leaveGuardModal}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 className={styles.leaveGuardTitle}>Unsaved changes</h3>
+            <p className={`text-body-secondary ${styles.leaveGuardHint}`}>
+              {leaveGuardMessage || "Unsaved changes detected. Save and leave?"}
+            </p>
+            {lastSaveAckAt ? (
+              <p className={`text-body-secondary ${styles.leaveGuardHint}`}>
+                Last save acknowledged at {new Date(lastSaveAckAt).toLocaleTimeString()}.
+              </p>
+            ) : null}
+            <div className={styles.leaveGuardActions}>
+              <button
+                type="button"
+                onClick={() => {
+                  void saveAndExecutePendingLeaveAction();
+                }}
+                disabled={saveInProgress}
+                className={styles.leaveGuardSaveButton}
+              >
+                {saveInProgress ? "Saving..." : "Save and leave"}
+              </button>
+              <button
+                type="button"
+                onClick={cancelPendingLeaveAction}
+                className={styles.leaveGuardCancelButton}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <WorkspacePanelOverlays
         contextMenu={contextMenu}
         setContextMenu={setContextMenu}
@@ -2498,6 +3194,15 @@ export default function WorkspacePanel({
         renameFile={renameFile}
         downloadFile={downloadFile}
         deleteFile={deleteFile}
+        openHistoryForPath={(path: string, isDir: boolean) => {
+          openHistory(path, isDir, "history");
+        }}
+        openDiffCurrentForPath={(path: string, isDir: boolean) => {
+          openHistory(path, isDir, "diff-current");
+        }}
+        openRestoreForPath={(path: string, isDir: boolean) => {
+          openHistory(path, isDir, "restore");
+        }}
         setMasterChangeOpen={setMasterChangeOpen}
         setMasterChangeMode={setMasterChangeMode}
         setMasterChangeError={setMasterChangeError}

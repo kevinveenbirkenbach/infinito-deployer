@@ -138,8 +138,9 @@ class WorkspaceServiceManagementMixin:
         root = self.ensure(workspace_id)
         entries: list[dict[str, Any]] = []
 
-        for dirpath, _dirnames, filenames in os.walk(root):
+        for dirpath, dirnames, filenames in os.walk(root):
             current_dir = Path(dirpath)
+            dirnames[:] = [name for name in dirnames if name not in _HIDDEN_FILES]
             if current_dir != root:
                 directory_entry = _to_entry(root, current_dir, True)
                 if directory_entry:
@@ -184,6 +185,7 @@ class WorkspaceServiceManagementMixin:
     def write_file(self, workspace_id: str, rel_path: str, content: str) -> None:
         root = self.ensure(workspace_id)
         target = _safe_resolve(root, rel_path)
+        existed_before = target.exists()
         safe_mkdir(target.parent)
         try:
             atomic_write_text(target, content)
@@ -191,6 +193,8 @@ class WorkspaceServiceManagementMixin:
             raise HTTPException(
                 status_code=500, detail=f"failed to write file: {exc}"
             ) from exc
+        action = "edit" if existed_before else "create"
+        self._history_commit(root, f"{action}: {target.relative_to(root).as_posix()}")
 
     def create_dir(self, workspace_id: str, rel_path: str) -> str:
         root = self.ensure(workspace_id)
@@ -210,7 +214,9 @@ class WorkspaceServiceManagementMixin:
             raise HTTPException(
                 status_code=500, detail=f"failed to create directory: {exc}"
             ) from exc
-        return target.relative_to(root).as_posix()
+        path = target.relative_to(root).as_posix()
+        self._history_commit(root, f"create: {path}")
+        return path
 
     def rename_file(self, workspace_id: str, rel_path: str, new_path: str) -> str:
         root = self.ensure(workspace_id)
@@ -238,6 +244,10 @@ class WorkspaceServiceManagementMixin:
             raise HTTPException(
                 status_code=500, detail=f"failed to rename file: {exc}"
             ) from exc
+        self._history_commit(
+            root,
+            f"rename: {source.relative_to(root).as_posix()} -> {destination.relative_to(root).as_posix()}",
+        )
         return destination.relative_to(root).as_posix()
 
     def delete_file(self, workspace_id: str, rel_path: str) -> None:
@@ -255,3 +265,4 @@ class WorkspaceServiceManagementMixin:
             raise HTTPException(
                 status_code=500, detail=f"failed to delete file: {exc}"
             ) from exc
+        self._history_commit(root, f"delete: {target.relative_to(root).as_posix()}")

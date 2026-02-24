@@ -418,9 +418,243 @@
   display: none;
 }
 
+.historyOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1470;
+  background: rgba(4, 10, 24, 0.82);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.historyModal {
+  width: min(1220px, 96vw);
+  max-height: min(92vh, 920px);
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--deployer-panel-workspace-bg);
+  box-shadow: var(--deployer-shadow-strong);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.historyHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.historyTitle {
+  margin: 0;
+  font-size: 20px;
+}
+
+.historyHint {
+  margin: 0;
+  font-size: 12px;
+}
+
+.historyToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.historyActionButton,
+.historyDangerButton {
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.historyActionButton {
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+}
+
+.historyActionButtonActive {
+  border-color: var(--bs-info-border-subtle);
+  background: var(--bs-info-bg-subtle);
+  color: var(--bs-info-text-emphasis);
+}
+
+.historyDangerButton {
+  border: 1px solid var(--bs-danger-border-subtle);
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
+}
+
+.historyActionButton:disabled,
+.historyDangerButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.historyMessage {
+  margin: 0;
+}
+
+.historyBody {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+.historyCommitColumn,
+.historyDiffColumn {
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 12px;
+  background: var(--deployer-card-bg-soft);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+}
+
+.historyCommitList {
+  display: grid;
+  gap: 6px;
+  max-height: 64vh;
+  overflow: auto;
+}
+
+.historyCommitButton {
+  width: 100%;
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 10px;
+  background: rgba(12, 19, 35, 0.72);
+  color: var(--bs-body-color);
+  padding: 8px 10px;
+  text-align: left;
+  display: grid;
+  gap: 2px;
+  cursor: pointer;
+}
+
+.historyCommitButtonActive {
+  border-color: var(--bs-info-border-subtle);
+  box-shadow: inset 0 0 0 1px var(--bs-info-border-subtle);
+}
+
+.historyCommitSummary {
+  font-size: 13px;
+}
+
+.historyCommitMeta {
+  font-size: 11px;
+  color: var(--deployer-muted-ink);
+}
+
+.historySelectedMeta {
+  display: grid;
+  gap: 4px;
+}
+
+.historyFileList {
+  margin: 0;
+  padding-left: 18px;
+  max-height: 180px;
+  overflow: auto;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.historyDiffWrap {
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 10px;
+  background: rgba(8, 14, 28, 0.85);
+  padding: 8px;
+  min-height: 240px;
+  max-height: 52vh;
+  overflow: auto;
+}
+
+.historyDiffText {
+  margin: 0;
+  white-space: pre;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #dbe7ff;
+}
+
+.leaveGuardOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1480;
+  background: rgba(4, 10, 24, 0.82);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.leaveGuardModal {
+  width: min(520px, 92vw);
+  border-radius: 14px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--deployer-panel-workspace-bg);
+  box-shadow: var(--deployer-shadow-strong);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.leaveGuardTitle {
+  margin: 0;
+  font-size: 18px;
+}
+
+.leaveGuardHint {
+  margin: 0;
+  font-size: 13px;
+}
+
+.leaveGuardActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.leaveGuardSaveButton,
+.leaveGuardCancelButton {
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.leaveGuardSaveButton {
+  border: 1px solid var(--bs-success-border-subtle);
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-success-text-emphasis);
+}
+
+.leaveGuardCancelButton {
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+}
+
+.leaveGuardSaveButton:disabled,
+.leaveGuardCancelButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 @media (max-width: 860px) {
   .usersFormGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .historyBody {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

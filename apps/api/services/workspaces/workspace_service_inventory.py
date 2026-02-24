@@ -159,6 +159,11 @@ class WorkspaceServiceInventoryMixin:
         safe_mkdir(host_vars_path.parent)
         atomic_write_text(host_vars_path, _dump_yaml_mapping(existing))
         self._ensure_inventory_alias(root, alias_value)
+        self._history_commit(
+            root,
+            f"context: update provider device ({alias_value})",
+            metadata={"server": alias_value},
+        )
 
         return {
             "alias": alias_value,
@@ -187,6 +192,11 @@ class WorkspaceServiceInventoryMixin:
         safe_mkdir(host_vars_path.parent)
         atomic_write_text(host_vars_path, _dump_yaml_mapping(data))
         self._ensure_inventory_alias(root, alias_value)
+        self._history_commit(
+            root,
+            f"context: set primary domain ({alias_value})",
+            metadata={"server": alias_value},
+        )
 
         return {
             "alias": alias_value,
@@ -296,6 +306,11 @@ class WorkspaceServiceInventoryMixin:
             raise HTTPException(
                 status_code=500, detail=f"failed to write host vars file: {exc}"
             ) from exc
+        self._history_commit(
+            root,
+            f"edit: {host_vars_path.relative_to(root).as_posix()}",
+            metadata={"server": alias_value, "role": normalized_role_id},
+        )
 
         return {
             "role_id": normalized_role_id,
@@ -327,6 +342,11 @@ class WorkspaceServiceInventoryMixin:
                 raise HTTPException(
                     status_code=500, detail=f"failed to write host vars file: {exc}"
                 ) from exc
+            self._history_commit(
+                root,
+                f"context: import role defaults ({normalized_role_id})",
+                metadata={"server": alias_value, "role": normalized_role_id},
+            )
 
         return {
             "role_id": normalized_role_id,
@@ -450,3 +470,4 @@ class WorkspaceServiceInventoryMixin:
         )
         _write_meta(root, meta)
         _ensure_secrets_dirs(root)
+        self._history_commit(root, "bulk: inventory generation")
