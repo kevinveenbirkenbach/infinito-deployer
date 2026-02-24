@@ -80,6 +80,28 @@ def runner_env() -> Dict[str, str]:
     return env
 
 
+def _split_stream_buffer(buffer: str) -> tuple[list[str], str]:
+    lines: list[str] = []
+    while True:
+        idx_n = buffer.find("\n")
+        idx_r = buffer.find("\r")
+
+        if idx_n == -1 and idx_r == -1:
+            break
+
+        if idx_n == -1:
+            idx = idx_r
+        elif idx_r == -1:
+            idx = idx_n
+        else:
+            idx = idx_n if idx_n < idx_r else idx_r
+
+        lines.append(buffer[:idx])
+        buffer = buffer[idx + 1 :]
+
+    return lines, buffer
+
+
 def start_process(
     *,
     run_path: Path,
@@ -102,8 +124,8 @@ def start_process(
         cwd=str(cwd),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
+        text=False,
+        bufsize=0,
         env=runner_env(),
         start_new_session=True,  # new process group/session
     )
@@ -111,18 +133,29 @@ def start_process(
     def _reader() -> None:
         if proc.stdout is None:
             return
+        buf = ""
+        secrets_list = list(secrets or [])
+
+        def _emit(raw_line: str) -> None:
+            masked = mask_secrets(raw_line, secrets_list)
+            log_fh.write(masked + "\n")
+            if on_line is not None:
+                try:
+                    on_line(masked)
+                except Exception:
+                    pass
+
         try:
-            for line in proc.stdout:
-                line = line.rstrip("\n")
-                parts = line.split("\r")
-                for part in parts:
-                    masked = mask_secrets(part, secrets or [])
-                    log_fh.write(masked + "\n")
-                    if on_line is not None:
-                        try:
-                            on_line(masked)
-                        except Exception:
-                            pass
+            while True:
+                chunk = os.read(proc.stdout.fileno(), 4096)
+                if not chunk:
+                    break
+                buf += chunk.decode("utf-8", errors="replace")
+                lines, buf = _split_stream_buffer(buf)
+                for line in lines:
+                    _emit(line)
+            if buf:
+                _emit(buf)
         finally:
             try:
                 proc.stdout.close()

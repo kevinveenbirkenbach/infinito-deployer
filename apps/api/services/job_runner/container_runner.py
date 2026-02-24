@@ -30,7 +30,7 @@ def _require_absolute(path: str, label: str) -> Path:
     if not p.is_absolute():
         raise HTTPException(
             status_code=500,
-            detail=f"{label} must be an absolute path when using JOB_RUNNER_BACKEND=container",
+            detail=f"{label} must be an absolute path for containerized jobs",
         )
     return p
 
@@ -155,6 +155,8 @@ def build_container_command(
         [
             "-e",
             f"PYTHONPATH={cfg.repo_dir}",
+            "-e",
+            "PYTHONUNBUFFERED=1",
             "-w",
             cfg.repo_dir,
             cfg.image,

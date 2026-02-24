@@ -19,7 +19,7 @@ from services.workspaces import WorkspaceService
 from .paths import job_paths, jobs_root
 from .persistence import load_json, mask_request_for_persistence, write_meta
 from .runner import start_process, terminate_process_group, write_runner_script
-from .config import env_bool, runner_backend
+from .config import env_bool
 from .container_runner import (
     build_container_command,
     load_container_config,
@@ -137,19 +137,9 @@ class JobRunnerService:
         write_meta(p.meta_path, meta)
 
         runner_args = None
-        backend = runner_backend()
-        if backend not in {"local", "container"}:
-            raise HTTPException(
-                status_code=500,
-                detail="JOB_RUNNER_BACKEND must be 'local' or 'container'",
-            )
-
         if not os.environ.get("RUNNER_CMD"):
-            cfg = None
-            inventory_arg = str(p.inventory_path)
-            if backend == "container":
-                cfg = load_container_config()
-                inventory_arg = f"{cfg.workdir}/inventory.yml"
+            cfg = load_container_config()
+            inventory_arg = f"{cfg.workdir}/inventory.yml"
 
             cli_args = self._build_runner_args(
                 req=req,
@@ -158,21 +148,18 @@ class JobRunnerService:
                 roles_from_inventory=roles_from_inventory,
             )
 
-            if backend == "container":
-                runner_args, container_id, cfg = build_container_command(
-                    job_id=job_id,
-                    job_dir=p.job_dir,
-                    cli_args=cli_args,
-                    cfg=cfg,
-                )
-                meta["container_id"] = container_id
-                if cfg.skip_cleanup:
-                    meta["skip_cleanup"] = True
-                if cfg.skip_build:
-                    meta["skip_build"] = True
-                write_meta(p.meta_path, meta)
-            else:
-                runner_args = cli_args
+            runner_args, container_id, cfg = build_container_command(
+                job_id=job_id,
+                job_dir=p.job_dir,
+                cli_args=cli_args,
+                cfg=cfg,
+            )
+            meta["container_id"] = container_id
+            if cfg.skip_cleanup:
+                meta["skip_cleanup"] = True
+            if cfg.skip_build:
+                meta["skip_build"] = True
+            write_meta(p.meta_path, meta)
 
         try:
             proc, log_fh, reader = start_process(
@@ -324,14 +311,6 @@ class JobRunnerService:
         inventory_arg: str,
         roles_from_inventory: List[str],
     ) -> List[str]:
-        repo_root = (os.getenv("INFINITO_REPO_PATH") or "").strip()
-        if repo_root:
-            if not Path(repo_root).is_dir():
-                raise HTTPException(
-                    status_code=500, detail="INFINITO_REPO_PATH is invalid"
-                )
-        elif runner_backend() == "local":
-            raise HTTPException(status_code=500, detail="INFINITO_REPO_PATH is not set")
         if not inventory_path.is_file():
             raise HTTPException(status_code=500, detail="inventory.yml is missing")
 

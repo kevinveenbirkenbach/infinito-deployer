@@ -113,6 +113,7 @@ async def stream_logs(job_id: str, request: Request) -> StreamingResponse:
     async def event_stream():
         last_status = None
         buffer = ""
+        received_hub_data = bool(buffered_lines)
         log_fh = None
         terminal_since: float | None = None
         last_heartbeat = time.monotonic()
@@ -150,9 +151,15 @@ async def stream_logs(job_id: str, request: Request) -> StreamingResponse:
                     except Exception:
                         break
                     new_data = True
+                    received_hub_data = True
                     yield _sse_event("log", mask_secrets(line, secrets))
 
-                if not new_data and log_fh is None and paths.log_path.exists():
+                if (
+                    not received_hub_data
+                    and not new_data
+                    and log_fh is None
+                    and paths.log_path.exists()
+                ):
                     # Fallback for older jobs created before the log hub.
                     log_fh = open(
                         paths.log_path,

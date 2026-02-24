@@ -4,10 +4,16 @@ import unittest
 from tempfile import TemporaryDirectory
 from pathlib import Path
 
-from services.job_runner.runner import write_runner_script
+from services.job_runner.runner import _split_stream_buffer, write_runner_script
 
 
 class TestRunnerScript(unittest.TestCase):
+    def test_split_stream_buffer_handles_cr_and_lf(self) -> None:
+        lines, rest = _split_stream_buffer("one\rtwo\nthree")
+
+        self.assertEqual(lines, ["one", "two"])
+        self.assertEqual(rest, "three")
+
     def test_runner_cmd_propagates_exit_and_output(self) -> None:
         with TemporaryDirectory() as tmp:
             run_path = Path(tmp) / "run.sh"
