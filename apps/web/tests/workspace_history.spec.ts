@@ -274,9 +274,9 @@ test("history entry point is available via workspace menu only", async ({
 
   await expect(page.getByRole("button", { name: "History" })).toHaveCount(0);
   await page.getByRole("button", { name: "Workspace" }).click();
-  await expect(page.getByRole("button", { name: "History..." })).toBeVisible();
+  await expect(page.getByRole("button", { name: "History" })).toBeVisible();
 
-  await page.getByRole("button", { name: "History..." }).click();
+  await page.getByRole("button", { name: "History" }).click();
   await expect(page.getByRole("heading", { name: "Workspace History" })).toBeVisible();
   await expect(page.getByText("Scope: entire workspace")).toBeVisible();
 });
@@ -322,7 +322,7 @@ test("restore workspace triggers refresh feedback", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("tab", { name: "Inventory" }).click();
   await page.getByRole("button", { name: "Workspace" }).click();
-  await page.getByRole("button", { name: "History..." }).click();
+  await page.getByRole("button", { name: "History" }).click();
   await expect(page.getByRole("heading", { name: "Workspace History" })).toBeVisible();
 
   page.once("dialog", (dialog) => dialog.accept());

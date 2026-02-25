@@ -99,7 +99,7 @@ Rules:
 Global entry points:
 
 - [x] Inventory bottom menu includes `History`
-- [x] Workspace menu includes `History...`
+- [x] Workspace menu includes `History`
 - [x] Both open the same history component/state
 
 History modal/panel:

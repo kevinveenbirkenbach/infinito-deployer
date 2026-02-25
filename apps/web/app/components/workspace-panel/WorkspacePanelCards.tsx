@@ -309,8 +309,8 @@ export default function WorkspacePanelCards(props: any) {
                       className={styles.menuItem}
                     >
                       <span className={styles.menuItemLabel}>
-                        <i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />
-                        History...
+                        <i className="fa-solid fa-clock" aria-hidden="true" />
+                        History
                       </span>
                     </button>
                   </li>
