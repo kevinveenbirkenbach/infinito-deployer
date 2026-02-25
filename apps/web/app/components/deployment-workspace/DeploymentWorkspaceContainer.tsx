@@ -6,7 +6,6 @@ import YAML from "yaml";
 import RoleDashboard from "../RoleDashboard";
 import DeploymentCredentialsForm from "../DeploymentCredentialsForm";
 import WorkspacePanel from "../WorkspacePanel";
-import LiveDeploymentView from "../LiveDeploymentView";
 import DeploymentWorkspaceServerSwitcher from "../DeploymentWorkspaceServerSwitcher";
 import styles from "../DeploymentWorkspace.module.css";
 import { sanitizeAliasFilename } from "../workspace-panel/utils";
@@ -48,7 +47,6 @@ import {
   GROUP_VARS_DOMAIN_CATALOG_KEY,
   buildDomainCatalogPayload,
   createDefaultDomainEntries,
-  inferDomainKind,
   isLikelyFqdn,
   isValidDomainToken,
   normalizeDomainLabel,
@@ -58,13 +56,14 @@ import {
   readPrimaryDomainFromGroupVars,
 } from "./domain-utils";
 import {
-  createDeviceStyle,
   encodeWorkspacePath,
-  isPortInvalid,
-  normalizePortValue,
   parseApiError,
   parseYamlMapping,
 } from "./helpers";
+import IntroPanel from "./panels/IntroPanel";
+import DomainPanel from "./panels/DomainPanel";
+import DeployPanel from "./panels/DeployPanel";
+import BillingPanel from "./panels/BillingPanel";
 
 const DEFAULT_DEVICE_ALIAS = "device";
 
@@ -2081,71 +2080,20 @@ export default function DeploymentWorkspace({
     [servers]
   );
 
-  const billingMatrixRows = useMemo(() => {
-    const hardwareCount = servers.length;
-    const selectedAppsCount = Object.values(selectedRolesByAlias || {}).reduce(
-      (sum, roles) => sum + (Array.isArray(roles) ? roles.length : 0),
-      0
-    );
-    const supportSeats = hardwareCount > 0 ? 1 : 0;
-    return [
-      {
-        item: "Hardware management",
-        quantity: hardwareCount,
-        unit: 9,
-        recurring: hardwareCount * 9,
-        setup: hardwareCount * 29,
-      },
-      {
-        item: "Software workload",
-        quantity: selectedAppsCount,
-        unit: 3,
-        recurring: selectedAppsCount * 3,
-        setup: 0,
-      },
-      {
-        item: "Support baseline",
-        quantity: supportSeats,
-        unit: 19,
-        recurring: supportSeats * 19,
-        setup: 0,
-      },
-    ];
-  }, [servers, selectedRolesByAlias]);
-
-  const billingRecurringTotal = billingMatrixRows.reduce(
-    (sum, row) => sum + row.recurring,
-    0
+  const selectedAppsCount = useMemo(
+    () =>
+      Object.values(selectedRolesByAlias || {}).reduce(
+        (sum, roles) => sum + (Array.isArray(roles) ? roles.length : 0),
+        0
+      ),
+    [selectedRolesByAlias]
   );
-  const billingSetupTotal = billingMatrixRows.reduce((sum, row) => sum + row.setup, 0);
 
   const panels: WorkspaceTabPanel[] = [
     {
       key: "intro",
       title: "Intro",
-      content: (
-        <div className={styles.introPanel}>
-          <h3 className={styles.placeholderTitle}>Welcome to your deployment workspace</h3>
-          <p className={styles.placeholderCopy}>
-            Placeholder: Hier kommt eine kurze Einfuehrung zum Ablauf von
-            Software-Auswahl, Hardware-Konfiguration, Inventory und Setup hinein.
-          </p>
-          <div className={styles.introVideoWrap}>
-            <iframe
-              title="2026-02-18 13-25-09"
-              src="https://video.infinito.nexus/videos/embed/5YmUZYWUaaNcEy5vH5pHrQ"
-              frameBorder="0"
-              allowFullScreen
-              sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-              className={styles.introVideo}
-            />
-          </div>
-          <p className={styles.placeholderCopy}>
-            Placeholder: In einem naechsten Schritt koennen wir hier auch eine
-            Checkliste mit den wichtigsten ersten Schritten ergaenzen.
-          </p>
-        </div>
-      ),
+      content: <IntroPanel />,
     },
     {
       key: "store",
@@ -2180,153 +2128,33 @@ export default function DeploymentWorkspace({
       key: "domain",
       title: "Domain",
       content: (
-        <div className={styles.domainPanel}>
-          <div className={styles.domainTableFilters}>
-            <input
-              value={domainFilterQuery}
-              onChange={(event) => setDomainFilterQuery(event.target.value)}
-              placeholder="Filter domains"
-              className={`form-control ${styles.domainFilterInput}`}
-            />
-            <select
-              value={domainFilterKind}
-              onChange={(event) =>
-                setDomainFilterKind(event.target.value as DomainFilterKind)
-              }
-              className={`form-select ${styles.domainFilterSelect}`}
-            >
-              <option value="all">All types</option>
-              <option value="local">Local</option>
-              <option value="fqdn">FQDN</option>
-              <option value="subdomain">Subdomain</option>
-            </select>
-            <button
-              type="button"
-              onClick={() => openDomainPopup()}
-              className={styles.modeActionButton}
-            >
-              <i className="fa-solid fa-plus" aria-hidden="true" />
-              <span>Add new</span>
-            </button>
-          </div>
-
-          {primaryDomainModalError ? (
-            <p className={styles.primaryDomainError}>{primaryDomainModalError}</p>
-          ) : null}
-
-          <div className={styles.domainTableWrap}>
-            <table className={styles.domainTable}>
-              <thead>
-                <tr>
-                  <th>Default</th>
-                  <th>Domain</th>
-                  <th>Type</th>
-                  <th>Parent FQDN</th>
-                  <th>Devices</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredDomainEntries.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className={styles.domainTableEmpty}>
-                      No domains match the current filter.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredDomainEntries.map((entry) => {
-                    const domainKey = normalizeDomainName(entry.domain);
-                    const inUse = (domainUsageByName.get(domainKey) || 0) > 0;
-                    const hasChildren = domainEntries.some(
-                      (item) =>
-                        item.kind === "subdomain" &&
-                        normalizeDomainName(item.parentFqdn || "") === domainKey
-                    );
-                    const removeBlocked =
-                      domainKey === DEFAULT_PRIMARY_DOMAIN || hasChildren || inUse;
-                    const removeTitle =
-                      domainKey === DEFAULT_PRIMARY_DOMAIN
-                        ? "localhost is required."
-                        : hasChildren
-                        ? "Remove subdomains first."
-                        : inUse
-                        ? "Reassign devices before removing this domain."
-                        : "Remove domain";
-                    const addSubdomainParent =
-                      entry.kind === "fqdn"
-                        ? normalizeDomainName(entry.domain)
-                        : entry.kind === "subdomain"
-                        ? normalizeDomainName(entry.parentFqdn || "")
-                        : "";
-                    const addSubdomainBlocked = !addSubdomainParent;
-                    const addSubdomainTitle = addSubdomainBlocked
-                      ? "Subdomains require a FQDN parent."
-                      : `Add subdomain under ${addSubdomainParent}`;
-                    return (
-                      <tr key={entry.id}>
-                        <td>
-                          <input
-                            type="radio"
-                            name="workspace-primary-domain-radio"
-                            checked={
-                              normalizeDomainName(primaryDomainDraft) === domainKey
-                            }
-                            onChange={() => {
-                              setPrimaryDomainDraft(entry.domain);
-                              setPrimaryDomainModalError(null);
-                              void persistWorkspaceDomainSettings({
-                                entries: domainEntries,
-                                primaryDomain: entry.domain,
-                              });
-                            }}
-                            aria-label={`Set ${entry.domain} as workspace primary domain`}
-                          />
-                        </td>
-                        <td>
-                          <code>{entry.domain}</code>
-                        </td>
-                        <td>{entry.kind}</td>
-                        <td>
-                          {entry.parentFqdn ? <code>{entry.parentFqdn}</code> : "—"}
-                        </td>
-                        <td>{domainUsageByName.get(domainKey) || 0}</td>
-                        <td>
-                          <div className={styles.domainActionRow}>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openDomainPopup("subdomain", {
-                                  kind: "subdomain",
-                                  parentFqdn: addSubdomainParent,
-                                })
-                              }
-                              disabled={addSubdomainBlocked}
-                              title={addSubdomainTitle}
-                              className={styles.domainActionButton}
-                            >
-                              <i className="fa-solid fa-sitemap" aria-hidden="true" />
-                              <span>Add subdomain</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => removeDomainEntry(entry.domain)}
-                              disabled={removeBlocked}
-                              title={removeTitle}
-                              className={styles.domainRemoveButton}
-                            >
-                              <i className="fa-solid fa-trash" aria-hidden="true" />
-                              <span>Remove</span>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DomainPanel
+          filterQuery={domainFilterQuery}
+          onFilterQueryChange={setDomainFilterQuery}
+          filterKind={domainFilterKind}
+          onFilterKindChange={setDomainFilterKind}
+          onOpenAddDomain={(kind = "fqdn") => openDomainPopup(kind)}
+          primaryDomainError={primaryDomainModalError}
+          filteredEntries={filteredDomainEntries}
+          allEntries={domainEntries}
+          domainUsageByName={domainUsageByName}
+          primaryDomainDraft={primaryDomainDraft}
+          onSelectPrimaryDomain={(domain) => {
+            setPrimaryDomainDraft(domain);
+            setPrimaryDomainModalError(null);
+            void persistWorkspaceDomainSettings({
+              entries: domainEntries,
+              primaryDomain: domain,
+            });
+          }}
+          onOpenAddSubdomain={(parentFqdn) =>
+            openDomainPopup("subdomain", {
+              kind: "subdomain",
+              parentFqdn,
+            })
+          }
+          onRemoveDomain={removeDomainEntry}
+        />
       ),
     },
     {
@@ -2402,394 +2230,60 @@ export default function DeploymentWorkspace({
       key: "deploy",
       title: "Setup",
       content: (
-        <div className={styles.deployLayout}>
-          <div className={styles.deployTabs}>
-            <button
-              type="button"
-              onClick={() => setDeployViewTab("live-log")}
-              className={`${styles.deployTabButton} ${
-                deployViewTab === "live-log" ? styles.deployTabButtonActive : ""
-              }`}
-            >
-              Deploy devices
-            </button>
-            <button
-              type="button"
-              onClick={() => setDeployViewTab("terminal")}
-              className={`${styles.deployTabButton} ${
-                deployViewTab === "terminal" ? styles.deployTabButtonActive : ""
-              }`}
-            >
-              Terminal
-            </button>
-          </div>
-
-          {deployError ? <div className={styles.errorText}>{deployError}</div> : null}
-          {liveError ? <div className={styles.errorText}>{liveError}</div> : null}
-
-          <div className={styles.deployBody}>
-            <div
-              className={`${styles.deployTabPanel} ${
-                deployViewTab === "live-log" ? styles.deployTabPanelActive : ""
-              }`}
-              aria-hidden={deployViewTab !== "live-log"}
-            >
-              <div className={styles.serverTableCard} style={deployTableStyle}>
-                <div className={styles.serverTableTop}>
-                  <span className={styles.serverTableTitle}>Deploy devices</span>
-                  <span className={`text-body-secondary ${styles.serverTableMeta}`}>
-                    {deploySelection.size} selected
-                  </span>
-                </div>
-                <div className={styles.serverTableHeader}>
-                  <span>Status</span>
-                  <span>Device</span>
-                  <span>Host</span>
-                  <span>Port</span>
-                  <span>User</span>
-                  <span>Apps</span>
-                  <span>Edit</span>
-                  <span>Select</span>
-                </div>
-                <div className={styles.serverTableRows}>
-                  {servers.map((server) => {
-                    const alias = String(server.alias || "").trim();
-                    if (!alias) return null;
-                    const roles = selectedRolesByAlias?.[alias] ?? [];
-                    const filteredRoles = (Array.isArray(roles) ? roles : []).filter(
-                      (roleId) =>
-                        deployRoleFilter.size === 0 || deployRoleFilter.has(roleId)
-                    );
-                    const hasRoles = filteredRoles.length > 0;
-                    const isDeployed = deployedAliases.has(alias);
-                    const isSelected = deploySelection.has(alias);
-                    const hostMissing = !String(server.host || "").trim();
-                    const userMissing = !String(server.user || "").trim();
-                    const portInvalid = isPortInvalid(server.port);
-                    const authMissing = isAuthMissing(server);
-                    const appsMissing = !hasRoles;
-                    const isConfigured =
-                      !hostMissing && !userMissing && !portInvalid && !authMissing;
-                    const isSelectable = hasRoles && isConfigured && !isDeployed;
-                    const connectionState = getConnectionState(server);
-                    const statusToneClass = isDeployed
-                      ? styles.statusDotGreen
-                      : connectionState.toneClass;
-                    const statusTooltip = isDeployed
-                      ? "Device was included in the last successful deployment."
-                      : hasRoles
-                      ? connectionState.tooltip
-                      : "No apps selected for this device.";
-                    const tintAllowed =
-                      !isDeployed &&
-                      isConfigured &&
-                      connectionState.rowClass !== styles.serverRowMissingCredentials;
-                    const rowStyle = tintAllowed
-                      ? createDeviceStyle(server.color, {
-                          backgroundAlpha: 0.16,
-                          borderAlpha: 0.56,
-                          outlineAlpha: 0.86,
-                        })
-                      : undefined;
-                    const roleText = hasRoles ? `${filteredRoles.length} apps` : "—";
-                    const roleTitle = hasRoles
-                      ? filteredRoles.sort().join(", ")
-                      : "No apps selected";
-                    return (
-                      <div
-                        key={alias}
-                        className={`${styles.serverRow} ${
-                          connectionState.rowClass
-                        } ${isSelected ? styles.serverRowSelected : ""} ${
-                          tintAllowed ? styles.serverRowTinted : ""
-                        }`}
-                        style={rowStyle}
-                      >
-                        <div
-                          className={`${styles.statusCell} ${
-                            isDeployed ? styles.statusCellDeployed : ""
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            className={styles.statusDotButton}
-                            title={statusTooltip}
-                            aria-label={`Status: ${
-                              isDeployed ? "Deployed" : connectionState.label
-                            }`}
-                          >
-                            <span
-                              className={`${styles.statusDot} ${statusToneClass}`}
-                              aria-hidden="true"
-                            />
-                          </button>
-                        </div>
-                        <span className={styles.aliasCell}>
-                          <span className={styles.aliasWithEmoji}>
-                            <span aria-hidden="true">{server.logoEmoji || "💻"}</span>
-                            <span>{alias}</span>
-                          </span>
-                        </span>
-                        <div className={styles.tableInputWrap}>
-                          <input
-                            value={server.host}
-                            onChange={(event) =>
-                              updateServer(alias, { host: event.target.value })
-                            }
-                            onBlur={(event) =>
-                              void testConnectionForServer({
-                                ...server,
-                                host: event.currentTarget.value,
-                              })
-                            }
-                            placeholder="example.com"
-                            className={`${styles.tableInput} ${
-                              hostMissing ? styles.tableInputMissing : ""
-                            }`}
-                          />
-                          {hostMissing ? (
-                            <span className={styles.cellAlert} title="Host is required.">
-                              !
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className={styles.tableInputWrap}>
-                          <input
-                            type="number"
-                            value={server.port}
-                            onChange={(event) =>
-                              updateServer(alias, {
-                                port: normalizePortValue(event.target.value),
-                              })
-                            }
-                            onBlur={() =>
-                              {
-                                const normalized = normalizePortValue(server.port) || "22";
-                                updateServer(alias, {
-                                  port: normalized,
-                                });
-                                void testConnectionForServer({
-                                  ...server,
-                                  port: normalized,
-                                });
-                              }
-                            }
-                            placeholder="22"
-                            min={1}
-                            max={65535}
-                            step={1}
-                            inputMode="numeric"
-                            className={`${styles.tableInput} ${
-                              portInvalid ? styles.tableInputMissing : ""
-                            }`}
-                          />
-                          {portInvalid ? (
-                            <span
-                              className={styles.cellAlert}
-                              title="Port must be between 1 and 65535."
-                            >
-                              !
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className={styles.tableInputWrap}>
-                          <input
-                            value={server.user}
-                            onChange={(event) =>
-                              updateServer(alias, { user: event.target.value })
-                            }
-                            onBlur={(event) =>
-                              void testConnectionForServer({
-                                ...server,
-                                user: event.currentTarget.value,
-                              })
-                            }
-                            placeholder="root"
-                            className={`${styles.tableInput} ${
-                              userMissing ? styles.tableInputMissing : ""
-                            }`}
-                          />
-                          {userMissing ? (
-                            <span className={styles.cellAlert} title="User is required.">
-                              !
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className={styles.appsCell} title={roleTitle}>
-                          <span className={styles.roleCell}>{roleText}</span>
-                          {appsMissing ? (
-                            <span
-                              className={styles.cellAlert}
-                              title="Select at least one app for this device."
-                            >
-                              !
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className={styles.credentialsCell}>
-                          <button
-                            type="button"
-                            onClick={() => openCredentialsFor(alias)}
-                            className={`${styles.smallButton} ${styles.smallButtonEnabled}`}
-                          >
-                            <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
-                            <span>Edit</span>
-                          </button>
-                        </div>
-                        <div>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            disabled={!isSelectable}
-                            onChange={() => toggleDeployAlias(alias)}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className={styles.serverTableFooter}>
-                  <button
-                    type="button"
-                    onClick={() => setDeployRolePickerOpen(true)}
-                    className={`${styles.smallButton} ${styles.smallButtonEnabled}`}
-                    disabled={inventoryRoleIds.length === 0}
-                    title="Choose apps passed to infinito deploy --id"
-                  >
-                    <i className="fa-solid fa-list-check" aria-hidden="true" />
-                    <span>Apps: {deployRoleSummary}</span>
-                  </button>
-                  <button
-                    onClick={selectAllDeployAliases}
-                    disabled={selectableAliases.length === 0}
-                    className={`${styles.smallButton} ${
-                      selectableAliases.length === 0
-                        ? styles.smallButtonDisabled
-                        : styles.smallButtonEnabled
-                    }`}
-                  >
-                    Select all
-                  </button>
-                  <button
-                    onClick={deselectAllDeployAliases}
-                    disabled={selectableAliases.length === 0}
-                    className={`${styles.smallButton} ${
-                      selectableAliases.length === 0
-                        ? styles.smallButtonDisabled
-                        : styles.smallButtonEnabled
-                    }`}
-                  >
-                    Deselect all
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div
-              className={`${styles.deployTabPanel} ${
-                deployViewTab === "terminal" ? styles.deployTabPanelActive : ""
-              }`}
-              aria-hidden={deployViewTab !== "terminal"}
-            >
-              <div className={styles.liveWrap}>
-                <LiveDeploymentView
-                  baseUrl={baseUrl}
-                  jobId={liveJobId}
-                  compact
-                  fill
-                  hideControls
-                  connectRequestKey={connectRequestKey}
-                  cancelRequestKey={cancelRequestKey}
-                  onJobIdSync={setLiveJobId}
-                  onConnectedChange={setLiveConnected}
-                  onCancelingChange={setLiveCanceling}
-                  onErrorChange={setLiveError}
-                  onStatusChange={handleDeploymentStatus}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className={styles.deployFooter}>
-            <input
-              value={liveJobId}
-              onChange={(event) => {
-                setLiveError(null);
-                setLiveJobId(event.target.value);
-              }}
-              placeholder="Job ID"
-              className={`form-control ${styles.jobInput}`}
-            />
-            <button
-              type="button"
-              onClick={requestConnect}
-              disabled={!liveJobId.trim() || liveConnected}
-              className={`btn btn-info ${styles.footerButton}`}
-            >
-              {liveConnected ? "Connected" : "Connect"}
-            </button>
-            <button
-              type="button"
-              onClick={startDeployment}
-              disabled={!canDeploy}
-              className={`btn btn-success ${styles.footerButton}`}
-            >
-              {deploying ? "Deploying..." : "Deploy"}
-            </button>
-            <button
-              type="button"
-              onClick={requestCancel}
-              disabled={!liveJobId.trim() || liveCanceling || !liveConnected}
-              className={`btn btn-danger ${styles.footerButton}`}
-            >
-              {liveCanceling ? "Canceling..." : "Cancel"}
-            </button>
-          </div>
-        </div>
+        <DeployPanel
+          baseUrl={baseUrl}
+          deployViewTab={deployViewTab}
+          onDeployViewTabChange={setDeployViewTab}
+          deployError={deployError}
+          liveError={liveError}
+          deployTableStyle={deployTableStyle}
+          deploySelection={deploySelection}
+          servers={servers}
+          selectedRolesByAlias={selectedRolesByAlias}
+          deployRoleFilter={deployRoleFilter}
+          deployedAliases={deployedAliases}
+          onUpdateServer={updateServer}
+          onTestConnection={testConnectionForServer}
+          isAuthMissing={isAuthMissing}
+          getConnectionState={getConnectionState}
+          onOpenCredentials={openCredentialsFor}
+          onToggleDeployAlias={toggleDeployAlias}
+          onOpenDeployRolePicker={() => setDeployRolePickerOpen(true)}
+          inventoryRoleIds={inventoryRoleIds}
+          deployRoleSummary={deployRoleSummary}
+          selectableAliases={selectableAliases}
+          onSelectAllDeployAliases={selectAllDeployAliases}
+          onDeselectAllDeployAliases={deselectAllDeployAliases}
+          liveJobId={liveJobId}
+          onLiveJobIdChange={(value) => {
+            setLiveError(null);
+            setLiveJobId(value);
+          }}
+          onRequestConnect={requestConnect}
+          onStartDeployment={startDeployment}
+          onRequestCancel={requestCancel}
+          canDeploy={canDeploy}
+          deploying={deploying}
+          liveConnected={liveConnected}
+          liveCanceling={liveCanceling}
+          connectRequestKey={connectRequestKey}
+          cancelRequestKey={cancelRequestKey}
+          onJobIdSync={setLiveJobId}
+          onConnectedChange={setLiveConnected}
+          onCancelingChange={setLiveCanceling}
+          onLiveErrorChange={setLiveError}
+          onStatusChange={handleDeploymentStatus}
+        />
       ),
     },
     {
       key: "billing",
       title: "Billing",
       content: (
-        <div className={styles.billingPanel}>
-          <div className={styles.billingTableWrap}>
-            <table className={styles.billingTable}>
-              <thead>
-                <tr>
-                  <th>Position</th>
-                  <th>Menge</th>
-                  <th>Einzelpreis (EUR/Monat)</th>
-                  <th>Laufend (EUR/Monat)</th>
-                  <th>Einmalig (EUR)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {billingMatrixRows.map((row) => (
-                  <tr key={row.item}>
-                    <td>{row.item}</td>
-                    <td>{row.quantity}</td>
-                    <td>{row.unit.toFixed(2)}</td>
-                    <td>{row.recurring.toFixed(2)}</td>
-                    <td>{row.setup.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td>Summe</td>
-                  <td />
-                  <td />
-                  <td>{billingRecurringTotal.toFixed(2)}</td>
-                  <td>{billingSetupTotal.toFixed(2)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-          <p className={styles.billingHint}>
-            Placeholder-Matrix fuer den ersten Billing-Ueberblick.
-          </p>
-        </div>
+        <BillingPanel
+          hardwareCount={servers.length}
+          selectedAppsCount={selectedAppsCount}
+        />
       ),
     },
   ];
