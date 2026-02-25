@@ -10,7 +10,6 @@ import LiveDeploymentView from "../LiveDeploymentView";
 import DeploymentWorkspaceServerSwitcher from "../DeploymentWorkspaceServerSwitcher";
 import styles from "../DeploymentWorkspace.module.css";
 import { sanitizeAliasFilename } from "../workspace-panel/utils";
-import { createInitialState } from "../../lib/deploy_form";
 import {
   createServerPlaceholder,
   normalizePersistedDeviceMeta,
@@ -67,44 +66,23 @@ import {
   parseYamlMapping,
 } from "./helpers";
 
+const DEFAULT_DEVICE_ALIAS = "device";
+
 export default function DeploymentWorkspace({
   baseUrl,
   onJobCreated,
 }: DeploymentWorkspaceProps) {
-  const initial = useMemo(() => createInitialState(), []);
   const [roles, setRoles] = useState<Role[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [rolesError, setRolesError] = useState<string | null>(null);
-  const [servers, setServers] = useState<ServerState[]>([
-    {
-      alias: initial.alias,
-      description: initial.description,
-      primaryDomain: initial.primaryDomain || DEFAULT_PRIMARY_DOMAIN,
-      requirementServerType: initial.requirementServerType || "vps",
-      requirementStorageGb: initial.requirementStorageGb || "200",
-      requirementLocation: initial.requirementLocation || "Germany",
-      host: initial.host,
-      port: initial.port,
-      user: initial.user,
-      color: pickUniqueDeviceColor(new Set<string>()),
-      logoEmoji:
-        normalizeDeviceEmoji(initial.logoEmoji) ||
-        pickUniqueDeviceEmoji(new Set<string>()),
-      authMethod: initial.authMethod,
-      password: initial.password,
-      privateKey: initial.privateKey,
-      publicKey: initial.publicKey,
-      keyAlgorithm: initial.keyAlgorithm,
-      keyPassphrase: initial.keyPassphrase,
-    },
-  ]);
-  const [activeAlias, setActiveAlias] = useState(initial.alias);
+  const [servers, setServers] = useState<ServerState[]>([]);
+  const [activeAlias, setActiveAlias] = useState("");
   const [selectedByAlias, setSelectedByAlias] = useState<
     Record<string, Set<string>>
-  >(() => ({ [initial.alias]: new Set<string>() }));
+  >(() => ({}));
   const [selectedPlansByAlias, setSelectedPlansByAlias] = useState<
     Record<string, Record<string, string | null>>
-  >(() => ({ [initial.alias]: {} }));
+  >(() => ({}));
   const [aliasRenames, setAliasRenames] = useState<AliasRename[]>([]);
   const [aliasDeletes, setAliasDeletes] = useState<string[]>([]);
   const [aliasCleanups, setAliasCleanups] = useState<string[]>([]);
@@ -1314,6 +1292,21 @@ export default function DeploymentWorkspace({
         .filter(Boolean);
 
       if (aliases.length === 0) {
+        setSelectedByAlias((prev) => {
+          if (Object.keys(prev).length > 0) return prev;
+          return { [DEFAULT_DEVICE_ALIAS]: new Set<string>() };
+        });
+        setSelectedPlansByAlias((prev) => {
+          if (Object.keys(prev).length > 0) return prev;
+          return { [DEFAULT_DEVICE_ALIAS]: {} };
+        });
+        setServers((prev) => {
+          if (prev.length > 0) return prev;
+          return normalizePersistedDeviceMeta([
+            createServerPlaceholder(DEFAULT_DEVICE_ALIAS),
+          ]);
+        });
+        setActiveAlias((prev) => prev || DEFAULT_DEVICE_ALIAS);
         return;
       }
 

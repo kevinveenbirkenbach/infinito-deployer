@@ -79,3 +79,32 @@ export type WorkspaceListEntry = {
   last_modified_at?: string | null;
   last_used?: string | null;
 };
+
+export type UsersAction =
+  | "overview"
+  | "add"
+  | "import-csv"
+  | "import-yaml"
+  | "export-csv"
+  | "export-yaml";
+
+export type HistoryOpenIntent = "history" | "diff-current" | "restore";
+
+export type WorkspaceHistoryFileChange = {
+  status: string;
+  path: string;
+  old_path?: string | null;
+};
+
+export type WorkspaceHistoryCommit = {
+  sha: string;
+  created_at?: string | null;
+  summary: string;
+  files: WorkspaceHistoryFileChange[];
+};
+
+export type OrphanCleanupItem = {
+  path: string;
+  alias: string;
+  kind: "host_vars" | "ssh_key_private" | "ssh_key_public";
+};

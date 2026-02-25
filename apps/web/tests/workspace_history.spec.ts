@@ -353,3 +353,34 @@ test("unsaved changes guard can save-and-leave and flush pending write", async (
     "true"
   );
 });
+
+test("users overview can add and persist a user to group_vars/all.yml", async ({
+  page,
+}) => {
+  const state = await mockWorkspaceApi(page);
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Inventory" }).click();
+
+  await page.getByRole("button", { name: "Users" }).click();
+  await page.getByRole("button", { name: "Overview" }).click();
+  await expect(page.getByText("Users overview from")).toBeVisible();
+
+  await page.getByRole("button", { name: "New" }).click();
+  await expect(page.getByRole("heading", { name: "Add user" })).toBeVisible();
+
+  await page.getByLabel("Username* (a-z0-9)").fill("alice");
+  await page.getByLabel("Firstname*").fill("Alice");
+  await page.getByLabel("Lastname*").fill("Admin");
+  await page.getByLabel("Email (optional)").fill("alice@example.local");
+  await page.getByRole("button", { name: "Add user" }).click();
+
+  await expect(page.getByText("alice", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Save users" }).click();
+
+  await expect(
+    page.getByText("Saved 1 user(s) to group_vars/all.yml.", { exact: true })
+  ).toBeVisible();
+  await expect.poll(() => state.fileContents["group_vars/all.yml"]).toContain(
+    "username: alice"
+  );
+});
