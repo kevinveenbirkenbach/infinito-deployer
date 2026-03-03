@@ -152,18 +152,32 @@ export default function WorkspacePanel({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const fromQuery =
-      readQueryParam("user") || readQueryParam("workspace_user");
-    const stored = window.localStorage.getItem(USER_STORAGE_KEY);
-    const resolved = fromQuery || stored;
-    if (resolved) {
-      if (fromQuery && fromQuery !== stored) {
-        window.localStorage.setItem(USER_STORAGE_KEY, resolved);
+    const sync = () => {
+      const fromQuery =
+        readQueryParam("user") || readQueryParam("workspace_user");
+      const stored = window.localStorage.getItem(USER_STORAGE_KEY);
+      const resolved = fromQuery || stored;
+      if (resolved) {
+        if (fromQuery && fromQuery !== stored) {
+          window.localStorage.setItem(USER_STORAGE_KEY, resolved);
+        }
+        setUserId(resolved);
+      } else {
+        setUserId(null);
       }
-      setUserId(resolved);
-    } else {
-      setUserId(null);
-    }
+    };
+    sync();
+    const onStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== USER_STORAGE_KEY) return;
+      sync();
+    };
+    const onSessionUpdate = () => sync();
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("infinito:account-session-updated", onSessionUpdate);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("infinito:account-session-updated", onSessionUpdate);
+    };
   }, []);
 
   useEffect(() => {

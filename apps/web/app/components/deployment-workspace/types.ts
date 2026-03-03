@@ -77,7 +77,7 @@ export type PanelKey =
   | "server"
   | "inventory"
   | "deploy"
-  | "billing";
+  | "account";
 
 export type PanelQueryKey =
   | "intro"
@@ -86,6 +86,7 @@ export type PanelQueryKey =
   | "hardware"
   | "inventory"
   | "setup"
+  | "account"
   | "billing";
 
 export const PANEL_QUERY_TO_KEY: Record<string, PanelKey> = {
@@ -96,7 +97,8 @@ export const PANEL_QUERY_TO_KEY: Record<string, PanelKey> = {
   device: "server",
   inventory: "inventory",
   setup: "deploy",
-  billing: "billing",
+  account: "account",
+  billing: "account",
 };
 
 export const PANEL_KEY_TO_QUERY: Record<PanelKey, PanelQueryKey> = {
@@ -106,7 +108,7 @@ export const PANEL_KEY_TO_QUERY: Record<PanelKey, PanelQueryKey> = {
   server: "hardware",
   inventory: "inventory",
   deploy: "setup",
-  billing: "billing",
+  account: "account",
 };
 
 export const PANEL_ICON_BY_KEY: Record<PanelKey, string> = {
@@ -116,7 +118,7 @@ export const PANEL_ICON_BY_KEY: Record<PanelKey, string> = {
   server: "fa-server",
   inventory: "fa-box-archive",
   deploy: "fa-screwdriver-wrench",
-  billing: "fa-file-invoice",
+  account: "fa-user",
 };
 
 export type WorkspaceTabPanel = {

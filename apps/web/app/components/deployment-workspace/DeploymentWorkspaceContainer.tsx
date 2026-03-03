@@ -63,7 +63,7 @@ import {
 import IntroPanel from "./panels/IntroPanel";
 import DomainPanel from "./panels/DomainPanel";
 import DeployPanel from "./panels/DeployPanel";
-import BillingPanel from "./panels/BillingPanel";
+import AccountPanel, { type AccountTabKey } from "./panels/AccountPanel";
 
 const DEFAULT_DEVICE_ALIAS = "device";
 
@@ -160,6 +160,7 @@ export default function DeploymentWorkspace({
     string | null
   >(null);
   const [activePanel, setActivePanel] = useState<PanelKey>("intro");
+  const [accountTab, setAccountTab] = useState<AccountTabKey>("profile");
   const handleModeChange = useCallback(
     (mode: "customer" | "expert") => {
       if (mode === deviceMode) return;
@@ -186,6 +187,9 @@ export default function DeploymentWorkspace({
     const panelParam = String(params.get("ui_panel") || "").trim().toLowerCase();
     const modeParam = String(params.get("ui_mode") || "").trim().toLowerCase();
     const aliasParam = String(params.get("ui_device") || "").trim();
+    if (panelParam === "billing") {
+      setAccountTab("billing");
+    }
     if (panelParam && PANEL_QUERY_TO_KEY[panelParam]) {
       setActivePanel(PANEL_QUERY_TO_KEY[panelParam]);
     }
@@ -2080,15 +2084,6 @@ export default function DeploymentWorkspace({
     [servers]
   );
 
-  const selectedAppsCount = useMemo(
-    () =>
-      Object.values(selectedRolesByAlias || {}).reduce(
-        (sum, roles) => sum + (Array.isArray(roles) ? roles.length : 0),
-        0
-      ),
-    [selectedRolesByAlias]
-  );
-
   const panels: WorkspaceTabPanel[] = [
     {
       key: "intro",
@@ -2277,12 +2272,16 @@ export default function DeploymentWorkspace({
       ),
     },
     {
-      key: "billing",
-      title: "Billing",
+      key: "account",
+      title: "Account",
       content: (
-        <BillingPanel
-          hardwareCount={servers.length}
-          selectedAppsCount={selectedAppsCount}
+        <AccountPanel
+          baseUrl={baseUrl}
+          roles={roles}
+          selectedRolesByAlias={selectedRolesByAlias}
+          selectedPlansByAlias={selectedPlansByAlias}
+          activeTab={accountTab}
+          onTabChange={setAccountTab}
         />
       ),
     },

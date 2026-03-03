@@ -120,11 +120,68 @@
 
 .introPanel,
 .placeholderPanel,
-.billingPanel {
+.billingPanel,
+.accountPanel {
   display: flex;
   flex-direction: column;
   gap: 10px;
   min-height: 0;
+}
+
+.accountSubTabList {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  width: fit-content;
+}
+
+.accountSubTabButton {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.accountSubTabButtonActive {
+  border-color: var(--bs-body-color);
+  background: var(--deployer-card-bg-soft);
+  color: var(--bs-body-color);
+  box-shadow: var(--deployer-shadow);
+}
+
+.accountCard {
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 16px;
+  background: var(--bs-body-bg);
+  box-shadow: var(--deployer-shadow);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  max-width: 560px;
+}
+
+.accountCardTitle {
+  margin: 0;
+  font-size: 18px;
+}
+
+.accountCardHint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--deployer-muted-ink);
+}
+
+.accountCardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .placeholderTitle {
@@ -186,6 +243,12 @@
 
 .billingTable tfoot td {
   font-weight: 700;
+}
+
+.billingNoteRow {
+  font-size: 12px;
+  color: var(--deployer-muted-ink);
+  white-space: normal;
 }
 
 .billingHint {
@@ -432,6 +495,104 @@
 
 .smallButtonDisabled {
   cursor: not-allowed;
+}
+
+.smallButtonDanger {
+  border-color: color-mix(in srgb, var(--bs-danger) 60%, var(--bs-border-color) 40%);
+  color: var(--bs-danger-text-emphasis);
+}
+
+.smallButtonDanger:hover {
+  background: color-mix(in srgb, var(--bs-danger) 14%, var(--bs-body-bg) 86%);
+}
+
+.accountAuthOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 10, 18, 0.72);
+  display: grid;
+  place-items: center;
+  z-index: 240;
+}
+
+.accountAuthCard {
+  width: min(560px, 92vw);
+  max-height: min(86vh, 720px);
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  box-shadow: var(--deployer-shadow-strong);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.accountAuthHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.accountAuthTitle {
+  margin: 0;
+  font-size: 18px;
+}
+
+.accountAuthHint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--deployer-muted-ink);
+}
+
+.accountAuthModeRow {
+  display: inline-flex;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-tertiary-bg);
+  width: fit-content;
+}
+
+.accountAuthModeButton {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--deployer-muted-ink);
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.accountAuthModeButtonActive {
+  border-color: var(--bs-body-color);
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  box-shadow: var(--deployer-shadow);
+}
+
+.accountAuthError {
+  font-size: 12px;
+}
+
+.accountAuthForm {
+  display: grid;
+  gap: 10px;
+}
+
+.accountAuthField {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--deployer-muted-ink);
+}
+
+.accountAuthActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .errorList {
