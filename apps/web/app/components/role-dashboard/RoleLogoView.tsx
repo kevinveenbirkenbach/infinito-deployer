@@ -4,15 +4,17 @@ import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { SIMPLEICON_CDN } from "./constants";
 import { simpleIconCandidates } from "./helpers";
-import styles from "./styles.module.css";
+import styles from "./styles";
 import type { Role } from "./types";
 
 export default function RoleLogoView({
   role,
   size,
+  className,
 }: {
   role: Role;
   size: number;
+  className?: string;
 }) {
   const simpleIconUrls = useMemo(() => {
     const candidates = simpleIconCandidates(role.display_name, role.id);
@@ -76,8 +78,10 @@ export default function RoleLogoView({
     "--role-logo-initial-size": `${Math.max(14, Math.floor(size * 0.32))}px`,
   } as CSSProperties;
 
+  const rootClassName = className ? `${styles.logoRoot} ${className}` : styles.logoRoot;
+
   return (
-    <div className={styles.logoRoot} style={logoSizeStyle}>
+    <div className={rootClassName} style={logoSizeStyle}>
       <div
         className={`${styles.logoFallbackLayer} ${
           simpleIconVisible ? styles.logoLayerHidden : styles.logoLayerVisible

@@ -1,7 +1,7 @@
 "use client";
 
 import BundleAppList, { type BundleAppListRow } from "./BundleAppList";
-import styles from "./styles.module.css";
+import styles from "./styles";
 import type { Bundle, Role } from "./types";
 
 type BundleDetailsModalProps = {

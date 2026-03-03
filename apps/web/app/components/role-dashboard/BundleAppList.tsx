@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import RoleLogoView from "./RoleLogoView";
-import styles from "./styles.module.css";
+import styles from "./styles";
 import type { Role } from "./types";
 
 export type BundleAppListRow = {

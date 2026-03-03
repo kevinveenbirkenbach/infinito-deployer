@@ -6,7 +6,7 @@ import { colorForStatus, displayTargets } from "./helpers";
 import EnableDropdown from "./EnableDropdown";
 import RoleLogoView from "./RoleLogoView";
 import RoleQuickLinks from "./RoleQuickLinks";
-import styles from "./styles.module.css";
+import styles from "./styles";
 import type { Role, ViewConfig, ViewMode } from "./types";
 
 type RoleGridViewProps = {

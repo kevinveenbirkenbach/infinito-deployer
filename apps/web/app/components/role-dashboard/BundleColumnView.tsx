@@ -9,7 +9,7 @@ import type {
 import BundleAppList, { type BundleAppListRow } from "./BundleAppList";
 import BundleDetailsModal from "./BundleDetailsModal";
 import EnableDropdown from "./EnableDropdown";
-import styles from "./styles.module.css";
+import styles from "./styles";
 import type { Bundle, Role } from "./types";
 
 type ColumnVariant = "row" | "column";
@@ -94,14 +94,17 @@ function bundleIconClass(bundle: Bundle): string {
   return raw || "fa-solid fa-layer-group";
 }
 
-function bundleLogo(bundle: Bundle, size: number) {
+function bundleLogo(bundle: Bundle, size: number, className?: string) {
   const logoSizeStyle = {
     "--role-logo-size": `${size}px`,
     "--role-logo-meta-size": `${Math.max(20, Math.floor(size * 0.82))}px`,
     "--role-logo-initial-size": `${Math.max(14, Math.floor(size * 0.32))}px`,
   } as CSSProperties;
   return (
-    <div className={styles.logoRoot} style={logoSizeStyle}>
+    <div
+      className={className ? `${styles.logoRoot} ${className}` : styles.logoRoot}
+      style={logoSizeStyle}
+    >
       <i className={`${bundleIconClass(bundle)} ${styles.logoMetaIcon}`} aria-hidden="true" />
     </div>
   );
@@ -575,7 +578,11 @@ export default function BundleColumnView({
                                       </h3>
                                     </header>
                                     <div className={styles.columnLogoFrame}>
-                                      {bundleLogo(bundle, Math.max(92, iconSize + 28))}
+                                      {bundleLogo(
+                                        bundle,
+                                        Math.max(92, iconSize + 28),
+                                        styles.logoRootColumnVertical
+                                      )}
                                     </div>
                                     <div className={styles.columnBadgeRow}>
                                       <p

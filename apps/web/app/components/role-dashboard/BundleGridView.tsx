@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import BundleAppList, { type BundleAppListRow } from "./BundleAppList";
 import BundleDetailsModal from "./BundleDetailsModal";
 import EnableDropdown from "./EnableDropdown";
-import styles from "./styles.module.css";
+import styles from "./styles";
 import type { Bundle, Role, ViewConfig, ViewMode } from "./types";
 
 type BundleState = {

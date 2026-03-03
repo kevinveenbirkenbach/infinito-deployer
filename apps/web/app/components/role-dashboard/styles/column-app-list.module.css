@@ -1,0 +1,210 @@
+.bundleAppListShell {
+  width: 100%;
+  min-width: 0;
+  position: relative;
+  display: grid;
+  gap: 8px;
+}
+
+.bundleAppListShellCompact {
+  gap: 6px;
+}
+
+.bundleAppListStatus {
+  width: 100%;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--deployer-muted-ink);
+}
+
+.bundleAppListMenu {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  width: 100%;
+}
+
+.bundleAppListNavButton {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+
+.bundleAppListNavButton:hover {
+  border-color: var(--bs-info-border-subtle);
+  color: var(--bs-info-text-emphasis);
+}
+
+.bundleAppListNavLabel {
+  font-size: 10px;
+  line-height: 1;
+  min-width: 34px;
+  text-align: center;
+  color: var(--deployer-muted-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.bundleAppListViewport {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.bundleAppListShellCompact .bundleAppListViewport {
+  gap: 4px;
+}
+
+.bundleAppListTrack {
+  display: grid;
+  gap: 6px;
+}
+
+.bundleAppListShellCompact .bundleAppListTrack {
+  gap: 4px;
+}
+
+.bundleAppListItem {
+  min-height: 28px;
+  width: 100%;
+  min-width: 0;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: color-mix(in srgb, var(--bs-tertiary-bg) 72%, transparent);
+  color: var(--bs-body-color);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(70px, auto);
+  align-items: center;
+  gap: 14px;
+  padding: 4px 8px;
+  font-size: 11px;
+  text-align: left;
+}
+
+.bundleAppListShellCompact .bundleAppListItem {
+  min-height: 24px;
+  gap: 10px;
+  padding: 3px 7px;
+  font-size: 10px;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(64px, auto);
+}
+
+.bundleAppListLogo {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--deployer-muted-ink);
+}
+
+.bundleAppListShellCompact .bundleAppListLogo {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+}
+
+.bundleAppListLogo i {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.bundleAppListShellCompact .bundleAppListLogo i {
+  font-size: 9px;
+}
+
+.bundleAppListItem:hover {
+  border-color: var(--bs-info-border-subtle);
+  background: color-mix(in srgb, var(--bs-info-bg-subtle) 64%, transparent);
+}
+
+.bundleAppListItemUsed {
+  border-color: var(--bs-success-border-subtle);
+  background: color-mix(in srgb, var(--bs-success-bg-subtle) 64%, transparent);
+}
+
+.bundleAppListItemUsed:hover {
+  border-color: var(--bs-success-border-subtle);
+  background: color-mix(in srgb, var(--bs-success-bg-subtle) 74%, transparent);
+}
+
+.bundleAppListItemDisabled {
+  opacity: 0.74;
+  cursor: default;
+}
+
+.bundleAppListName {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bundleAppListPrice {
+  white-space: nowrap;
+  color: var(--deployer-muted-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.bundleAppListShellCompact .bundleAppListPrice {
+  font-size: 10px;
+}
+
+.bundleAppListDetailsButton {
+  min-height: 22px;
+  min-width: 70px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 7px;
+  font-size: 10px;
+  white-space: nowrap;
+  justify-self: end;
+}
+
+.bundleAppListShellCompact .bundleAppListDetailsButton {
+  min-height: 20px;
+  min-width: 64px;
+  padding: 0 6px;
+  font-size: 10px;
+}
+
+.bundleAppListDetailsButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.bundleAppListDetailsButton:not(:disabled):hover {
+  border-color: var(--bs-info-border-subtle);
+  color: var(--bs-info-text-emphasis);
+}
+
+.bundleAppListShellCompact .bundleAppListMenu {
+  gap: 5px;
+}
+
+.bundleAppListShellCompact .bundleAppListNavButton {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+}
+
+.bundleAppListShellCompact .bundleAppListNavLabel {
+  font-size: 10px;
+}
+

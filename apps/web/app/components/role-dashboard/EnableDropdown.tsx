@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import styles from "./styles.module.css";
+import styles from "./styles";
 
 type PlanOption = { id: string; label: string };
 type PricingModel = "app" | "bundle";

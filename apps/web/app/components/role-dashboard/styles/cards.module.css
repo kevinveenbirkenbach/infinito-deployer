@@ -1,0 +1,455 @@
+.gridRoot {
+  display: grid;
+  grid-template-columns: repeat(var(--role-grid-columns, 1), minmax(0, 1fr));
+  grid-auto-rows: var(--role-grid-row-height, auto);
+  gap: var(--role-grid-gap, 16px);
+  align-content: start;
+}
+
+.cardBase {
+  background: var(--bs-body-bg);
+  border-radius: 18px;
+  box-shadow: var(--deployer-shadow);
+  min-width: 0;
+  overflow: visible;
+  transition: border-color 220ms ease, background-color 220ms ease;
+}
+
+.cardDefault {
+  border: 2px solid var(--bs-info-border-subtle);
+  background: color-mix(in srgb, var(--bs-info-bg-subtle) 74%, var(--bs-body-bg) 26%);
+}
+
+.cardSelected {
+  border: 2px solid var(--bs-success-border-subtle);
+  background: color-mix(in srgb, var(--bs-success-bg-subtle) 80%, var(--bs-body-bg) 20%);
+}
+
+.cardDeselectedFlash {
+  border: 2px solid var(--bs-danger-border-subtle);
+  background: color-mix(in srgb, var(--bs-danger-bg-subtle) 82%, var(--bs-body-bg) 18%);
+  animation: deselectedFadeToInfo 3s ease-out forwards;
+}
+
+@keyframes deselectedFadeToInfo {
+  0% {
+    border-color: var(--bs-danger-border-subtle);
+    background: color-mix(in srgb, var(--bs-danger-bg-subtle) 82%, var(--bs-body-bg) 18%);
+  }
+
+  100% {
+    border-color: var(--bs-info-border-subtle);
+    background: color-mix(in srgb, var(--bs-info-bg-subtle) 74%, var(--bs-body-bg) 26%);
+  }
+}
+
+.horizontalCard {
+  min-height: var(--role-card-min-height, 240px);
+  height: 100%;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.horizontalHeader {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.roleMetaWrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.roleTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.roleTitle {
+  margin: 0;
+  font-size: 16px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statusBadge {
+  flex-shrink: 0;
+  width: fit-content;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--status-bg, var(--bs-secondary-bg-subtle));
+  color: var(--status-fg, var(--bs-secondary-text-emphasis));
+  border: 1px solid var(--status-border, var(--bs-secondary-border-subtle));
+}
+
+.roleDescriptionShort {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.roleDescriptionLong {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.roleDescriptionOneLine {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--bs-body-color);
+  min-height: 1.4em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.targetList {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.targetBadge {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+  border: 1px solid var(--bs-border-color);
+}
+
+.targetBadgeTiny {
+  font-size: 10px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+  border: 1px solid var(--bs-border-color);
+}
+
+.bundleList {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.bundleBadge {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bs-info-bg-subtle) 75%, transparent);
+  color: var(--bs-info-text-emphasis);
+  border: 1px solid var(--bs-info-border-subtle);
+}
+
+.bundleBadgeTiny {
+  font-size: 10px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bs-info-bg-subtle) 75%, transparent);
+  color: var(--bs-info-text-emphasis);
+  border: 1px solid var(--bs-info-border-subtle);
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.selectButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.roleActionButtons {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+
+.selectButtonDefault {
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+}
+
+.selectButtonSelected {
+  border: 1px solid var(--bs-body-color);
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+}
+
+.horizontalLinks {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.miniCard {
+  position: relative;
+  min-height: var(--role-card-min-height, 120px);
+  height: 100%;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  outline: none;
+}
+
+.miniCardSelected {
+  border: 2px solid var(--bs-success-border-subtle);
+  background: color-mix(in srgb, var(--bs-success-bg-subtle) 80%, var(--bs-body-bg) 20%);
+}
+
+.miniCardDeselectedFlash {
+  animation: deselectedFadeToInfo 3s ease-out forwards;
+}
+
+.miniTitle {
+  width: 100%;
+  font-size: 11px;
+  text-align: center;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.miniCard:focus-visible {
+  box-shadow: 0 0 0 2px var(--bs-info);
+}
+
+.miniSelectedBadge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bs-body-color);
+  color: var(--bs-body-bg);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+}
+
+.miniEditButton {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--deployer-muted-ink);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.miniTooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translate(-50%, -10px);
+  min-width: 220px;
+  max-width: 280px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--bs-body-bg);
+  box-shadow: var(--deployer-shadow);
+  font-size: 12px;
+  display: grid;
+  gap: 6px;
+  z-index: 10;
+}
+
+.tooltipTitle {
+  font-weight: 600;
+}
+
+.tooltipDescription {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.detailCard {
+  min-height: var(--role-card-min-height, 240px);
+  height: 100%;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.bundleCard {
+  min-height: var(--role-card-min-height, 240px);
+  height: 100%;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bundleHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bundleHeaderText {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.bundleFooterMeta {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+}
+
+.bundleFooterRow {
+  margin-top: auto;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.bundleControlRow {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.bundleRoleCount {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-tertiary-bg);
+  color: var(--deployer-muted-ink);
+}
+
+.detailTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.detailHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.detailHeaderMeta {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  flex: 1;
+}
+
+.detailBadgeRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.detailPlanBadge {
+  min-width: 0;
+  font-size: 12px;
+  padding: 5px 9px;
+  border-radius: 10px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detailRoleMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: nowrap;
+  flex: 1;
+}
+
+.detailControlRow {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  width: 100%;
+}
+
+.detailLinks {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.detailFooterRow {
+  margin-top: auto;
+  display: block;
+  gap: 8px;
+  min-width: 0;
+}
+
+.detailLinksRow {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  min-width: 0;
+  overflow: hidden;
+}
+

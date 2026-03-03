@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { quickLinksForRole, toEmbedUrl } from "./helpers";
-import styles from "./styles.module.css";
+import styles from "./styles";
 import type { Role } from "./types";
 
 type RoleQuickLinksProps = {

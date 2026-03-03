@@ -10,7 +10,7 @@ import { colorForStatus } from "./helpers";
 import EnableDropdown from "./EnableDropdown";
 import RoleLogoView from "./RoleLogoView";
 import RoleQuickLinks from "./RoleQuickLinks";
-import styles from "./styles.module.css";
+import styles from "./styles";
 import type { Role } from "./types";
 
 type ColumnVariant = "row" | "column";
@@ -521,7 +521,11 @@ export default function RoleColumnView({
                                     </h3>
                                   </header>
                                   <div className={styles.columnLogoFrame}>
-                                    <RoleLogoView role={role} size={Math.max(92, iconSize + 28)} />
+                                    <RoleLogoView
+                                      role={role}
+                                      size={Math.max(92, iconSize + 28)}
+                                      className={styles.logoRootColumnVertical}
+                                    />
                                   </div>
                                   <div className={styles.columnBadgeRow}>
                                     <span

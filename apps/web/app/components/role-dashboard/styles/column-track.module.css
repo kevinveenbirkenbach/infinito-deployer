@@ -1,0 +1,207 @@
+.columnEmpty {
+  padding: 10px 4px;
+  font-size: 13px;
+}
+
+.columnRoot {
+  --column-card-gap: 16px;
+  display: grid;
+  min-height: 0;
+  height: 100%;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.columnRootRow {
+  align-content: start;
+}
+
+.columnRootColumn {
+  align-content: stretch;
+}
+
+.columnLanes {
+  display: grid;
+  min-height: 0;
+  height: 100%;
+  gap: var(--column-card-gap, 16px);
+  width: 100%;
+  align-content: stretch;
+}
+
+.columnLanesRow {
+  grid-template-rows: repeat(
+    var(--column-lane-count, 1),
+    minmax(0, var(--column-lane-size, 180px))
+  );
+  align-content: start;
+}
+
+.columnLanesColumn {
+  grid-template-columns: repeat(
+    var(--column-lane-count, 1),
+    minmax(0, var(--column-lane-size, 220px))
+  );
+  justify-content: start;
+  align-items: stretch;
+}
+
+.columnLane {
+  display: grid;
+  min-height: 0;
+  min-width: 0;
+}
+
+.columnLaneRow {
+  height: var(--column-lane-size, 180px);
+}
+
+.columnLaneColumn {
+  width: var(--column-lane-size, 220px);
+}
+
+.columnViewport {
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  height: 100%;
+  width: 100%;
+}
+
+.columnViewportInteractive {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.columnViewportDragging {
+  cursor: grabbing;
+}
+
+.columnTrack {
+  display: flex;
+  gap: 0;
+  will-change: transform;
+}
+
+.columnTrackHorizontal {
+  align-items: stretch;
+  width: max-content;
+  animation: columnTrackMarqueeX var(--column-scroll-duration, 18s) linear infinite;
+}
+
+.columnTrackVertical {
+  flex-direction: column;
+  align-items: stretch;
+  height: max-content;
+  animation: columnTrackMarqueeY var(--column-scroll-duration, 20s) linear infinite;
+}
+
+.columnTrackSegment {
+  display: flex;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+}
+
+.columnTrackSegmentRow {
+  align-items: stretch;
+  gap: var(--column-card-gap, 16px);
+  padding-right: var(--column-card-gap, 16px);
+}
+
+.columnTrackSegmentColumn {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--column-card-gap, 16px);
+  padding-bottom: var(--column-card-gap, 16px);
+}
+
+.columnTrackPaused {
+  animation-play-state: paused;
+}
+
+.columnTrackStatic {
+  animation: none;
+  transform: none;
+}
+
+.columnTrackReverse {
+  animation-direction: reverse;
+}
+
+@keyframes columnTrackMarqueeX {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  100% {
+    transform: translate3d(-33.333333%, 0, 0);
+  }
+}
+
+@keyframes columnTrackMarqueeY {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  100% {
+    transform: translate3d(0, -33.333333%, 0);
+  }
+}
+
+.columnCard {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.columnCardRow {
+  width: var(--column-row-card-width, 560px);
+  height: var(--column-lane-size, 180px);
+  padding: 12px;
+}
+
+.columnCardColumn {
+  width: 100%;
+  min-height: var(--column-column-card-min-height, 300px);
+  aspect-ratio: 1 / 2;
+  padding: 14px;
+}
+
+.columnCardLayout {
+  display: grid;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+
+.columnCardLayoutRow {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.columnCardLayoutColumn {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+@media (max-width: 980px) {
+  .columnCardRow {
+    width: min(640px, 92vw);
+  }
+}
+
+
+@media (max-width: 900px) {
+  .columnLanesColumn {
+    grid-template-columns: repeat(
+      var(--column-lane-count, 1),
+      minmax(0, min(220px, var(--column-lane-size, 220px)))
+    );
+  }
+}
+
