@@ -1,0 +1,10 @@
+ansible_host: test-arch
+ansible_user: deploy
+ansible_port: 22
+DOMAIN_PRIMARY: localhost
+description: Local Arch SSH test target
+server_requirements:
+  server_type: vps
+  storage_gb: 200
+  location: Germany
+color: "#3A86FF"

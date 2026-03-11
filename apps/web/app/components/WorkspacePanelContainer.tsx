@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { json as jsonLang } from "@codemirror/lang-json";
 import { yaml as yamlLang } from "@codemirror/lang-yaml";
@@ -18,6 +19,7 @@ import UserEntryModal from "./workspace-panel/UserEntryModal";
 import OrphanCleanupModal from "./workspace-panel/OrphanCleanupModal";
 import HistoryModal from "./workspace-panel/HistoryModal";
 import LeaveGuardModal from "./workspace-panel/LeaveGuardModal";
+import ZipImportModeModal from "./workspace-panel/ZipImportModeModal";
 import { useWorkspaceUsers } from "./workspace-panel/useWorkspaceUsers";
 import { useWorkspaceHistory } from "./workspace-panel/useWorkspaceHistory";
 import { useOrphanCleanup } from "./workspace-panel/useOrphanCleanup";
@@ -47,6 +49,8 @@ import type {
   KdbxEntryView,
   UsersAction,
   VaultBlock,
+  ZipImportMode,
+  ZipImportPreviewFile,
   WorkspaceListEntry,
   WorkspacePanelProps,
 } from "./workspace-panel/types";
@@ -134,6 +138,16 @@ export default function WorkspacePanel({
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [zipImportModalOpen, setZipImportModalOpen] = useState(false);
+  const [zipImportPreviewBusy, setZipImportPreviewBusy] = useState(false);
+  const [zipImportFile, setZipImportFile] = useState<File | null>(null);
+  const [zipImportItems, setZipImportItems] = useState<ZipImportPreviewFile[]>([]);
+  const [zipImportModeByPath, setZipImportModeByPath] = useState<
+    Record<string, ZipImportMode>
+  >({});
+  const [zipImportApplyAll, setZipImportApplyAll] = useState(false);
+  const [zipImportAllMode, setZipImportAllMode] = useState<ZipImportMode>("override");
+  const [zipImportError, setZipImportError] = useState<string | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const autoSyncRef = useRef(false);
   const hostVarsSyncRef = useRef(false);
@@ -427,6 +441,14 @@ export default function WorkspacePanel({
   useEffect(() => {
     inventorySeededRef.current = false;
     initialRolesSyncDoneRef.current = false;
+    setZipImportModalOpen(false);
+    setZipImportPreviewBusy(false);
+    setZipImportFile(null);
+    setZipImportItems([]);
+    setZipImportModeByPath({});
+    setZipImportApplyAll(false);
+    setZipImportAllMode("override");
+    setZipImportError(null);
   }, [workspaceId]);
 
   useEffect(() => {
@@ -617,7 +639,8 @@ export default function WorkspacePanel({
   const {
     downloadZip,
     downloadFile,
-    onUploadSelect,
+    previewZip,
+    uploadZip,
     openUploadPicker,
     createFile,
     createDirectory,
@@ -645,6 +668,148 @@ export default function WorkspacePanel({
     refreshFiles,
     loadFile,
   });
+
+  const onUploadSelect = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (file) {
+        void (async () => {
+          if (!workspaceId || uploadBusy) return;
+          setZipImportPreviewBusy(true);
+          setZipImportError(null);
+          setUploadError(null);
+          setUploadStatus(null);
+          try {
+            const items = await previewZip(file);
+            if (items.length === 0) {
+              throw new Error("ZIP contains no importable files.");
+            }
+
+            const nextModeByPath: Record<string, ZipImportMode> = {};
+            items.forEach((item) => {
+              nextModeByPath[item.path] = item.exists ? "merge" : "override";
+            });
+
+            setZipImportFile(file);
+            setZipImportItems(items);
+            setZipImportModeByPath(nextModeByPath);
+            setZipImportApplyAll(false);
+            setZipImportAllMode("override");
+            setZipImportModalOpen(true);
+          } catch (err: any) {
+            setUploadError(err?.message ?? "failed to inspect zip");
+          } finally {
+            setZipImportPreviewBusy(false);
+          }
+        })();
+      }
+      event.target.value = "";
+    },
+    [previewZip, workspaceId, uploadBusy]
+  );
+
+  const closeZipImportModal = useCallback(() => {
+    if (uploadBusy || zipImportPreviewBusy) return;
+    setZipImportModalOpen(false);
+    setZipImportFile(null);
+    setZipImportItems([]);
+    setZipImportModeByPath({});
+    setZipImportApplyAll(false);
+    setZipImportAllMode("override");
+    setZipImportError(null);
+  }, [uploadBusy, zipImportPreviewBusy]);
+
+  const applyZipImportModeToAll = useCallback(
+    (mode: ZipImportMode) => {
+      setZipImportModeByPath(() => {
+        const next: Record<string, ZipImportMode> = {};
+        zipImportItems.forEach((item) => {
+          next[item.path] = mode;
+        });
+        return next;
+      });
+    },
+    [zipImportItems]
+  );
+
+  const setZipImportApplyToAll = useCallback(
+    (checked: boolean) => {
+      setZipImportApplyAll(checked);
+      if (checked) {
+        applyZipImportModeToAll(zipImportAllMode);
+      }
+    },
+    [applyZipImportModeToAll, zipImportAllMode]
+  );
+
+  const setZipImportAllModeWithApply = useCallback(
+    (mode: ZipImportMode) => {
+      setZipImportAllMode(mode);
+      if (zipImportApplyAll) {
+        applyZipImportModeToAll(mode);
+      }
+    },
+    [applyZipImportModeToAll, zipImportApplyAll]
+  );
+
+  const setZipImportModeForPath = useCallback(
+    (path: string, mode: ZipImportMode) => {
+      if (zipImportApplyAll) {
+        setZipImportAllMode(mode);
+        applyZipImportModeToAll(mode);
+        return;
+      }
+      setZipImportModeByPath((prev) => ({
+        ...prev,
+        [path]: mode,
+      }));
+    },
+    [applyZipImportModeToAll, zipImportApplyAll]
+  );
+
+  const confirmZipImport = useCallback(async () => {
+    if (!zipImportFile || !workspaceId || uploadBusy) return;
+    setZipImportError(null);
+
+    const perFileMode: Record<string, ZipImportMode> = {};
+    zipImportItems.forEach((item) => {
+      perFileMode[item.path] =
+        zipImportModeByPath[item.path] || (item.exists ? "merge" : "override");
+    });
+
+    const result = await uploadZip(zipImportFile, {
+      defaultMode: zipImportApplyAll ? zipImportAllMode : "override",
+      perFileMode: zipImportApplyAll ? {} : perFileMode,
+    });
+    if (!result.ok) {
+      const hint =
+        "For non-YAML/JSON files, choose Override instead of Merge.";
+      const message = String(result.error || "").trim();
+      setZipImportError(
+        message ? `Import failed: ${message}` : `Import failed. ${hint}`
+      );
+      return;
+    }
+
+    setZipImportModalOpen(false);
+    setZipImportFile(null);
+    setZipImportItems([]);
+    setZipImportModeByPath({});
+    setZipImportApplyAll(false);
+    setZipImportAllMode("override");
+    setZipImportError(null);
+  }, [
+    zipImportFile,
+    workspaceId,
+    uploadBusy,
+    zipImportItems,
+    zipImportModeByPath,
+    zipImportApplyAll,
+    zipImportAllMode,
+    uploadZip,
+  ]);
+
+  const importActionBusy = uploadBusy || zipImportPreviewBusy;
 
   useEffect(() => {
     let alive = true;
@@ -1379,7 +1544,7 @@ export default function WorkspacePanel({
             downloadZip={downloadZip}
             zipBusy={zipBusy}
             openUploadPicker={openUploadPicker}
-            uploadBusy={uploadBusy}
+            uploadBusy={importActionBusy}
             uploadInputRef={uploadInputRef}
             onUploadSelect={onUploadSelect}
             uploadError={uploadError}
@@ -1396,6 +1561,24 @@ export default function WorkspacePanel({
           />
         </div>
       </Wrapper>
+      <ZipImportModeModal
+        open={zipImportModalOpen}
+        fileName={zipImportFile?.name || ""}
+        busy={uploadBusy}
+        previewBusy={zipImportPreviewBusy}
+        items={zipImportItems}
+        modeByPath={zipImportModeByPath}
+        applyToAll={zipImportApplyAll}
+        allMode={zipImportAllMode}
+        error={zipImportError}
+        onClose={closeZipImportModal}
+        onConfirm={() => {
+          void confirmZipImport();
+        }}
+        onToggleApplyToAll={setZipImportApplyToAll}
+        onSetAllMode={setZipImportAllModeWithApply}
+        onSetModeForPath={setZipImportModeForPath}
+      />
       <OrphanCleanupModal
         open={orphanCleanupOpen}
         loading={orphanCleanupLoading}

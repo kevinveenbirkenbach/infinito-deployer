@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import json
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
 from api.auth import (
@@ -40,6 +41,7 @@ from api.schemas.workspace import (
     WorkspaceRoleAppConfigOut,
     WorkspaceSshKeygenIn,
     WorkspaceSshKeygenOut,
+    WorkspaceUploadPreviewOut,
     WorkspaceUploadOut,
     WorkspaceVaultChangeIn,
     WorkspaceVaultDecryptIn,
@@ -479,14 +481,72 @@ def download_zip(workspace_id: str, request: Request) -> StreamingResponse:
     )
 
 
-@router.post("/{workspace_id}/upload.zip", response_model=WorkspaceUploadOut)
-async def upload_zip(
+@router.post(
+    "/{workspace_id}/upload.zip/preview",
+    response_model=WorkspaceUploadPreviewOut,
+)
+async def upload_zip_preview(
     workspace_id: str, request: Request, file: UploadFile = File(...)
-) -> WorkspaceUploadOut:
+) -> WorkspaceUploadPreviewOut:
     _require_workspace(request, workspace_id)
     filename = (file.filename or "").lower()
     if not filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="zip file required")
     data = await file.read()
-    _svc().load_zip(workspace_id, data)
-    return WorkspaceUploadOut(ok=True, files=_svc().list_files(workspace_id))
+    entries = _svc().list_zip_entries(data)
+    existing_paths = {
+        str(item.get("path") or "")
+        for item in _svc().list_files(workspace_id)
+        if not bool(item.get("is_dir"))
+    }
+    files = [{"path": path, "exists": path in existing_paths} for path in entries]
+    return WorkspaceUploadPreviewOut(files=files)
+
+
+@router.post("/{workspace_id}/upload.zip", response_model=WorkspaceUploadOut)
+async def upload_zip(
+    workspace_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    default_mode: str = Form("override"),
+    per_file_mode_json: str | None = Form(default=None),
+) -> WorkspaceUploadOut:
+    _require_workspace(request, workspace_id)
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="zip file required")
+
+    mode_default = str(default_mode or "").strip().lower()
+    if mode_default not in {"override", "merge"}:
+        raise HTTPException(status_code=400, detail="invalid default_mode")
+
+    per_file_mode: dict[str, str] = {}
+    if per_file_mode_json:
+        try:
+            loaded = json.loads(per_file_mode_json)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400, detail=f"invalid per_file_mode_json: {exc}"
+            ) from exc
+        if not isinstance(loaded, dict):
+            raise HTTPException(status_code=400, detail="per_file_mode_json must be an object")
+        for key, value in loaded.items():
+            path = str(key or "").strip()
+            if not path:
+                continue
+            mode = str(value or "").strip().lower()
+            if mode not in {"override", "merge"}:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"invalid merge mode for {path}: {mode}",
+                )
+            per_file_mode[path] = mode
+
+    data = await file.read()
+    summary = _svc().load_zip(
+        workspace_id,
+        data,
+        default_mode=mode_default,
+        per_file_mode=per_file_mode,
+    )
+    return WorkspaceUploadOut(ok=True, files=_svc().list_files(workspace_id), **summary)

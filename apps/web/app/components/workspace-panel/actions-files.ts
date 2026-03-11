@@ -1,6 +1,23 @@
 import type { ChangeEvent, MouseEvent } from "react";
 import { encodePath } from "./utils";
 
+type ZipImportMode = "override" | "merge";
+
+type ZipImportUploadOptions = {
+  defaultMode?: ZipImportMode;
+  perFileMode?: Record<string, ZipImportMode>;
+};
+
+type ZipImportUploadResult = {
+  ok: boolean;
+  error?: string;
+};
+
+type ZipImportPreviewEntry = {
+  path: string;
+  exists: boolean;
+};
+
 export function createWorkspacePanelFileActions(ctx: any) {
   const {
     baseUrl,
@@ -74,19 +91,69 @@ export function createWorkspacePanelFileActions(ctx: any) {
     }
   };
 
-  const uploadZip = async (file: File) => {
-    if (!workspaceId || uploadBusy) return;
+  const previewZip = async (file: File): Promise<ZipImportPreviewEntry[]> => {
+    if (!workspaceId) return [];
     const name = file?.name || "";
     if (!name.toLowerCase().endsWith(".zip")) {
-      setUploadError("Please select a .zip file.");
-      return;
+      throw new Error("Please select a .zip file.");
     }
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${baseUrl}/api/workspaces/${workspaceId}/upload.zip/preview`, {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`;
+      try {
+        const data = await res.json();
+        if (data?.detail) message = data.detail;
+      } catch {
+        // ignore
+      }
+      throw new Error(message);
+    }
+    const data = await res.json();
+    const files = Array.isArray(data?.files) ? data.files : [];
+    return files
+      .map((entry: any) => ({
+        path: String(entry?.path || "").trim(),
+        exists: Boolean(entry?.exists),
+      }))
+      .filter((entry: ZipImportPreviewEntry) => Boolean(entry.path));
+  };
+
+  const uploadZip = async (
+    file: File,
+    options?: ZipImportUploadOptions
+  ): Promise<ZipImportUploadResult> => {
+    if (!workspaceId || uploadBusy) {
+      return { ok: false, error: "Upload is currently unavailable." };
+    }
+    const name = file?.name || "";
+    if (!name.toLowerCase().endsWith(".zip")) {
+      const message = "Please select a .zip file.";
+      setUploadError(message);
+      return { ok: false, error: message };
+    }
+    const defaultMode: ZipImportMode =
+      options?.defaultMode === "merge" ? "merge" : "override";
+    const rawPerFileMode = options?.perFileMode || {};
+    const perFileMode: Record<string, ZipImportMode> = {};
+    Object.entries(rawPerFileMode).forEach(([path, mode]) => {
+      const relPath = String(path || "").trim();
+      if (!relPath) return;
+      perFileMode[relPath] = mode === "merge" ? "merge" : "override";
+    });
+
     setUploadBusy(true);
     setUploadError(null);
     setUploadStatus(null);
     try {
       const form = new FormData();
       form.append("file", file);
+      form.append("default_mode", defaultMode);
+      form.append("per_file_mode_json", JSON.stringify(perFileMode));
       const res = await fetch(`${baseUrl}/api/workspaces/${workspaceId}/upload.zip`, {
         method: "POST",
         body: form,
@@ -101,10 +168,27 @@ export function createWorkspacePanelFileActions(ctx: any) {
         }
         throw new Error(message);
       }
-      setUploadStatus("Workspace loaded.");
+      const data = await res.json();
+      const created = Number(data?.created_files ?? 0);
+      const overridden = Number(data?.overridden_files ?? 0);
+      const merged = Number(data?.merged_files ?? 0);
+      const skipped = Number(data?.skipped_files ?? 0);
+      const parts: string[] = [];
+      if (created > 0) parts.push(`${created} created`);
+      if (overridden > 0) parts.push(`${overridden} overridden`);
+      if (merged > 0) parts.push(`${merged} merged`);
+      if (skipped > 0) parts.push(`${skipped} skipped`);
+      setUploadStatus(
+        parts.length > 0
+          ? `Workspace loaded (${parts.join(", ")}).`
+          : "Workspace loaded."
+      );
       await refreshFiles(workspaceId);
+      return { ok: true };
     } catch (err: any) {
-      setUploadError(err?.message ?? "failed to upload zip");
+      const message = err?.message ?? "failed to upload zip";
+      setUploadError(message);
+      return { ok: false, error: message };
     } finally {
       setUploadBusy(false);
     }
@@ -275,6 +359,7 @@ export function createWorkspacePanelFileActions(ctx: any) {
   return {
     downloadZip,
     downloadFile,
+    previewZip,
     uploadZip,
     onUploadSelect,
     openUploadPicker,

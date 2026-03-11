@@ -170,6 +170,147 @@
   cursor: pointer;
 }
 
+.zipImportOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1455;
+  background: rgba(4, 10, 24, 0.78);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.zipImportModal {
+  width: min(980px, 96vw);
+  max-height: min(88vh, 900px);
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid var(--bs-border-color-translucent);
+  background: var(--deployer-panel-workspace-bg);
+  box-shadow: var(--deployer-shadow-strong);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.zipImportHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.zipImportTitle {
+  margin: 0;
+  font-size: 20px;
+}
+
+.zipImportHint {
+  margin: 0;
+  font-size: 13px;
+}
+
+.zipImportToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.zipImportApplyAllLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.zipImportModeGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.zipImportModeLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.zipImportTableWrap {
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 12px;
+  background: var(--deployer-card-bg-soft);
+  max-height: 48vh;
+  overflow: auto;
+}
+
+.zipImportTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.zipImportTable th,
+.zipImportTable td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--bs-border-color-translucent);
+  border-right: 1px solid var(--bs-border-color-translucent);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.zipImportTable th:last-child,
+.zipImportTable td:last-child {
+  border-right: 0;
+}
+
+.zipImportTable thead th {
+  position: sticky;
+  top: 0;
+  background: rgba(10, 18, 36, 0.96);
+  z-index: 1;
+}
+
+.zipImportPath {
+  display: inline-block;
+  max-width: min(52vw, 520px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zipImportStateExists,
+.zipImportStateNew {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  border: 1px solid transparent;
+}
+
+.zipImportStateExists {
+  color: var(--bs-warning-text-emphasis);
+  background: var(--bs-warning-bg-subtle);
+  border-color: var(--bs-warning-border-subtle);
+}
+
+.zipImportStateNew {
+  color: var(--bs-success-text-emphasis);
+  background: var(--bs-success-bg-subtle);
+  border-color: var(--bs-success-border-subtle);
+}
+
+.zipImportFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .usersOverlay {
   position: fixed;
   inset: 0;

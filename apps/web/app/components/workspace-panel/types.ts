@@ -71,6 +71,13 @@ export type VaultBlock = {
   indent: string;
 };
 
+export type ZipImportMode = "override" | "merge";
+
+export type ZipImportPreviewFile = {
+  path: string;
+  exists: boolean;
+};
+
 export type WorkspaceListEntry = {
   id: string;
   name?: string;

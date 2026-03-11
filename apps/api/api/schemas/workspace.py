@@ -134,9 +134,22 @@ class WorkspaceGenerateOut(BaseModel):
     warnings: List[str] = Field(default_factory=list)
 
 
+class WorkspaceUploadPreviewFile(BaseModel):
+    path: str
+    exists: bool = False
+
+
+class WorkspaceUploadPreviewOut(BaseModel):
+    files: List[WorkspaceUploadPreviewFile] = Field(default_factory=list)
+
+
 class WorkspaceUploadOut(BaseModel):
     ok: bool
     files: List[WorkspaceFileEntry]
+    created_files: int = 0
+    overridden_files: int = 0
+    merged_files: int = 0
+    skipped_files: int = 0
 
 
 class WorkspaceCredentialsIn(BaseModel):

@@ -1,4 +1,4 @@
-.PHONY: setup env dirs up down logs ps refresh-catalog test-arch test-env-up test-env-down web-sync venv install test clean
+.PHONY: setup env dirs up down logs ps refresh-catalog test-arch test-env-up test-env-down web-sync venv install test clean example-workspace-zip
 
 # Use docker compose v2 by default; override via env if needed:
 #   make setup DOCKER_COMPOSE="docker-compose"
@@ -15,6 +15,8 @@ export PYTHONPATH := $(PWD)/apps/api
 
 # Keep state in repo-local directory for tests (no /state permission issues)
 TEST_STATE_DIR := $(PWD)/state
+EXAMPLE_WORKSPACE_DIR ?= examples/workspace
+EXAMPLE_WORKSPACE_ZIP ?= examples/workspace-import.zip
 
 setup: env dirs up
 	@echo "✔ Setup completed and stack is up."
@@ -89,3 +91,11 @@ test: dirs install
 clean:
 	@rm -rf "$(VENV_DIR)" state
 	@echo "→ Removed .venv/ and state/"
+
+example-workspace-zip:
+	@command -v zip >/dev/null 2>&1 || { echo "✖ zip command not found"; exit 1; }
+	@test -d "$(EXAMPLE_WORKSPACE_DIR)" || { echo "✖ Missing $(EXAMPLE_WORKSPACE_DIR)"; exit 1; }
+	@mkdir -p "$(dir $(EXAMPLE_WORKSPACE_ZIP))"
+	@rm -f "$(EXAMPLE_WORKSPACE_ZIP)"
+	@cd "$(EXAMPLE_WORKSPACE_DIR)" && zip -rq "$(abspath $(EXAMPLE_WORKSPACE_ZIP))" .
+	@echo "✔ Created $(EXAMPLE_WORKSPACE_ZIP)"
