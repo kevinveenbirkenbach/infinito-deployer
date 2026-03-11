@@ -85,6 +85,14 @@
   cursor: not-allowed;
 }
 
+.menuItemDanger {
+  color: var(--bs-danger-text-emphasis);
+}
+
+.menuItemDanger:hover:not(:disabled) {
+  background: rgba(var(--bs-danger-rgb), 0.12);
+}
+
 .menuItemLabel {
   display: inline-flex;
   align-items: center;

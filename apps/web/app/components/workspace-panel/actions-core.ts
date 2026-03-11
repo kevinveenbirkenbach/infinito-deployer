@@ -387,6 +387,18 @@ export function createWorkspacePanelCoreActions(ctx: any) {
         if (apiUserId) {
           saveWorkspaceList(apiUserId, list);
         }
+        if (list.length === 0) {
+          resetWorkspaceState();
+          setWorkspaceId(null);
+          onWorkspaceIdChange?.(null);
+          updateWorkspaceUrl(null);
+          if (apiUserId && typeof window !== "undefined") {
+            window.localStorage.removeItem(
+              `${USER_WORKSPACE_CURRENT_PREFIX}${apiUserId}`
+            );
+          }
+          return;
+        }
         const storedCurrent =
           typeof window !== "undefined" && apiUserId
             ? window.localStorage.getItem(`${USER_WORKSPACE_CURRENT_PREFIX}${apiUserId}`)
@@ -493,15 +505,16 @@ export function createWorkspacePanelCoreActions(ctx: any) {
       setWorkspaceId(null);
       onWorkspaceIdChange?.(null);
       updateWorkspaceUrl(null);
+      if (userId && typeof window !== "undefined") {
+        window.localStorage.removeItem(`${USER_WORKSPACE_CURRENT_PREFIX}${userId}`);
+      }
 
       const nextCandidate =
         (Array.isArray(apiList) ? apiList : []).find((entry) => entry.id !== targetId)?.id ||
         null;
       if (nextCandidate) {
         await selectWorkspace(nextCandidate);
-        return;
       }
-      await createWorkspace();
       return;
     }
 

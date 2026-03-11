@@ -1381,6 +1381,35 @@ export default function WorkspacePanel({
     !credentialsBusy &&
     credentialServerAliases.some((alias) => (serverRolesByAlias[alias] ?? []).length > 0);
 
+  const requestWorkspaceDelete = useCallback(
+    (id: string) => {
+      queueLeaveAction(() => {
+        void (async () => {
+          const targetId = String(id || "").trim();
+          if (!targetId) return;
+          const confirmed = window.confirm(
+            `Delete workspace '${targetId}'? This action cannot be undone.`
+          );
+          if (!confirmed) return;
+          setWorkspaceError(null);
+          setDeletingWorkspaceId(targetId);
+          try {
+            await deleteWorkspace(targetId);
+          } catch (err: any) {
+            setWorkspaceError(err?.message ?? "failed to delete workspace");
+          } finally {
+            setDeletingWorkspaceId(null);
+          }
+        })();
+      });
+    },
+    [deleteWorkspace, queueLeaveAction]
+  );
+
+  const deletingActiveWorkspace = Boolean(
+    workspaceId && deletingWorkspaceId === workspaceId
+  );
+
   const workspaceSwitcher =
     userId && workspaceSwitcherTarget
       ? createPortal(
@@ -1453,27 +1482,7 @@ export default function WorkspacePanel({
               void selectWorkspace(id);
             });
           }}
-          onDeleteWorkspace={(id) => {
-            queueLeaveAction(() => {
-              void (async () => {
-                const targetId = String(id || "").trim();
-                if (!targetId) return;
-                const confirmed = window.confirm(
-                  `Delete workspace '${targetId}'? This action cannot be undone.`
-                );
-                if (!confirmed) return;
-                setWorkspaceError(null);
-                setDeletingWorkspaceId(targetId);
-                try {
-                  await deleteWorkspace(targetId);
-                } catch (err: any) {
-                  setWorkspaceError(err?.message ?? "failed to delete workspace");
-                } finally {
-                  setDeletingWorkspaceId(null);
-                }
-              })();
-            });
-          }}
+          onDeleteWorkspace={requestWorkspaceDelete}
         />
         <div className={styles.editorSection}>
           <WorkspacePanelFileEditor
@@ -1552,6 +1561,8 @@ export default function WorkspacePanel({
             uploadStatus={uploadStatus}
             openInventoryCleanup={openOrphanCleanupDialog}
             inventoryCleanupBusy={orphanCleanupLoading || orphanCleanupBusy}
+            deletingWorkspace={deletingActiveWorkspace}
+            onDeleteWorkspace={requestWorkspaceDelete}
             onOpenHistory={() => {
               openHistory(null, false, "history");
             }}

@@ -39,6 +39,8 @@ export default function WorkspacePanelCards(props: any) {
     uploadStatus,
     openInventoryCleanup,
     inventoryCleanupBusy,
+    deletingWorkspace,
+    onDeleteWorkspace,
     onUsersAction,
     onOpenHistory,
   } = props;
@@ -203,6 +205,16 @@ export default function WorkspacePanelCards(props: any) {
     onOpenHistory?.();
   };
 
+  const deleteWorkspaceFromMenu = () => {
+    if (!workspaceId || deletingWorkspace || !onDeleteWorkspace) return;
+    setSecretsMenuOpen(false);
+    setWorkspaceMenuOpen(false);
+    setUsersMenuOpen(false);
+    setUsersImportMenuOpen(false);
+    setUsersExportMenuOpen(false);
+    onDeleteWorkspace(workspaceId);
+  };
+
   return (
     <div className={styles.cardsRoot}>
       <div className={`bg-body border ${styles.card}`}>
@@ -356,6 +368,19 @@ export default function WorkspacePanelCards(props: any) {
                       <span className={styles.menuItemLabel}>
                         <i className="fa-solid fa-broom" aria-hidden="true" />
                         {inventoryCleanupBusy ? "Cleanup running..." : "Cleanup"}
+                      </span>
+                    </button>
+                  </li>
+                  <li className={styles.menuDivider} aria-hidden="true" />
+                  <li>
+                    <button
+                      onClick={deleteWorkspaceFromMenu}
+                      disabled={!workspaceId || deletingWorkspace || !onDeleteWorkspace}
+                      className={`${styles.menuItem} ${styles.menuItemDanger}`}
+                    >
+                      <span className={styles.menuItemLabel}>
+                        <i className="fa-solid fa-trash" aria-hidden="true" />
+                        {deletingWorkspace ? "Deleting..." : "Delete workspace"}
                       </span>
                     </button>
                   </li>
