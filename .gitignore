@@ -3,6 +3,9 @@ dist/
 build/
 __pycache__/
 *.pyc
+node_modules/
+*.tsbuildinfo
+.next/
 .env
 state/
 examples/workspace-import.zip

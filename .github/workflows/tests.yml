@@ -64,12 +64,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
 
       - name: Install dependencies
         shell: bash
         run: |
           set -euo pipefail
-          npm install
+          npm ci
 
       - name: Lint frontend
         shell: bash

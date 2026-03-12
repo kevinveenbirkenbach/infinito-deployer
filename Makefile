@@ -57,7 +57,7 @@ web-sync:
 	@$(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" up -d web
 	@$(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" exec -T web sh -lc 'rm -rf /tmp/web-src && mkdir -p /tmp/web-src'
 	@$(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" cp apps/web/. web:/tmp/web-src
-	@$(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" exec -T web sh -lc 'cd /tmp/web-src && npm install && npm run build'
+	@$(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" exec -T web sh -lc 'cd /tmp/web-src && npm ci && npm run build'
 	@$(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" exec -T web sh -lc 'rm -rf /app/.next /app/public /app/server.js /app/package.json /app/node_modules; mkdir -p /app/.next; cp -a /tmp/web-src/.next/standalone/. /app/; cp -a /tmp/web-src/.next/static /app/.next/; cp -a /tmp/web-src/public /app/public'
 	@$(DOCKER_COMPOSE) --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" restart web
 	@echo "✔ Web container refreshed."
