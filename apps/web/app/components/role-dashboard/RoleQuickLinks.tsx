@@ -19,7 +19,6 @@ export default function RoleQuickLinks({
   adaptiveOverflow = false,
 }: RoleQuickLinksProps) {
   const quickLinks = quickLinksForRole(role);
-  if (quickLinks.length === 0) return null;
   const rowRef = useRef<HTMLDivElement | null>(null);
   const [adaptiveLimit, setAdaptiveLimit] = useState<number | null>(null);
 
@@ -84,6 +83,7 @@ export default function RoleQuickLinks({
   }, [adaptiveLimit, staticLimit]);
   const visible = quickLinks.slice(0, computedLimit);
   const hiddenCount = Math.max(0, quickLinks.length - visible.length);
+  if (quickLinks.length === 0) return null;
 
   return (
     <div ref={rowRef} className={styles.quickLinksInline}>

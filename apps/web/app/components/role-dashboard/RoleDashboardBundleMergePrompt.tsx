@@ -28,8 +28,8 @@ export default function RoleDashboardBundleMergePrompt({
           <h3 className={styles.modeConfirmTitle}>Bundle deployment strategy</h3>
         </div>
         <p className={styles.modeConfirmText}>
-          Server "{prompt.alias}" already has app selections. Choose how to apply "
-          {prompt.bundle.title}".
+          Server {prompt.alias} already has app selections. Choose how to apply{" "}
+          {prompt.bundle.title}.
         </p>
         <div className={styles.modeConfirmActions}>
           <button onClick={onCancel} className={styles.modeActionButton}>
