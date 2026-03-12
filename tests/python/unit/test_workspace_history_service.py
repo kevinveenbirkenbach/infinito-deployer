@@ -45,8 +45,11 @@ class TestWorkspaceHistoryService(unittest.TestCase):
         self.assertTrue((root / ".git").is_dir())
         self.assertTrue((root / ".gitignore").is_file())
         gitignore = (root / ".gitignore").read_text(encoding="utf-8")
-        self.assertIn("workspace.json", gitignore)
-        self.assertIn("logs/", gitignore)
+        self.assertEqual(gitignore.strip(), "")
+
+        exclude = (root / ".git" / "info" / "exclude").read_text(encoding="utf-8")
+        self.assertIn("workspace.json", exclude)
+        self.assertIn("logs/", exclude)
 
         entries = service.list_files(workspace_id)
         paths = {str(item.get("path") or "") for item in entries}

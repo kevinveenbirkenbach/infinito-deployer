@@ -84,6 +84,31 @@ class WorkspaceServiceHistoryMixin(WorkspaceServiceHistoryRestoreMixin):
 
     def _ensure_history_gitignore(self, root: Path) -> None:
         ignore_path = root / ".gitignore"
+        if not ignore_path.exists():
+            ignore_path.write_text("", encoding="utf-8")
+        else:
+            existing = ignore_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            normalized = [line.strip() for line in existing if line.strip()]
+            legacy_variants = [
+                [
+                    "# Infinito workspace runtime artifacts",
+                    WORKSPACE_META_FILENAME,
+                    "logs/",
+                ],
+                [
+                    "# Infinito workspace runtime artifacts",
+                    WORKSPACE_META_FILENAME,
+                    "logs/",
+                    "secrets/credentials.kdbx",
+                ],
+            ]
+            if normalized in legacy_variants:
+                ignore_path.write_text("", encoding="utf-8")
+
+        self._ensure_history_git_exclude(root)
+
+    def _ensure_history_git_exclude(self, root: Path) -> None:
+        exclude_path = self._git_dir(root) / "info" / "exclude"
         required_lines = [
             "# Infinito workspace runtime artifacts",
             WORKSPACE_META_FILENAME,
@@ -92,9 +117,10 @@ class WorkspaceServiceHistoryMixin(WorkspaceServiceHistoryRestoreMixin):
         if not self._history_include_kdbx():
             required_lines.append("secrets/credentials.kdbx")
 
+        exclude_path.parent.mkdir(parents=True, exist_ok=True)
         existing: list[str] = []
-        if ignore_path.is_file():
-            existing = ignore_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        if exclude_path.is_file():
+            existing = exclude_path.read_text(encoding="utf-8", errors="replace").splitlines()
 
         existing_set = {line.strip() for line in existing}
         additions = [line for line in required_lines if line.strip() not in existing_set]
@@ -105,7 +131,7 @@ class WorkspaceServiceHistoryMixin(WorkspaceServiceHistoryRestoreMixin):
         if next_lines and next_lines[-1].strip():
             next_lines.append("")
         next_lines.extend(additions)
-        ignore_path.write_text("\n".join(next_lines).rstrip() + "\n", encoding="utf-8")
+        exclude_path.write_text("\n".join(next_lines).rstrip() + "\n", encoding="utf-8")
 
     def _ensure_history_repo(self, root: Path) -> None:
         if not self._history_enabled():
