@@ -1,275 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
-import { createPortal } from "react-dom";
-import CodeMirror from "@uiw/react-codemirror";
-import { yaml as yamlLang } from "@codemirror/lang-yaml";
-import { filterRoles } from "../lib/role_filter";
-import { VIEW_CONFIG, VIEW_MODE_ICONS } from "./role-dashboard/constants";
-import { sortStatuses } from "./role-dashboard/helpers";
-import { hexToRgba } from "./deployment-credentials/device-visuals";
-import BundleColumnView from "./role-dashboard/BundleColumnView";
-import BundleGridView, {
+import { useRef, useState } from "react";
+import {
   BUNDLE_OPTIONAL_LIST_COLUMNS,
   type BundleOptionalListColumnKey,
 } from "./role-dashboard/BundleGridView";
-import RoleColumnView from "./role-dashboard/RoleColumnView";
-import EnableDropdown from "./role-dashboard/EnableDropdown";
-import RoleDetailsModal from "./role-dashboard/RoleDetailsModal";
-import RoleGridView from "./role-dashboard/RoleGridView";
-import RoleListView, {
+import RoleDashboardBodyContainer from "./role-dashboard/RoleDashboardBodyContainer";
+import RoleDashboardOverlays from "./role-dashboard/RoleDashboardOverlays";
+import {
   OPTIONAL_LIST_COLUMNS,
   type OptionalListColumnKey,
 } from "./role-dashboard/RoleListView";
-import RoleLogoView from "./role-dashboard/RoleLogoView";
-import RoleVideoModal from "./role-dashboard/RoleVideoModal";
-import { VIEW_MODES } from "./role-dashboard/types";
-import ModeToggle from "./ModeToggle";
-import styles from "./RoleDashboard.module.css";
+import {
+  normalizeFacet,
+  type DeployTargetFilter,
+  type ReleaseTrack,
+  type SoftwareScope,
+} from "./role-dashboard/dashboard-filters";
 import type { Bundle, Role, ViewMode } from "./role-dashboard/types";
-
-type BundleSelectionState = {
-  enabled: boolean;
-  selectedCount: number;
-  totalCount: number;
-};
-
-type RoleAppConfigPayload = {
-  role_id: string;
-  alias: string;
-  host_vars_path: string;
-  content: string;
-  imported_paths?: number;
-};
-
-const ROW_FILTER_OPTIONS: number[] = [1, 2, 3, 5, 10, 20, 100, 500, 1000];
-const DEFAULT_VIEW_MODES: ViewMode[] = ["detail", "list", "mini", "matrix"];
-const ANIMATED_VIEW_MODES: ViewMode[] = ["row", "column"];
-
-function formatViewLabel(mode: ViewMode): string {
-  return mode.charAt(0).toUpperCase() + mode.slice(1);
-}
-
-type SoftwareScope = "apps" | "bundles";
-const TARGET_FILTER_OPTIONS = [
-  "all",
-  "universal",
-  "server",
-  "workstation",
-] as const;
-type DeployTargetFilter = (typeof TARGET_FILTER_OPTIONS)[number];
-const TARGET_FILTER_SET = new Set<string>(TARGET_FILTER_OPTIONS);
-type ReleaseTrack = "stable" | "preview";
-const RELEASE_TRACK_OPTIONS = ["stable", "preview"] as const;
-const RELEASE_TRACK_SET = new Set<string>(RELEASE_TRACK_OPTIONS);
-const TARGET_FILTER_META: Record<
-  DeployTargetFilter,
-  { iconClass: string; tooltip: string }
-> = {
-  all: {
-    iconClass: "fa-solid fa-globe",
-    tooltip: "Show software for all deploy targets.",
-  },
-  universal: {
-    iconClass: "fa-solid fa-infinity",
-    tooltip: "Show only software that is deployable on universal targets.",
-  },
-  server: {
-    iconClass: "fa-solid fa-server",
-    tooltip: "Show only software for server deployments.",
-  },
-  workstation: {
-    iconClass: "fa-solid fa-laptop-code",
-    tooltip: "Show only software for workstation deployments.",
-  },
-};
-const STATUS_FILTER_META: Record<string, { iconClass: string; tooltip: string }> = {
-  stable: {
-    iconClass: "fa-solid fa-circle-check",
-    tooltip: "Stable lifecycle stage.",
-  },
-  maintenance: {
-    iconClass: "fa-solid fa-screwdriver-wrench",
-    tooltip: "Maintenance lifecycle stage.",
-  },
-  beta: {
-    iconClass: "fa-solid fa-flask",
-    tooltip: "Beta lifecycle stage.",
-  },
-  alpha: {
-    iconClass: "fa-solid fa-vial",
-    tooltip: "Alpha lifecycle stage.",
-  },
-  "pre-alpha": {
-    iconClass: "fa-solid fa-seedling",
-    tooltip: "Pre-alpha lifecycle stage.",
-  },
-  deprecated: {
-    iconClass: "fa-solid fa-box-archive",
-    tooltip: "Deprecated lifecycle stage.",
-  },
-};
-const LIFECYCLE_STABLE_ALLOWED = new Set<string>([
-  "beta",
-  "stable",
-  "maintenance",
-]);
-const LIFECYCLE_PREVIEW_EXPERT_ALLOWED = new Set<string>([
-  "alpha",
-  "beta",
-  "stable",
-  "maintenance",
-]);
-const FILTER_TOOLTIPS = {
-  rows: "Choose how many rows are rendered in row/column views.",
-  deployTarget: "Filter software by deploy target.",
-  lifecycle: "Filter apps and bundles by lifecycle status.",
-  selection: "Filter apps by enabled/disabled selection state.",
-  categories: "Filter software by metadata categories.",
-  tags: "Filter software by galaxy tags.",
-} as const;
-
-const SW_QUERY_KEYS = {
-  scope: "sw_scope",
-  track: "sw_track",
-  search: "sw_search",
-  target: "sw_target",
-  status: "sw_status",
-  categories: "sw_categories",
-  tags: "sw_tags",
-  selected: "sw_selected",
-  view: "sw_view",
-  rows: "sw_rows",
-  listOpen: "sw_list_open",
-  listClosed: "sw_list_closed",
-  bundleListOpen: "sw_bundle_list_open",
-  bundleListClosed: "sw_bundle_list_closed",
-} as const;
-
-function normalizeFacet(value: string): string {
-  return String(value || "").trim().toLowerCase();
-}
-
-function isReleaseTrack(value: string): value is ReleaseTrack {
-  return RELEASE_TRACK_SET.has(value);
-}
-
-function normalizeDeployTarget(value: string): string {
-  const normalized = normalizeFacet(value);
-  if (normalized === "servers") return "server";
-  if (normalized === "workstations") return "workstation";
-  return normalized;
-}
-
-function isDeployTargetFilter(value: string): value is DeployTargetFilter {
-  return TARGET_FILTER_SET.has(value);
-}
-
-function parseCsvParam(value: string | null): string[] {
-  return String(value || "")
-    .split(",")
-    .map((entry) => String(entry || "").trim())
-    .filter(Boolean);
-}
-
-function parseFacetCsvParam(value: string | null): string[] {
-  return String(value || "")
-    .split(",")
-    .map((entry) => normalizeFacet(entry))
-    .filter(Boolean);
-}
-
-function parseListColumnCsvParam<T extends string>(
-  value: string | null,
-  allowedColumns: readonly T[]
-): T[] {
-  const allowedSet = new Set<string>(allowedColumns);
-  const seen = new Set<T>();
-  String(value || "")
-    .split(",")
-    .map((entry) => String(entry || "").trim().toLowerCase())
-    .forEach((entry) => {
-      if (!allowedSet.has(entry)) return;
-      seen.add(entry as T);
-    });
-  return allowedColumns.filter((entry) => seen.has(entry));
-}
-
-function normalizeListColumnState<T extends string>(
-  openColumns: T[],
-  closedColumns: T[],
-  allColumns: readonly T[]
-): {
-  open: T[];
-  closed: T[];
-} {
-  const openSet = new Set<T>(openColumns);
-  const closedSet = new Set<T>(closedColumns);
-  allColumns.forEach((column) => {
-    if (openSet.has(column) && closedSet.has(column)) {
-      openSet.delete(column);
-    }
-  });
-  return {
-    open: allColumns.filter((column) => openSet.has(column)),
-    closed: allColumns.filter((column) => closedSet.has(column)),
-  };
-}
-
-function collectFacetValues<T>(
-  entries: T[],
-  getter: (entry: T) => string[] | null | undefined
-): string[] {
-  const seen = new Map<string, string>();
-  entries.forEach((item) => {
-    (getter(item) || []).forEach((entry) => {
-      const label = String(entry || "").trim();
-      const key = normalizeFacet(label);
-      if (!label || !key || seen.has(key)) return;
-      seen.set(key, label);
-    });
-  });
-  return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
-}
-
-type RoleDashboardProps = {
-  baseUrl?: string;
-  roles: Role[];
-  loading: boolean;
-  error: string | null;
-  selected: Set<string>;
-  onToggleSelected: (id: string) => void;
-  onLoadRoleAppConfig?: (
-    roleId: string,
-    alias?: string
-  ) => Promise<RoleAppConfigPayload>;
-  onSaveRoleAppConfig?: (
-    roleId: string,
-    content: string,
-    alias?: string
-  ) => Promise<RoleAppConfigPayload>;
-  onImportRoleAppDefaults?: (
-    roleId: string,
-    alias?: string
-  ) => Promise<RoleAppConfigPayload>;
-  activeAlias?: string;
-  serverAliases?: string[];
-  serverMetaByAlias?: Record<string, { logoEmoji?: string | null; color?: string | null }>;
-  selectedByAlias?: Record<string, string[]>;
-  onToggleSelectedForAlias?: (alias: string, roleId: string) => void;
-  selectedPlanByAlias?: Record<string, Record<string, string | null>>;
-  onSelectPlanForAlias?: (
-    alias: string,
-    roleId: string,
-    planId: string | null
-  ) => void;
-  serverSwitcher?: ReactNode;
-  onCreateServerForTarget?: (target: string) => string | null;
-  mode?: "customer" | "expert";
-  onModeChange?: (mode: "customer" | "expert") => void;
-  compact?: boolean;
-};
+import type { RoleDashboardProps } from "./role-dashboard/role-dashboard-types";
+import { useRoleDashboardBootstrap } from "./role-dashboard/useRoleDashboardBootstrap";
+import { useRoleDashboardEditor } from "./role-dashboard/useRoleDashboardEditor";
+import { useRoleDashboardFiltering } from "./role-dashboard/useRoleDashboardFiltering";
+import { useRoleDashboardSelection } from "./role-dashboard/useRoleDashboardSelection";
+import styles from "./RoleDashboard.module.css";
 
 export default function RoleDashboard({
   baseUrl,
@@ -340,14 +94,6 @@ export default function RoleDashboard({
   const [localMode, setLocalMode] = useState<"customer" | "expert">("customer");
   const activeMode = controlledMode ?? localMode;
   const isExpertMode = activeMode === "expert";
-  const [editingRole, setEditingRole] = useState<Role | null>(null);
-  const [editorContent, setEditorContent] = useState("");
-  const [editorPath, setEditorPath] = useState("");
-  const [editorAlias, setEditorAlias] = useState("");
-  const [editorBusy, setEditorBusy] = useState(false);
-  const [editorError, setEditorError] = useState<string | null>(null);
-  const [editorStatus, setEditorStatus] = useState<string | null>(null);
-  const editorExtensions = useMemo(() => [yamlLang()], []);
   const [activeVideo, setActiveVideo] = useState<{
     url: string;
     title: string;
@@ -365,682 +111,122 @@ export default function RoleDashboard({
   } | null>(null);
   const querySyncReadyRef = useRef(false);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
+  const editor = useRoleDashboardEditor({
+    onLoadRoleAppConfig,
+    onSaveRoleAppConfig,
+    onImportRoleAppDefaults,
+  });
 
-    const scopeParam = String(params.get(SW_QUERY_KEYS.scope) || "")
-      .trim()
-      .toLowerCase();
-    if (scopeParam === "apps" || scopeParam === "bundles") {
-      setSoftwareScope(scopeParam);
-    }
-
-    const trackParam = String(params.get(SW_QUERY_KEYS.track) || "")
-      .trim()
-      .toLowerCase();
-    if (isReleaseTrack(trackParam)) {
-      setReleaseTrack(trackParam);
-    }
-
-    const searchParam = params.get(SW_QUERY_KEYS.search);
-    if (searchParam !== null) {
-      setQuery(searchParam);
-      setQueryDraft(searchParam);
-    }
-
-    const targetParam = String(params.get(SW_QUERY_KEYS.target) || "")
-      .trim()
-      .toLowerCase();
-    if (isDeployTargetFilter(targetParam)) {
-      setTargetFilter(targetParam);
-    }
-
-    const statusParam = params.get(SW_QUERY_KEYS.status);
-    if (statusParam !== null) {
-      setStatusFilter(new Set(parseCsvParam(statusParam)));
-    }
-
-    const categoriesParam = params.get(SW_QUERY_KEYS.categories);
-    if (categoriesParam !== null) {
-      setCategoryFilter(new Set(parseFacetCsvParam(categoriesParam)));
-    }
-
-    const tagsParam = params.get(SW_QUERY_KEYS.tags);
-    if (tagsParam !== null) {
-      setTagFilter(new Set(parseFacetCsvParam(tagsParam)));
-    }
-
-    const selectedParam = String(params.get(SW_QUERY_KEYS.selected) || "")
-      .trim()
-      .toLowerCase();
-    if (selectedParam) {
-      setShowSelectedOnly(selectedParam === "1" || selectedParam === "true");
-    }
-
-    const viewParam = String(params.get(SW_QUERY_KEYS.view) || "")
-      .trim()
-      .toLowerCase();
-    if ((VIEW_MODES as readonly string[]).includes(viewParam)) {
-      setViewMode(viewParam as ViewMode);
-    }
-
-    const rowsParam = String(params.get(SW_QUERY_KEYS.rows) || "")
-      .trim()
-      .toLowerCase();
-    if (rowsParam) {
-      if (rowsParam === "auto") {
-        setRowsOverride(null);
-      } else {
-        const parsed = Number(rowsParam);
-        setRowsOverride(
-          Number.isInteger(parsed) && parsed > 0 ? parsed : null
-        );
-      }
-    }
-
-    const listOpenParam = params.get(SW_QUERY_KEYS.listOpen);
-    const listClosedParam = params.get(SW_QUERY_KEYS.listClosed);
-    if (listOpenParam !== null || listClosedParam !== null) {
-      const normalized = normalizeListColumnState(
-        parseListColumnCsvParam(listOpenParam, OPTIONAL_LIST_COLUMNS),
-        parseListColumnCsvParam(listClosedParam, OPTIONAL_LIST_COLUMNS),
-        OPTIONAL_LIST_COLUMNS
-      );
-      setListForcedOpenColumns(normalized.open);
-      setListForcedClosedColumns(normalized.closed);
-    }
-
-    const bundleListOpenParam = params.get(SW_QUERY_KEYS.bundleListOpen);
-    const bundleListClosedParam = params.get(SW_QUERY_KEYS.bundleListClosed);
-    if (bundleListOpenParam !== null || bundleListClosedParam !== null) {
-      const normalized = normalizeListColumnState(
-        parseListColumnCsvParam(bundleListOpenParam, BUNDLE_OPTIONAL_LIST_COLUMNS),
-        parseListColumnCsvParam(bundleListClosedParam, BUNDLE_OPTIONAL_LIST_COLUMNS),
-        BUNDLE_OPTIONAL_LIST_COLUMNS
-      );
-      setBundleListForcedOpenColumns(normalized.open);
-      setBundleListForcedClosedColumns(normalized.closed);
-    }
-
-    querySyncReadyRef.current = true;
-  }, []);
-
-  useEffect(() => {
-    if (isExpertMode) return;
-    if (releaseTrack === "stable") return;
-    setReleaseTrack("stable");
-  }, [isExpertMode, releaseTrack]);
-
-  useEffect(() => {
-    if (!activeVideo) return;
-    const handle = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setActiveVideo(null);
-      }
-    };
-    window.addEventListener("keydown", handle);
-    return () => window.removeEventListener("keydown", handle);
-  }, [activeVideo]);
-
-  useEffect(() => {
-    if (!activeDetails) return;
-    const handle = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setActiveDetails(null);
-      }
-    };
-    window.addEventListener("keydown", handle);
-    return () => window.removeEventListener("keydown", handle);
-  }, [activeDetails]);
-
-  useEffect(() => {
-    const apiBase = String(baseUrl || "").trim();
-    const endpoint = `${apiBase}/api/bundles`;
-    let alive = true;
-    const loadBundles = async () => {
-      setBundlesLoading(true);
-      setBundlesError(null);
-      try {
-        const res = await fetch(endpoint, { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (!alive) return;
-        setBundles(Array.isArray(data) ? data : []);
-      } catch (err: any) {
-        if (!alive) return;
-        setBundles([]);
-        setBundlesError(err?.message ?? "failed to load bundles");
-      } finally {
-        if (alive) setBundlesLoading(false);
-      }
-    };
-    void loadBundles();
-    return () => {
-      alive = false;
-    };
-  }, [baseUrl]);
-
-  useEffect(() => {
-    const node = scrollRef.current;
-    const contentNode = contentRef.current;
-    if (!node && !contentNode) return;
-    const toNumber = (value: string) => {
-      const parsed = Number.parseFloat(value);
-      return Number.isFinite(parsed) ? parsed : 0;
-    };
-    const update = () => {
-      const currentContentNode = contentRef.current;
-      if (currentContentNode) {
-        const computed = window.getComputedStyle(currentContentNode);
-        const horizontalPadding = toNumber(computed.paddingLeft) + toNumber(computed.paddingRight);
-        const verticalPadding = toNumber(computed.paddingTop) + toNumber(computed.paddingBottom);
-        setGridSize({
-          width: Math.max(0, (currentContentNode.clientWidth || 0) - horizontalPadding),
-          height: Math.max(0, (currentContentNode.clientHeight || 0) - verticalPadding),
-        });
-        return;
-      }
-      if (!node) return;
-      const controlsHeight = controlsRef.current?.clientHeight ?? 0;
-      setGridSize({
-        width: node.clientWidth || 0,
-        height: Math.max(0, (node.clientHeight || 0) - controlsHeight),
-      });
-    };
-    update();
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", update);
-      return () => window.removeEventListener("resize", update);
-    }
-    const observer = new ResizeObserver(() => update());
-    if (node) observer.observe(node);
-    if (controlsRef.current) observer.observe(controlsRef.current);
-    if (contentNode) observer.observe(contentNode);
-    return () => observer.disconnect();
-  }, []);
-
-  const roleStatusById = useMemo(() => {
-    const out: Record<string, string> = {};
-    roles.forEach((role) => {
-      const roleId = String(role.id || "").trim();
-      const status = normalizeFacet(role.status);
-      if (!roleId || !status) return;
-      out[roleId] = status;
-    });
-    return out;
-  }, [roles]);
-
-  const appLifecycleOptionsAll = useMemo(() => {
-    const set = new Set<string>();
-    roles.forEach((role) => {
-      const status = normalizeFacet(role.status);
-      if (status) set.add(status);
-    });
-    return sortStatuses(Array.from(set));
-  }, [roles]);
-
-  const bundleLifecycleByBundleId = useMemo(() => {
-    const out: Record<string, Set<string>> = {};
-    bundles.forEach((bundle) => {
-      const statuses = new Set<string>();
-      (Array.isArray(bundle.role_ids) ? bundle.role_ids : [])
-        .map((roleId) => String(roleId || "").trim())
-        .filter(Boolean)
-        .forEach((roleId) => {
-          const status = roleStatusById[roleId];
-          if (status) statuses.add(status);
-        });
-      out[bundle.id] = statuses;
-    });
-    return out;
-  }, [bundles, roleStatusById]);
-
-  const bundleLifecycleOptionsAll = useMemo(() => {
-    const set = new Set<string>();
-    Object.values(bundleLifecycleByBundleId).forEach((statuses) => {
-      statuses.forEach((status) => set.add(status));
-    });
-    return sortStatuses(Array.from(set));
-  }, [bundleLifecycleByBundleId]);
-
-  const lifecycleAllowedStatuses = useMemo(
-    () =>
-      new Set<string>(
-        Array.from(
-          isExpertMode && releaseTrack === "preview"
-            ? LIFECYCLE_PREVIEW_EXPERT_ALLOWED
-            : LIFECYCLE_STABLE_ALLOWED
-        )
-      ),
-    [isExpertMode, releaseTrack]
-  );
-
-  const lifecycleBaseOptions =
-    softwareScope === "bundles" ? bundleLifecycleOptionsAll : appLifecycleOptionsAll;
-
-  const lifecycleStatusOptions = useMemo(
-    () =>
-      sortStatuses(
-        lifecycleBaseOptions.filter((status) => lifecycleAllowedStatuses.has(status))
-      ),
-    [lifecycleBaseOptions, lifecycleAllowedStatuses]
-  );
-
-  const lifecycleStatusOptionSet = useMemo(
-    () => new Set<string>(lifecycleStatusOptions),
-    [lifecycleStatusOptions]
-  );
-
-  useEffect(() => {
-    setStatusFilter((prev) => {
-      const next = new Set(
-        Array.from(prev).filter((status) => lifecycleStatusOptionSet.has(status))
-      );
-      const unchanged =
-        next.size === prev.size && Array.from(next).every((status) => prev.has(status));
-      return unchanged ? prev : next;
-    });
-  }, [lifecycleStatusOptionSet]);
-
-  const appCategoryOptions = useMemo(
-    () => collectFacetValues(roles, (role) => role.categories),
-    [roles]
-  );
-
-  const appTagOptions = useMemo(
-    () => collectFacetValues(roles, (role) => role.galaxy_tags),
-    [roles]
-  );
-
-  const bundleCategoryOptions = useMemo(
-    () => collectFacetValues(bundles, (bundle) => bundle.categories),
-    [bundles]
-  );
-
-  const bundleTagOptions = useMemo(
-    () => collectFacetValues(bundles, (bundle) => bundle.tags),
-    [bundles]
-  );
-
-  const appCategoryLabelByToken = useMemo(() => {
-    const map = new Map<string, string>();
-    appCategoryOptions.forEach((entry) => {
-      map.set(normalizeFacet(entry), entry);
-    });
-    return map;
-  }, [appCategoryOptions]);
-
-  const appTagLabelByToken = useMemo(() => {
-    const map = new Map<string, string>();
-    appTagOptions.forEach((entry) => {
-      map.set(normalizeFacet(entry), entry);
-    });
-    return map;
-  }, [appTagOptions]);
-
-  const bundleCategoryLabelByToken = useMemo(() => {
-    const map = new Map<string, string>();
-    bundleCategoryOptions.forEach((entry) => {
-      map.set(normalizeFacet(entry), entry);
-    });
-    return map;
-  }, [bundleCategoryOptions]);
-
-  const bundleTagLabelByToken = useMemo(() => {
-    const map = new Map<string, string>();
-    bundleTagOptions.forEach((entry) => {
-      map.set(normalizeFacet(entry), entry);
-    });
-    return map;
-  }, [bundleTagOptions]);
-
-  const activeCategoryOptions =
-    softwareScope === "bundles" ? bundleCategoryOptions : appCategoryOptions;
-  const activeTagOptions =
-    softwareScope === "bundles" ? bundleTagOptions : appTagOptions;
-  const activeCategoryLabelByToken =
-    softwareScope === "bundles"
-      ? bundleCategoryLabelByToken
-      : appCategoryLabelByToken;
-  const activeTagLabelByToken =
-    softwareScope === "bundles" ? bundleTagLabelByToken : appTagLabelByToken;
-
-  const matrixAliases = useMemo(() => {
-    const raw = Array.isArray(serverAliases) ? serverAliases : [];
-    const deduped = Array.from(
-      new Set(
-        raw
-          .map((alias) => String(alias || "").trim())
-          .filter(Boolean)
-      )
-    );
-    if (deduped.length > 0) return deduped;
-    const fallback = String(activeAlias || "").trim();
-    return fallback ? [fallback] : [];
-  }, [serverAliases, activeAlias]);
-
-  const matrixColumnStyleByAlias = useMemo(() => {
-    const out: Record<string, CSSProperties> = {};
-    matrixAliases.forEach((alias) => {
-      const color = String(serverMetaByAlias?.[alias]?.color || "").trim();
-      const cellBg = hexToRgba(color, 0.14);
-      const headBg = hexToRgba(color, 0.24);
-      const border = hexToRgba(color, 0.58);
-      if (!cellBg && !headBg && !border) return;
-      out[alias] = {
-        ...(cellBg ? { "--matrix-device-col-bg": cellBg } : {}),
-        ...(headBg ? { "--matrix-device-col-head-bg": headBg } : {}),
-        ...(border ? { "--matrix-device-col-border": border } : {}),
-      } as CSSProperties;
-    });
-    return out;
-  }, [matrixAliases, serverMetaByAlias]);
-
-  const selectedLookup = useMemo(() => {
-    const out: Record<string, Set<string>> = {};
-    if (selectedByAlias) {
-      Object.entries(selectedByAlias).forEach(([alias, roleIds]) => {
-        const key = String(alias || "").trim();
-        if (!key) return;
-        out[key] = new Set(
-          (Array.isArray(roleIds) ? roleIds : [])
-            .map((roleId) => String(roleId || "").trim())
-            .filter(Boolean)
-        );
-      });
-    }
-    const active = String(activeAlias || "").trim();
-    if (active && !out[active]) {
-      out[active] = new Set(selected);
-    }
-    return out;
-  }, [selectedByAlias, activeAlias, selected]);
-
-  const roleServerCountByRole = useMemo(() => {
-    const counts: Record<string, number> = {};
-    roles.forEach((role) => {
-      const roleId = String(role.id || "").trim();
-      if (!roleId) return;
-      counts[roleId] = matrixAliases.reduce((sum, alias) => {
-        return sum + (selectedLookup[alias]?.has(roleId) ? 1 : 0);
-      }, 0);
-    });
-    return counts;
-  }, [roles, matrixAliases, selectedLookup]);
-
-  const roleById = useMemo(() => {
-    const out: Record<string, Role> = {};
-    roles.forEach((role) => {
-      const roleId = String(role.id || "").trim();
-      if (!roleId) return;
-      out[roleId] = role;
-    });
-    return out;
-  }, [roles]);
-
-  const rolePlanOptions = useMemo(() => {
-    const out: Record<string, { id: string; label: string }[]> = {};
-    roles.forEach((role) => {
-      const pricing = role?.pricing;
-      const offerings = Array.isArray(pricing?.offerings) ? pricing.offerings : [];
-      const defaultOfferingId = String(
-        pricing?.default_offering_id || pricing?.default_offering || ""
-      ).trim();
-      const orderedOfferings = offerings
-        .slice()
-        .sort((a: any, b: any) => {
-          const aId = String(a?.id || "").trim();
-          const bId = String(b?.id || "").trim();
-          if (aId === defaultOfferingId && bId !== defaultOfferingId) return -1;
-          if (bId === defaultOfferingId && aId !== defaultOfferingId) return 1;
-          return aId.localeCompare(bId);
-        });
-      const plans = orderedOfferings.flatMap((offering: any) =>
-        Array.isArray(offering?.plans) ? offering.plans : []
-      );
-      const normalized = plans
-        .map((plan: any) => ({
-          id: String(plan?.id || "").trim(),
-          label: String(plan?.label || plan?.id || "").trim(),
-        }))
-        .filter((plan: { id: string; label: string }) => plan.id && plan.label);
-      const deduped = Array.from(
-        new Map(normalized.map((plan: { id: string; label: string }) => [plan.id, plan])).values()
-      );
-      if (!deduped.some((plan) => plan.id === "community")) {
-        deduped.unshift({ id: "community", label: "Community" });
-      }
-      out[role.id] = deduped.length > 0 ? deduped : [{ id: "community", label: "Community" }];
-    });
-    return out;
-  }, [roles]);
-
-  const defaultPlanByRole = useMemo(() => {
-    const out: Record<string, string> = {};
-    Object.entries(rolePlanOptions).forEach(([roleId, plans]) => {
-      out[roleId] =
-        plans.find((plan) => plan.id === "community")?.id ||
-        plans[0]?.id ||
-        "community";
-    });
-    return out;
-  }, [rolePlanOptions]);
-
-  const selectedPlanLookup = useMemo(() => {
-    const out: Record<string, Record<string, string | null>> = {};
-    matrixAliases.forEach((alias) => {
-      const next: Record<string, string | null> = {};
-      const selectedRoles = selectedLookup[alias] || new Set<string>();
-      const rolePlans = selectedPlanByAlias?.[alias] || {};
-      roles.forEach((role) => {
-        const roleId = role.id;
-        const selectedPlan = rolePlans?.[roleId];
-        if (selectedRoles.has(roleId)) {
-          next[roleId] = selectedPlan || defaultPlanByRole[roleId] || "community";
-        } else {
-          next[roleId] = null;
-        }
-      });
-      out[alias] = next;
-    });
-    return out;
-  }, [matrixAliases, selectedLookup, selectedPlanByAlias, roles, defaultPlanByRole]);
-
-  const activeSelectedPlanByRole = useMemo(() => {
-    const alias = String(activeAlias || "").trim();
-    if (!alias) return {};
-    return selectedPlanLookup[alias] || {};
-  }, [activeAlias, selectedPlanLookup]);
-
-  const appFilteredRoles = useMemo(
-    () =>
-      filterRoles(roles, {
-        statuses: statusFilter,
-        target: targetFilter,
-        query,
-        categories: categoryFilter,
-        tags: tagFilter,
-      }),
-    [roles, statusFilter, targetFilter, query, categoryFilter, tagFilter]
-  );
-
-  const filteredBundles = useMemo(() => {
-    const queryToken = normalizeFacet(query);
-    const categoryTokens = new Set(Array.from(categoryFilter));
-    const tagTokens = new Set(Array.from(tagFilter));
-    return bundles.filter((bundle) => {
-      if (targetFilter !== "all") {
-        const target = normalizeDeployTarget(bundle.deploy_target);
-        if (target !== targetFilter) return false;
-      }
-
-      if (statusFilter.size > 0) {
-        const bundleStatuses = bundleLifecycleByBundleId[bundle.id] || new Set<string>();
-        const hasLifecycleMatch = Array.from(statusFilter).some((status) =>
-          bundleStatuses.has(status)
-        );
-        if (!hasLifecycleMatch) return false;
-      }
-
-      if (categoryTokens.size > 0) {
-        const categories = (bundle.categories || []).map(normalizeFacet);
-        if (!categories.some((entry) => categoryTokens.has(entry))) return false;
-      }
-
-      if (tagTokens.size > 0) {
-        const tags = (bundle.tags || []).map(normalizeFacet);
-        if (!tags.some((entry) => tagTokens.has(entry))) return false;
-      }
-
-      if (queryToken) {
-        const haystack = [bundle.id, bundle.title, bundle.description]
-          .map(normalizeFacet)
-          .join(" ");
-        if (!haystack.includes(queryToken)) return false;
-      }
-
-      return true;
-    });
-  }, [
-    bundles,
+  useRoleDashboardBootstrap({
+    baseUrl,
+    isExpertMode,
+    releaseTrack,
+    setReleaseTrack,
+    setSoftwareScope,
+    setQuery,
+    setQueryDraft,
+    setTargetFilter,
+    setStatusFilter,
+    setCategoryFilter,
+    setTagFilter,
+    setShowSelectedOnly,
+    setViewMode,
+    setRowsOverride,
+    setListForcedOpenColumns: (values) =>
+      setListForcedOpenColumns(values as OptionalListColumnKey[]),
+    setListForcedClosedColumns: (values) =>
+      setListForcedClosedColumns(values as OptionalListColumnKey[]),
+    setBundleListForcedOpenColumns: (values) =>
+      setBundleListForcedOpenColumns(values as BundleOptionalListColumnKey[]),
+    setBundleListForcedClosedColumns: (values) =>
+      setBundleListForcedClosedColumns(values as BundleOptionalListColumnKey[]),
+    optionalListColumns: OPTIONAL_LIST_COLUMNS,
+    bundleOptionalListColumns: BUNDLE_OPTIONAL_LIST_COLUMNS,
+    querySyncReadyRef,
+    activeVideo,
+    setActiveVideo,
+    activeDetails,
+    setActiveDetails,
+    setBundles,
+    setBundlesLoading,
+    setBundlesError,
+    scrollRef,
+    controlsRef,
+    contentRef,
+    setGridSize,
+    filtersOpen,
+    setFiltersOpen,
+    filtersPopoverRef,
+    filtersButtonRef,
+    viewMenuOpen,
+    setViewMenuOpen,
+    viewPopoverRef,
+    viewButtonRef,
+    softwareScope,
+    query,
     targetFilter,
     statusFilter,
-    bundleLifecycleByBundleId,
+    categoryFilter,
+    tagFilter,
+    showSelectedOnly,
+    viewMode,
+    rowsOverride,
+    listForcedOpenColumns,
+    listForcedClosedColumns,
+    bundleListForcedOpenColumns,
+    bundleListForcedClosedColumns,
+    editingRole: editor.editingRole,
+    setEditingRole: editor.setEditingRole,
+  });
+
+  const selection = useRoleDashboardSelection({
+    roles,
+    bundles,
+    activeAlias,
+    serverAliases,
+    serverMetaByAlias,
+    selected,
+    selectedByAlias,
+    onToggleSelected,
+    selectedPlanByAlias,
+    onToggleSelectedForAlias,
+    onSelectPlanForAlias,
+    onCreateServerForTarget,
+    activeDetails,
+    setBundleMergePrompt,
+  });
+
+  const filtering = useRoleDashboardFiltering({
+    roles,
+    bundles,
+    loading,
+    error,
+    selected,
+    statusFilter,
+    setStatusFilter,
+    targetFilter,
     categoryFilter,
     tagFilter,
     query,
-  ]);
-
-  const filteredRoles = useMemo(() => {
-    if (!showSelectedOnly) return appFilteredRoles;
-    if (viewMode === "matrix") {
-      return appFilteredRoles.filter((role) =>
-        matrixAliases.some((alias) => selectedLookup[alias]?.has(role.id))
-      );
-    }
-    return appFilteredRoles.filter((role) => selected.has(role.id));
-  }, [appFilteredRoles, selected, showSelectedOnly, viewMode, matrixAliases, selectedLookup]);
-
-  const viewConfig = VIEW_CONFIG[viewMode];
-  const isLaneView = viewMode === "row" || viewMode === "column";
-  const isLaneAnimatedView = isLaneView;
-  const isAppLaneAnimatedView = softwareScope === "apps" && isLaneView;
-  const isBundleLaneAnimatedView = softwareScope === "bundles" && isLaneView;
-  const gridGap = 16;
-  const widthBuffer = viewMode === "mini" ? 80 : viewConfig.horizontal ? 360 : 140;
-  const minCardWidth = Math.max(viewConfig.minWidth, viewConfig.iconSize + widthBuffer);
-  const computedColumns =
-    viewMode === "list" ||
-    viewMode === "matrix" ||
-    viewMode === "row" ||
-    viewMode === "column"
-      ? 1
-      : Math.max(
-          1,
-          Math.floor((gridSize.width + gridGap) / (minCardWidth + gridGap))
-        );
-  const contentHeightBuffer =
-    viewMode === "mini" ? 24 : viewMode === "matrix" ? 12 : 8;
-  const laneMinSize = viewMode === "row" ? 188 : viewMode === "column" ? 220 : viewConfig.minHeight;
-  const rowAxisSize = viewMode === "column" ? gridSize.width : gridSize.height;
-  const computedRows = Math.max(
-    1,
-    Math.floor(
-      (Math.max(0, rowAxisSize - contentHeightBuffer) + gridGap) /
-        (laneMinSize + gridGap)
-    )
-  );
-  const rows = Math.max(1, rowsOverride ?? computedRows);
-  const laneGap = 14;
-  const laneCount = Math.max(1, rows);
-  const laneGapTotal = Math.max(0, laneGap * (laneCount - 1));
-  const rowLaneSize = Math.max(
-    188,
-    Math.floor(Math.max(0, gridSize.height - laneGapTotal) / laneCount)
-  );
-  const columnLaneSize = Math.max(
-    220,
-    Math.floor(Math.max(0, gridSize.width - laneGapTotal) / laneCount)
-  );
-  const pageSize = Math.max(1, rows * computedColumns);
-  const activeItemCount =
-    softwareScope === "bundles" ? filteredBundles.length : filteredRoles.length;
-  const rowOptions = useMemo(() => {
-    const maxRows = Math.max(
-      1,
-      Math.ceil(activeItemCount / Math.max(1, computedColumns))
-    );
-    const next = ROW_FILTER_OPTIONS.filter((value) => value <= maxRows);
-    if (rowsOverride && !next.includes(rowsOverride)) {
-      next.push(rowsOverride);
-    }
-    return next.sort((a, b) => a - b);
-  }, [activeItemCount, computedColumns, rowsOverride]);
-
-  const pageCount = isLaneAnimatedView ? 1 : Math.max(1, Math.ceil(activeItemCount / pageSize));
-  const currentPage = isLaneAnimatedView ? 1 : Math.min(page, pageCount);
-  const animatedRoles = useMemo(() => {
-    if (!isAppLaneAnimatedView || filteredRoles.length === 0) return filteredRoles;
-    const total = filteredRoles.length;
-    const normalizedOffset = ((animatedRoleOffset % total) + total) % total;
-    if (normalizedOffset === 0) return filteredRoles;
-    return [
-      ...filteredRoles.slice(normalizedOffset),
-      ...filteredRoles.slice(0, normalizedOffset),
-    ];
-  }, [filteredRoles, animatedRoleOffset, isAppLaneAnimatedView]);
-  const animatedBundles = useMemo(() => {
-    if (!isBundleLaneAnimatedView || filteredBundles.length === 0) return filteredBundles;
-    const total = filteredBundles.length;
-    const normalizedOffset = ((animatedBundleOffset % total) + total) % total;
-    if (normalizedOffset === 0) return filteredBundles;
-    return [
-      ...filteredBundles.slice(normalizedOffset),
-      ...filteredBundles.slice(0, normalizedOffset),
-    ];
-  }, [filteredBundles, animatedBundleOffset, isBundleLaneAnimatedView]);
-  const paginatedRoles = useMemo(() => {
-    if (isAppLaneAnimatedView) return animatedRoles;
-    const start = (currentPage - 1) * pageSize;
-    return filteredRoles.slice(start, start + pageSize);
-  }, [filteredRoles, currentPage, pageSize, isAppLaneAnimatedView, animatedRoles]);
-  const paginatedBundles = useMemo(() => {
-    if (isBundleLaneAnimatedView) return animatedBundles;
-    const start = (currentPage - 1) * pageSize;
-    return filteredBundles.slice(start, start + pageSize);
-  }, [filteredBundles, currentPage, pageSize, isBundleLaneAnimatedView, animatedBundles]);
-  const laneAnimatedItemCount =
-    softwareScope === "bundles" ? filteredBundles.length : filteredRoles.length;
-
-  const selectedCount = useMemo(() => {
-    if (viewMode !== "matrix") return selected.size;
-    return matrixAliases.reduce(
-      (sum, alias) => sum + (selectedLookup[alias]?.size ?? 0),
-      0
-    );
-  }, [viewMode, selected, matrixAliases, selectedLookup]);
-
-  const filteredSelectedCount = useMemo(() => {
-    if (viewMode !== "matrix") {
-      return filteredRoles.filter((role) => selected.has(role.id)).length;
-    }
-    const allowedRoleIds = new Set(filteredRoles.map((role) => role.id));
-    let count = 0;
-    matrixAliases.forEach((alias) => {
-      selectedLookup[alias]?.forEach((roleId) => {
-        if (allowedRoleIds.has(roleId)) count += 1;
-      });
-    });
-    return count;
-  }, [viewMode, filteredRoles, selected, matrixAliases, selectedLookup]);
-
-  const hiddenSelected = Math.max(0, selectedCount - filteredSelectedCount);
-  const isBundleScope = softwareScope === "bundles";
-  const headerLoading = isBundleScope ? bundlesLoading : loading;
-  const headerError = isBundleScope ? bundlesError : error;
-  const headerFilteredCount = isBundleScope ? filteredBundles.length : filteredRoles.length;
-  const headerTotalCount = isBundleScope ? bundles.length : roles.length;
+    showSelectedOnly,
+    viewMode,
+    softwareScope,
+    isExpertMode,
+    releaseTrack,
+    matrixAliases: selection.matrixAliases,
+    selectedLookup: selection.selectedLookup,
+    gridSize,
+    rowsOverride,
+    page,
+    setPage,
+    animatedRoleOffset,
+    setAnimatedRoleOffset,
+    animatedBundleOffset,
+    setAnimatedBundleOffset,
+    activeMode,
+    bundlesLoading,
+    bundlesError,
+  });
 
   const toggleStatus = (status: string) => {
     setStatusFilter((prev) => {
@@ -1076,225 +262,21 @@ export default function RoleDashboard({
     setTagDraft("");
   };
 
-  const canToggleAliasRole = (alias: string) =>
-    Boolean(onSelectPlanForAlias || onToggleSelectedForAlias) ||
-    String(activeAlias || "").trim() === alias;
-
-  const canToggleAliasBundle = (alias: string) =>
-    Boolean(onSelectPlanForAlias || onToggleSelectedForAlias) ||
-    String(activeAlias || "").trim() === alias;
-
-  const toggleSelectedByAlias = (alias: string, roleId: string) => {
-    if (!alias || !roleId) return;
-    if (onToggleSelectedForAlias) {
-      onToggleSelectedForAlias(alias, roleId);
-      return;
-    }
-    if (String(activeAlias || "").trim() === alias) {
-      onToggleSelected(roleId);
-    }
-  };
-
-  const selectPlanByAlias = (alias: string, roleId: string, planId: string | null) => {
-    if (!alias || !roleId) return;
-    if (onSelectPlanForAlias) {
-      onSelectPlanForAlias(alias, roleId, planId);
-      return;
-    }
-    const selectedState = Boolean(selectedLookup[alias]?.has(roleId));
-    if (planId && !selectedState) {
-      toggleSelectedByAlias(alias, roleId);
-    } else if (!planId && selectedState) {
-      toggleSelectedByAlias(alias, roleId);
-    }
-  };
-
-  const knownRoleIds = useMemo(
-    () => new Set(roles.map((role) => String(role.id || "").trim()).filter(Boolean)),
-    [roles]
-  );
-
-  const resolveBundleAlias = (bundle: Bundle): string => {
-    const currentAlias = String(activeAlias || "").trim();
-    if (currentAlias) return currentAlias;
-
-    const existingAliases = matrixAliases
-      .map((alias) => String(alias || "").trim())
-      .filter(Boolean);
-    if (existingAliases.length > 0) {
-      const deployTarget = normalizeDeployTarget(bundle.deploy_target);
-      const targetMatch =
-        existingAliases.find((alias) => alias.toLowerCase() === deployTarget) ||
-        existingAliases.find((alias) =>
-          alias.toLowerCase().includes(deployTarget === "workstation" ? "workstation" : "server")
-        );
-      return targetMatch || existingAliases[0];
-    }
-
-    const createdAlias = onCreateServerForTarget?.(bundle.deploy_target);
-    return String(createdAlias || bundle.deploy_target || "server").trim() || "server";
-  };
-
-  const applyBundleToAlias = (
-    bundle: Bundle,
-    alias: string,
-    strategy: "merge" | "overwrite"
-  ) => {
-    const targetAlias = String(alias || "").trim();
-    if (!targetAlias) return;
-    const bundleRoleIds = (Array.isArray(bundle.role_ids) ? bundle.role_ids : [])
-      .map((roleId) => String(roleId || "").trim())
-      .filter((roleId) => roleId && knownRoleIds.has(roleId));
-    if (bundleRoleIds.length === 0) return;
-
-    const existing = selectedLookup[targetAlias] || new Set<string>();
-    const desired =
-      strategy === "merge"
-        ? new Set<string>([...Array.from(existing), ...bundleRoleIds])
-        : new Set<string>(bundleRoleIds);
-
-    const roleIdsToCheck = new Set<string>([
-      ...Array.from(existing),
-      ...Array.from(desired),
-    ]);
-    roleIdsToCheck.forEach((roleId) => {
-      const hasNow = existing.has(roleId);
-      const shouldHave = desired.has(roleId);
-      if (hasNow === shouldHave) return;
-      if (shouldHave) {
-        const defaultPlan = defaultPlanByRole[roleId] || "community";
-        selectPlanByAlias(targetAlias, roleId, defaultPlan);
-      } else {
-        selectPlanByAlias(targetAlias, roleId, null);
-      }
+  const removeCategoryFilter = (token: string) => {
+    setCategoryFilter((prev) => {
+      const next = new Set(prev);
+      next.delete(token);
+      return next;
     });
   };
 
-  const requestEnableBundleForAlias = (bundle: Bundle, aliasOverride?: string) => {
-    const aliasCandidate = String(aliasOverride || "").trim();
-    const alias = aliasCandidate || resolveBundleAlias(bundle);
-    if (!alias) return;
-    const existing = selectedLookup[alias] || new Set<string>();
-    if (existing.size === 0) {
-      applyBundleToAlias(bundle, alias, "overwrite");
-      return;
-    }
-    setBundleMergePrompt({ bundle, alias });
-  };
-
-  const disableBundleForAlias = (bundle: Bundle, aliasOverride?: string) => {
-    const aliasCandidate = String(aliasOverride || "").trim();
-    const alias = aliasCandidate || resolveBundleAlias(bundle);
-    if (!alias) return;
-    const existing = selectedLookup[alias] || new Set<string>();
-    const bundleRoleIds = (Array.isArray(bundle.role_ids) ? bundle.role_ids : [])
-      .map((roleId) => String(roleId || "").trim())
-      .filter((roleId) => roleId && knownRoleIds.has(roleId));
-    bundleRoleIds.forEach((roleId) => {
-      if (existing.has(roleId)) {
-        selectPlanByAlias(alias, roleId, null);
-      }
+  const removeTagFilter = (token: string) => {
+    setTagFilter((prev) => {
+      const next = new Set(prev);
+      next.delete(token);
+      return next;
     });
   };
-
-  const requestEnableBundle = (bundle: Bundle) => {
-    requestEnableBundleForAlias(bundle);
-  };
-
-  const disableBundle = (bundle: Bundle) => {
-    disableBundleForAlias(bundle);
-  };
-
-  const bundleRoleCountById = useMemo(() => {
-    const out: Record<string, number> = {};
-    bundles.forEach((bundle) => {
-      out[bundle.id] = (Array.isArray(bundle.role_ids) ? bundle.role_ids : [])
-        .map((roleId) => String(roleId || "").trim())
-        .filter((roleId) => roleId && knownRoleIds.has(roleId)).length;
-    });
-    return out;
-  }, [bundles, knownRoleIds]);
-
-  const bundleStateByAlias = useMemo(() => {
-    const aliasCandidates = matrixAliases.length
-      ? matrixAliases
-      : [String(activeAlias || "").trim()].filter(Boolean);
-    const byAlias: Record<string, Record<string, BundleSelectionState>> = {};
-
-    aliasCandidates.forEach((alias) => {
-      const selectedForAlias = selectedLookup[alias] || new Set<string>();
-      const stateMap: Record<string, BundleSelectionState> = {};
-      bundles.forEach((bundle) => {
-        const bundleRoleIds = (Array.isArray(bundle.role_ids) ? bundle.role_ids : [])
-          .map((roleId) => String(roleId || "").trim())
-          .filter((roleId) => roleId && knownRoleIds.has(roleId));
-        const totalCount = bundleRoleIds.length;
-        const selectedCount = bundleRoleIds.reduce(
-          (sum, roleId) => sum + (selectedForAlias.has(roleId) ? 1 : 0),
-          0
-        );
-        stateMap[bundle.id] = {
-          enabled: totalCount > 0 && selectedCount === totalCount,
-          selectedCount,
-          totalCount,
-        };
-      });
-      byAlias[alias] = stateMap;
-    });
-
-    return byAlias;
-  }, [matrixAliases, activeAlias, selectedLookup, bundles, knownRoleIds]);
-
-  const bundleStateById = useMemo(() => {
-    const alias = String(activeAlias || "").trim() || matrixAliases[0] || "";
-    return bundleStateByAlias[alias] || {};
-  }, [activeAlias, matrixAliases, bundleStateByAlias]);
-
-  const detailAliases = useMemo(() => {
-    const fallback = String(activeAlias || "").trim();
-    const aliases = matrixAliases.map((alias) => String(alias || "").trim()).filter(Boolean);
-    if (aliases.length > 0) return aliases;
-    return fallback ? [fallback] : ["server"];
-  }, [matrixAliases, activeAlias]);
-
-  const activeDetailsAlias = useMemo(() => {
-    if (!activeDetails) return detailAliases[0] || "server";
-    if (detailAliases.includes(activeDetails.alias)) return activeDetails.alias;
-    return detailAliases[0] || "server";
-  }, [activeDetails, detailAliases]);
-
-  const activeDetailsRoleId = String(activeDetails?.role?.id || "").trim();
-  const activeDetailsSelected = Boolean(
-    activeDetailsRoleId && selectedLookup[activeDetailsAlias]?.has(activeDetailsRoleId)
-  );
-  const activeDetailsPlans = activeDetailsRoleId
-    ? rolePlanOptions[activeDetailsRoleId] || [{ id: "community", label: "Community" }]
-    : [{ id: "community", label: "Community" }];
-  const activeDetailsPlanId = activeDetailsRoleId
-    ? selectedPlanLookup[activeDetailsAlias]?.[activeDetailsRoleId] ?? null
-    : null;
-
-  useEffect(() => {
-    setPage(1);
-    setAnimatedRoleOffset(0);
-    setAnimatedBundleOffset(0);
-  }, [
-    query,
-    statusFilter,
-    targetFilter,
-    categoryFilter,
-    tagFilter,
-    softwareScope,
-    releaseTrack,
-    activeMode,
-    showSelectedOnly,
-    viewMode,
-    rowsOverride,
-  ]);
-
-  useEffect(() => {
-    if (page > pageCount) setPage(pageCount);
-  }, [page, pageCount]);
 
   const applySearch = () => {
     setQuery(queryDraft.trim());
@@ -1312,121 +294,6 @@ export default function RoleDashboard({
     setFiltersOpen(true);
   };
 
-  useEffect(() => {
-    if (!filtersOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (filtersPopoverRef.current?.contains(target)) return;
-      if (filtersButtonRef.current?.contains(target)) return;
-      setFiltersOpen(false);
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setFiltersOpen(false);
-    };
-    const closeOnViewportChange = () => setFiltersOpen(false);
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    window.addEventListener("resize", closeOnViewportChange);
-    window.addEventListener("scroll", closeOnViewportChange, true);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-      window.removeEventListener("resize", closeOnViewportChange);
-      window.removeEventListener("scroll", closeOnViewportChange, true);
-    };
-  }, [filtersOpen]);
-
-  useEffect(() => {
-    if (!viewMenuOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (viewPopoverRef.current?.contains(target)) return;
-      if (viewButtonRef.current?.contains(target)) return;
-      setViewMenuOpen(false);
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setViewMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [viewMenuOpen]);
-
-  useEffect(() => {
-    setViewMenuOpen(false);
-  }, [softwareScope]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!querySyncReadyRef.current) return;
-    const url = new URL(window.location.href);
-    const params = url.searchParams;
-    params.set(SW_QUERY_KEYS.scope, softwareScope);
-    params.set(SW_QUERY_KEYS.track, releaseTrack);
-    params.set(SW_QUERY_KEYS.search, query);
-    params.set(SW_QUERY_KEYS.target, targetFilter);
-    params.set(
-      SW_QUERY_KEYS.status,
-      Array.from(statusFilter)
-        .sort((a, b) => a.localeCompare(b))
-        .join(",")
-    );
-    params.set(
-      SW_QUERY_KEYS.categories,
-      Array.from(categoryFilter)
-        .sort((a, b) => a.localeCompare(b))
-        .join(",")
-    );
-    params.set(
-      SW_QUERY_KEYS.tags,
-      Array.from(tagFilter)
-        .sort((a, b) => a.localeCompare(b))
-        .join(",")
-    );
-    params.set(SW_QUERY_KEYS.selected, showSelectedOnly ? "1" : "0");
-    params.set(SW_QUERY_KEYS.view, viewMode);
-    params.set(SW_QUERY_KEYS.rows, rowsOverride ? String(rowsOverride) : "auto");
-    params.set(SW_QUERY_KEYS.listOpen, listForcedOpenColumns.join(","));
-    params.set(SW_QUERY_KEYS.listClosed, listForcedClosedColumns.join(","));
-    params.set(SW_QUERY_KEYS.bundleListOpen, bundleListForcedOpenColumns.join(","));
-    params.set(SW_QUERY_KEYS.bundleListClosed, bundleListForcedClosedColumns.join(","));
-    window.history.replaceState({}, "", url.toString());
-  }, [
-    softwareScope,
-    releaseTrack,
-    query,
-    targetFilter,
-    statusFilter,
-    categoryFilter,
-    tagFilter,
-    showSelectedOnly,
-    viewMode,
-    rowsOverride,
-    listForcedOpenColumns,
-    listForcedClosedColumns,
-    bundleListForcedOpenColumns,
-    bundleListForcedClosedColumns,
-  ]);
-
-  useEffect(() => {
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (editingRole) {
-        setEditingRole(null);
-      }
-    };
-    window.addEventListener("keydown", onEscape);
-    return () => window.removeEventListener("keydown", onEscape);
-  }, [editingRole]);
-
   const applyMode = (mode: "customer" | "expert") => {
     if (onModeChange) {
       onModeChange(mode);
@@ -1438,7 +305,7 @@ export default function RoleDashboard({
   const handleModeChange = (mode: "customer" | "expert") => {
     applyMode(mode);
     if (mode === "customer") {
-      setEditingRole(null);
+      editor.setEditingRole(null);
       setReleaseTrack("stable");
     }
   };
@@ -1450,1167 +317,172 @@ export default function RoleDashboard({
       ? "Preview mode active. Alpha lifecycle filters are additionally available."
       : "Stable mode active. Lifecycle filters are limited to beta and maintenance/stable.";
 
-  const startEditRoleConfig = async (role: Role, aliasOverride?: string) => {
-    if (!onLoadRoleAppConfig) return;
-    const requestedAlias = String(aliasOverride || "").trim();
-    setEditingRole(role);
-    setEditorBusy(true);
-    setEditorError(null);
-    setEditorStatus(null);
-    setEditorAlias(requestedAlias);
-    try {
-      const data = await onLoadRoleAppConfig(role.id, requestedAlias || undefined);
-      setEditorContent(String(data?.content ?? ""));
-      setEditorPath(String(data?.host_vars_path ?? ""));
-      setEditorAlias(String(data?.alias ?? requestedAlias));
-    } catch (err: any) {
-      setEditorError(err?.message ?? "failed to load app config");
-      setEditorContent("");
-      setEditorPath("");
-      setEditorAlias(requestedAlias);
-    } finally {
-      setEditorBusy(false);
-    }
-  };
-
-  const saveRoleConfig = async () => {
-    if (!editingRole || !onSaveRoleAppConfig) return;
-    setEditorBusy(true);
-    setEditorError(null);
-    setEditorStatus(null);
-    try {
-      const data = await onSaveRoleAppConfig(
-        editingRole.id,
-        editorContent,
-        editorAlias || undefined
-      );
-      setEditorContent(String(data?.content ?? editorContent));
-      setEditorPath(String(data?.host_vars_path ?? editorPath));
-      setEditorAlias(String(data?.alias ?? editorAlias));
-      setEditorStatus("Saved.");
-    } catch (err: any) {
-      setEditorError(err?.message ?? "failed to save app config");
-    } finally {
-      setEditorBusy(false);
-    }
-  };
-
-  const importRoleDefaults = async () => {
-    if (!editingRole || !onImportRoleAppDefaults) return;
-    setEditorBusy(true);
-    setEditorError(null);
-    setEditorStatus(null);
-    try {
-      const data = await onImportRoleAppDefaults(
-        editingRole.id,
-        editorAlias || undefined
-      );
-      setEditorContent(String(data?.content ?? editorContent));
-      setEditorPath(String(data?.host_vars_path ?? editorPath));
-      setEditorAlias(String(data?.alias ?? editorAlias));
-      const imported = Number(data?.imported_paths ?? 0);
-      setEditorStatus(
-        imported > 0
-          ? `Imported ${imported} missing paths from config/main.yml.`
-          : "No missing defaults to import."
-      );
-    } catch (err: any) {
-      setEditorError(err?.message ?? "failed to import defaults");
-    } finally {
-      setEditorBusy(false);
-    }
-  };
-
-  const filtersOverlay =
-    filtersOpen && typeof document !== "undefined"
-      ? createPortal(
-          <div
-            ref={filtersPopoverRef}
-            className={styles.dropdownCardOverlay}
-            style={{ top: filtersPos.top, left: filtersPos.left }}
-          >
-            <div className={styles.group}>
-              <span
-                className={`text-body-tertiary ${styles.groupTitle}`}
-                title={FILTER_TOOLTIPS.rows}
-              >
-                <i className={`fa-solid fa-grip ${styles.groupTitleIcon}`} aria-hidden="true" />
-                <span>Rows</span>
-              </span>
-              <select
-                value={rowsOverride ? String(rowsOverride) : "auto"}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  if (value === "auto") {
-                    setRowsOverride(null);
-                  } else {
-                    const parsed = Number(value);
-                    setRowsOverride(Number.isFinite(parsed) ? parsed : null);
-                  }
-                }}
-                className={`form-select ${styles.rowSelect}`}
-                title={FILTER_TOOLTIPS.rows}
-              >
-                <option value="auto">Auto ({computedRows})</option>
-                {rowOptions.map((value) => (
-                  <option key={value} value={String(value)}>
-                    {value} rows
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className={styles.group}>
-              <span
-                className={`text-body-tertiary ${styles.groupTitle}`}
-                title={FILTER_TOOLTIPS.deployTarget}
-              >
-                <i className={`fa-solid fa-crosshairs ${styles.groupTitleIcon}`} aria-hidden="true" />
-                <span>Deploy target</span>
-              </span>
-              <div className={styles.groupButtons}>
-                {TARGET_FILTER_OPTIONS.map((target) => (
-                  <button
-                    key={target}
-                    onClick={() => setTargetFilter(target)}
-                    className={`${styles.pillButton} ${
-                      targetFilter === target ? styles.pillButtonActive : ""
-                    }`}
-                    title={TARGET_FILTER_META[target].tooltip}
-                    aria-label={TARGET_FILTER_META[target].tooltip}
-                  >
-                    <i className={TARGET_FILTER_META[target].iconClass} aria-hidden="true" />
-                    <span>{target}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className={styles.group}>
-              <span
-                className={`text-body-tertiary ${styles.groupTitle}`}
-                title={FILTER_TOOLTIPS.lifecycle}
-              >
-                <i className={`fa-solid fa-wave-square ${styles.groupTitleIcon}`} aria-hidden="true" />
-                <span>Lifecycle</span>
-              </span>
-              <div className={styles.groupButtons}>
-                {lifecycleStatusOptions.map((status) => {
-                  const active = statusFilter.has(status);
-                  const statusMeta = STATUS_FILTER_META[status] || {
-                    iconClass: "fa-solid fa-circle",
-                    tooltip: `${status} lifecycle stage.`,
-                  };
-                  return (
-                    <button
-                      key={status}
-                      onClick={() => toggleStatus(status)}
-                      className={`${styles.pillButton} ${
-                        active ? styles.pillButtonActive : ""
-                      }`}
-                      title={`${
-                        softwareScope === "bundles" ? "Filter bundles" : "Filter apps"
-                      } by lifecycle: ${status}. ${statusMeta.tooltip}`}
-                    >
-                      <i className={statusMeta.iconClass} aria-hidden="true" />
-                      <span>{status}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              {lifecycleStatusOptions.length === 0 ? (
-                <span className={styles.groupHint}>
-                  No lifecycle options available for this scope and mode.
-                </span>
-              ) : null}
-            </div>
-
-            {softwareScope === "apps" ? (
-              <div className={styles.group}>
-                <span
-                  className={`text-body-tertiary ${styles.groupTitle}`}
-                  title={FILTER_TOOLTIPS.selection}
-                >
-                  <i className={`fa-solid fa-list-check ${styles.groupTitleIcon}`} aria-hidden="true" />
-                  <span>Selection</span>
-                </span>
-                <div className={styles.groupButtons}>
-                  {[
-                    {
-                      key: "all",
-                      label: "all",
-                      iconClass: "fa-solid fa-layer-group",
-                      tooltip: "Show all apps.",
-                      active: !showSelectedOnly,
-                    },
-                    {
-                      key: "selected",
-                      label: "enabled",
-                      iconClass: "fa-solid fa-circle-check",
-                      tooltip: "Show only enabled apps.",
-                      active: showSelectedOnly,
-                    },
-                  ].map((item) => (
-                    <button
-                      key={item.key}
-                      onClick={() => setShowSelectedOnly(item.key === "selected")}
-                      className={`${styles.pillButton} ${
-                        item.active ? styles.pillButtonActive : ""
-                      }`}
-                      title={item.tooltip}
-                    >
-                      <i className={item.iconClass} aria-hidden="true" />
-                      <span>{item.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            <div className={styles.group}>
-              <span
-                className={`text-body-tertiary ${styles.groupTitle}`}
-                title={FILTER_TOOLTIPS.categories}
-              >
-                <i className={`fa-solid fa-folder-open ${styles.groupTitleIcon}`} aria-hidden="true" />
-                <span>Categories</span>
-              </span>
-              <div className={styles.filterInputRow}>
-                <input
-                  value={categoryDraft}
-                  onChange={(event) => setCategoryDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      addCategoryFilter();
-                    }
-                  }}
-                  list="role-category-options"
-                  placeholder="Search/add category"
-                  className={`form-control ${styles.filterInput}`}
-                  title={FILTER_TOOLTIPS.categories}
-                />
-                <button
-                  type="button"
-                  onClick={addCategoryFilter}
-                  className={styles.filterAddButton}
-                  title="Add category filter"
-                >
-                  <i className="fa-solid fa-plus" aria-hidden="true" />
-                  Add
-                </button>
-              </div>
-              <datalist id="role-category-options">
-                {activeCategoryOptions.map((entry) => (
-                  <option key={entry} value={entry} />
-                ))}
-              </datalist>
-              {categoryFilter.size > 0 ? (
-                <div className={styles.selectedTokenList}>
-                  {Array.from(categoryFilter).map((token) => (
-                    <button
-                      key={token}
-                      type="button"
-                      onClick={() =>
-                        setCategoryFilter((prev) => {
-                          const next = new Set(prev);
-                          next.delete(token);
-                          return next;
-                        })
-                      }
-                      className={styles.selectedToken}
-                      title={`Remove category filter: ${activeCategoryLabelByToken.get(token) || token}`}
-                    >
-                      <span>{activeCategoryLabelByToken.get(token) || token}</span>
-                      <i className="fa-solid fa-xmark" aria-hidden="true" />
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <span className={styles.groupHint}>No category filter</span>
-              )}
-            </div>
-
-            <div className={styles.group}>
-              <span
-                className={`text-body-tertiary ${styles.groupTitle}`}
-                title={FILTER_TOOLTIPS.tags}
-              >
-                <i className={`fa-solid fa-tags ${styles.groupTitleIcon}`} aria-hidden="true" />
-                <span>Tags</span>
-              </span>
-              <div className={styles.filterInputRow}>
-                <input
-                  value={tagDraft}
-                  onChange={(event) => setTagDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      addTagFilter();
-                    }
-                  }}
-                  list="role-tag-options"
-                  placeholder="Search/add tag"
-                  className={`form-control ${styles.filterInput}`}
-                  title={FILTER_TOOLTIPS.tags}
-                />
-                <button
-                  type="button"
-                  onClick={addTagFilter}
-                  className={styles.filterAddButton}
-                  title="Add tag filter"
-                >
-                  <i className="fa-solid fa-plus" aria-hidden="true" />
-                  Add
-                </button>
-              </div>
-              <datalist id="role-tag-options">
-                {activeTagOptions.map((entry) => (
-                  <option key={entry} value={entry} />
-                ))}
-              </datalist>
-              {tagFilter.size > 0 ? (
-                <div className={styles.selectedTokenList}>
-                  {Array.from(tagFilter).map((token) => (
-                    <button
-                      key={token}
-                      type="button"
-                      onClick={() =>
-                        setTagFilter((prev) => {
-                          const next = new Set(prev);
-                          next.delete(token);
-                          return next;
-                        })
-                      }
-                      className={styles.selectedToken}
-                      title={`Remove tag filter: ${activeTagLabelByToken.get(token) || token}`}
-                    >
-                      <span>{activeTagLabelByToken.get(token) || token}</span>
-                      <i className="fa-solid fa-xmark" aria-hidden="true" />
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <span className={styles.groupHint}>No tag filter</span>
-              )}
-            </div>
-          </div>,
-          document.body
-        )
-      : null;
-
   return (
     <Wrapper className={wrapperClassName}>
-      {!compact ? (
-        <div className={styles.header}>
-          <div className={styles.headerLeft}>
-            <h2 className={`text-body ${styles.title}`}>Software</h2>
-            <p className={`text-body-secondary ${styles.subtitle}`}>
-              Browse roles, filter fast, and keep your selections locked in while you
-              explore.
-            </p>
-          </div>
-          <div className={`text-body-secondary ${styles.headerRight}`}>
-            {headerLoading ? (
-              <span>{isBundleScope ? "Loading bundles…" : "Loading roles…"}</span>
-            ) : (
-              <span>
-                {headerFilteredCount} / {headerTotalCount}{" "}
-                {isBundleScope ? "bundles" : "roles"}
-                {!isBundleScope && selectedCount > 0 ? (
-                  <span>
-                    {" "}
-                    · Enabled {selectedCount}
-                    {hiddenSelected > 0 ? ` (${hiddenSelected} hidden)` : ""}
-                  </span>
-                ) : null}
-                {!isBundleScope && viewMode === "matrix"
-                  ? ` · Matrix: ${matrixAliases.length} devices`
-                  : !isBundleScope && activeAlias
-                    ? ` · Active: ${activeAlias}`
-                    : ""}
-              </span>
-            )}
-          </div>
-        </div>
-      ) : null}
+      <RoleDashboardBodyContainer
+        compact={compact}
+        filtering={filtering}
+        selection={selection}
+        serverMetaByAlias={serverMetaByAlias}
+        activeAlias={activeAlias}
+        scrollRef={scrollRef}
+        controlsRef={controlsRef}
+        contentRef={contentRef}
+        queryDraft={queryDraft}
+        setQueryDraft={setQueryDraft}
+        setQuery={setQuery}
+        applySearch={applySearch}
+        softwareScope={softwareScope}
+        setSoftwareScope={setSoftwareScope}
+        filtersOpen={filtersOpen}
+        setFiltersOpen={setFiltersOpen}
+        openFilters={openFilters}
+        filtersButtonRef={filtersButtonRef}
+        serverSwitcher={serverSwitcher}
+        viewMode={viewMode}
+        releaseTrack={releaseTrack}
+        releaseTrackLocked={releaseTrackLocked}
+        releaseTrackTooltip={releaseTrackTooltip}
+        setReleaseTrack={setReleaseTrack}
+        activeMode={activeMode}
+        handleModeChange={handleModeChange}
+        viewMenuOpen={viewMenuOpen}
+        setViewMenuOpen={setViewMenuOpen}
+        viewButtonRef={viewButtonRef}
+        viewPopoverRef={viewPopoverRef}
+        setViewMode={setViewMode}
+        columnAnimationRunning={columnAnimationRunning}
+        bundleListForcedOpenColumns={bundleListForcedOpenColumns}
+        bundleListForcedClosedColumns={bundleListForcedClosedColumns}
+        setBundleListForcedOpenColumns={setBundleListForcedOpenColumns}
+        setBundleListForcedClosedColumns={setBundleListForcedClosedColumns}
+        selected={selected}
+        onToggleSelected={onToggleSelected}
+        baseUrl={baseUrl}
+        setActiveVideo={setActiveVideo}
+        listForcedOpenColumns={listForcedOpenColumns}
+        listForcedClosedColumns={listForcedClosedColumns}
+        setListForcedOpenColumns={setListForcedOpenColumns}
+        setListForcedClosedColumns={setListForcedClosedColumns}
+        setActiveDetails={setActiveDetails}
+        setAnimatedBundleOffset={setAnimatedBundleOffset}
+        setAnimatedRoleOffset={setAnimatedRoleOffset}
+        setColumnAnimationRunning={setColumnAnimationRunning}
+        setPage={setPage}
+      />
 
-      {headerError ? <div className={`text-danger ${styles.error}`}>{headerError}</div> : null}
-
-      <div className={styles.layout}>
-        <div ref={scrollRef} className={styles.scrollArea}>
-          <div ref={controlsRef} className={styles.controls}>
-            <div className={styles.controlsRow}>
-              <input
-                value={queryDraft}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setQueryDraft(value);
-                  setQuery(value);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    applySearch();
-                  }
-                }}
-                placeholder={softwareScope === "bundles" ? "Search bundles" : "Search roles"}
-                aria-label={softwareScope === "bundles" ? "Search bundles" : "Search roles"}
-                className={`form-control ${styles.search}`}
-              />
-              <button
-                ref={filtersButtonRef}
-                onClick={() => {
-                  if (filtersOpen) {
-                    setFiltersOpen(false);
-                  } else {
-                    openFilters();
-                  }
-                }}
-                className={`${styles.toolbarButton} ${styles.filterButton}`}
-                aria-expanded={filtersOpen}
-                title={
-                  softwareScope === "apps"
-                    ? "Open filters for rows, deploy target, lifecycle, selection, categories and tags"
-                    : "Open filters for rows, deploy target, lifecycle, categories and tags"
-                }
-              >
-                <i className="fa-solid fa-filter" aria-hidden="true" />
-                <span>Filters</span>
-                <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-              </button>
-              {softwareScope === "apps" && serverSwitcher && viewMode !== "matrix" ? (
-                <div className={styles.serverSwitcherSlot}>{serverSwitcher}</div>
-              ) : null}
-              <button
-                type="button"
-                onClick={() =>
-                  setSoftwareScope((prev) => (prev === "apps" ? "bundles" : "apps"))
-                }
-                className={`${styles.toolbarButton} ${styles.scopeToggleButton} ${
-                  softwareScope === "apps"
-                    ? styles.scopeToggleButtonApps
-                    : styles.scopeToggleButtonBundles
-                }`}
-                aria-label="Toggle apps and bundles"
-                aria-pressed={softwareScope === "apps"}
-                title={
-                  softwareScope === "apps"
-                    ? "Switch scope to bundles"
-                    : "Switch scope to apps"
-                }
-              >
-                <i
-                  className={
-                    softwareScope === "apps"
-                      ? "fa-solid fa-toggle-on"
-                      : "fa-solid fa-toggle-off"
-                  }
-                  aria-hidden="true"
-                />
-                <span>{softwareScope === "apps" ? "Apps" : "Bundles"}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setReleaseTrack((prev) => (prev === "preview" ? "stable" : "preview"))
-                }
-                className={`${styles.toolbarButton} ${styles.releaseTrackButton} ${
-                  releaseTrack === "preview"
-                    ? styles.releaseTrackButtonPreview
-                    : styles.releaseTrackButtonStable
-                } ${releaseTrackLocked ? styles.releaseTrackButtonLocked : ""}`}
-                aria-label="Toggle stable and preview release track"
-                aria-pressed={releaseTrack === "preview"}
-                title={releaseTrackTooltip}
-                disabled={releaseTrackLocked}
-              >
-                <i
-                  className={
-                    releaseTrack === "preview"
-                      ? "fa-solid fa-flask"
-                      : "fa-solid fa-shield-halved"
-                  }
-                  aria-hidden="true"
-                />
-                <span>{releaseTrack === "preview" ? "Preview" : "Stable"}</span>
-              </button>
-              <div className={styles.modeControl}>
-                <ModeToggle mode={activeMode} onModeChange={handleModeChange} />
-              </div>
-              <div className={styles.viewModeControl}>
-                <button
-                  ref={viewButtonRef}
-                  onClick={() => setViewMenuOpen((prev) => !prev)}
-                  className={`${styles.viewModeButton} ${styles.viewModeButtonActive}`}
-                  aria-haspopup="menu"
-                  aria-expanded={viewMenuOpen}
-                >
-                  <i className={VIEW_MODE_ICONS[viewMode]} aria-hidden="true" />
-                  <span>{formatViewLabel(viewMode)}</span>
-                  <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-                </button>
-                {viewMenuOpen ? (
-                  <div
-                    ref={viewPopoverRef}
-                    className={styles.viewModeMenu}
-                    role="menu"
-                  >
-                    {DEFAULT_VIEW_MODES.map((mode) => {
-                      const active = viewMode === mode;
-                      return (
-                        <button
-                          key={mode}
-                          onClick={() => {
-                            setViewMode(mode);
-                            setViewMenuOpen(false);
-                          }}
-                          className={`${styles.viewModeMenuItem} ${
-                            active ? styles.viewModeMenuItemActive : ""
-                          }`}
-                        >
-                          <i className={VIEW_MODE_ICONS[mode]} aria-hidden="true" />
-                          <span>{formatViewLabel(mode)}</span>
-                        </button>
-                      );
-                    })}
-                    <div
-                      key="view-mode-group-animated"
-                      className={styles.viewModeMenuSectionLabel}
-                      role="presentation"
-                    >
-                      Animated
-                    </div>
-                    {ANIMATED_VIEW_MODES.map((mode) => {
-                      const active = viewMode === mode;
-                      return (
-                        <button
-                          key={mode}
-                          onClick={() => {
-                            setViewMode(mode);
-                            setViewMenuOpen(false);
-                          }}
-                          className={`${styles.viewModeMenuItem} ${
-                            active ? styles.viewModeMenuItemActive : ""
-                          }`}
-                        >
-                          <i className={VIEW_MODE_ICONS[mode]} aria-hidden="true" />
-                          <span>{formatViewLabel(mode)}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
-          <div
-            ref={contentRef}
-            className={`${styles.content} ${
-              viewMode === "matrix" ? styles.contentMatrix : ""
-            }`}
-          >
-            {softwareScope === "bundles" ? (
-              viewMode === "matrix" ? (
-                matrixAliases.length === 0 ? (
-                  <div className={`text-body-secondary ${styles.matrixEmpty}`}>
-                    Add at least one device to use bundle matrix selection.
-                  </div>
-                ) : (
-                  <div className={styles.matrixContainer}>
-                    <table className={styles.matrixTable}>
-                      <thead>
-                        <tr>
-                          <th>Bundle</th>
-                          {matrixAliases.map((alias) => (
-                            <th
-                              key={alias}
-                              className={styles.matrixAliasColumnHead}
-                              style={matrixColumnStyleByAlias[alias]}
-                            >
-                              <span className={styles.matrixAliasHead}>
-                                <span aria-hidden="true">
-                                  {serverMetaByAlias?.[alias]?.logoEmoji || "💻"}
-                                </span>
-                                <span className={styles.matrixAliasName} title={alias}>
-                                  {alias}
-                                </span>
-                              </span>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginatedBundles.map((bundle) => (
-                          <tr key={bundle.id}>
-                            <th className={styles.matrixRoleCell}>
-                              <div className={styles.matrixRoleInner}>
-                                <span className={styles.matrixBundleIcon} aria-hidden="true">
-                                  <i
-                                    className={String(bundle.logo_class || "fa-solid fa-layer-group")}
-                                  />
-                                </span>
-                                <div className={styles.matrixRoleText}>
-                                  <span className={styles.matrixRoleName}>{bundle.title}</span>
-                                  <span className={styles.matrixRoleId}>
-                                    {(bundle.deploy_target || "bundle").trim() || "bundle"} ·{" "}
-                                    {bundleRoleCountById[bundle.id] || 0} apps
-                                  </span>
-                                </div>
-                              </div>
-                            </th>
-                            {matrixAliases.map((alias) => {
-                              const bundleState = bundleStateByAlias[alias]?.[bundle.id];
-                              const totalCount =
-                                bundleState?.totalCount ?? bundleRoleCountById[bundle.id] ?? 0;
-                              const selectedCount = bundleState?.selectedCount ?? 0;
-                              const enabled = Boolean(bundleState?.enabled);
-                              const selectable = canToggleAliasBundle(alias);
-                              const partiallyEnabled =
-                                totalCount > 0 &&
-                                selectedCount > 0 &&
-                                selectedCount < totalCount;
-                              const partialTooltip = `Partially enabled on "${alias}": ${selectedCount}/${totalCount} apps active. Click to enable full bundle.`;
-                              return (
-                                <td
-                                  key={`${alias}:${bundle.id}`}
-                                  className={styles.matrixAliasColumnCell}
-                                  style={matrixColumnStyleByAlias[alias]}
-                                >
-                                  <div className={styles.matrixCellActions}>
-                                    {partiallyEnabled ? (
-                                      <button
-                                        type="button"
-                                        className={styles.matrixPartialButton}
-                                        title={partialTooltip}
-                                        disabled={!selectable}
-                                        onClick={() =>
-                                          requestEnableBundleForAlias(bundle, alias)
-                                        }
-                                      >
-                                        <i
-                                          className="fa-solid fa-triangle-exclamation"
-                                          aria-hidden="true"
-                                        />
-                                        <span>Partial</span>
-                                      </button>
-                                    ) : (
-                                      <EnableDropdown
-                                        enabled={enabled}
-                                        disabled={!selectable || totalCount === 0}
-                                        compact
-                                        showPlanField={false}
-                                        pricingModel="bundle"
-                                        plans={[{ id: "community", label: "Community" }]}
-                                        selectedPlanId="community"
-                                        appCount={Math.max(1, totalCount)}
-                                        contextLabel={`device "${alias}" for bundle "${bundle.title}"`}
-                                        onEnable={() => requestEnableBundleForAlias(bundle, alias)}
-                                        onDisable={() => disableBundleForAlias(bundle, alias)}
-                                      />
-                                    )}
-                                  </div>
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )
-              ) : viewMode === "row" || viewMode === "column" ? (
-                <BundleColumnView
-                  bundles={paginatedBundles}
-                  iconSize={viewConfig.iconSize}
-                  variant={viewMode}
-                  laneCount={rows}
-                  laneSize={viewMode === "row" ? rowLaneSize : columnLaneSize}
-                  animationRunning={columnAnimationRunning}
-                  activeAlias={String(activeAlias || "").trim() || matrixAliases[0] || "server"}
-                  bundleStates={bundleStateById}
-                  roleById={roleById}
-                  roleServerCountByRole={roleServerCountByRole}
-                  onOpenRoleDetails={(role) =>
-                    setActiveDetails({
-                      role,
-                      alias: String(activeAlias || "").trim() || matrixAliases[0] || "server",
-                    })
-                  }
-                  onEnableBundle={requestEnableBundle}
-                  onDisableBundle={disableBundle}
-                />
-              ) : (
-                <BundleGridView
-                  bundles={paginatedBundles}
-                  viewMode={viewMode}
-                  viewConfig={viewConfig}
-                  computedColumns={computedColumns}
-                  gridGap={gridGap}
-                  minHeight={viewConfig.minHeight}
-                  activeAlias={String(activeAlias || "").trim() || matrixAliases[0] || "server"}
-                  bundleStates={bundleStateById}
-                  roleById={roleById}
-                  roleServerCountByRole={roleServerCountByRole}
-                  forcedOpenColumns={bundleListForcedOpenColumns}
-                  forcedClosedColumns={bundleListForcedClosedColumns}
-                  onListColumnsChange={({ open, closed }) => {
-                    const normalized = normalizeListColumnState(
-                      open,
-                      closed,
-                      BUNDLE_OPTIONAL_LIST_COLUMNS
-                    );
-                    setBundleListForcedOpenColumns(normalized.open);
-                    setBundleListForcedClosedColumns(normalized.closed);
-                  }}
-                  onOpenRoleDetails={(role) =>
-                    setActiveDetails({
-                      role,
-                      alias: String(activeAlias || "").trim() || matrixAliases[0] || "server",
-                    })
-                  }
-                  onEnableBundle={requestEnableBundle}
-                  onDisableBundle={disableBundle}
-                />
-              )
-            ) : viewMode === "matrix" ? (
-              matrixAliases.length === 0 ? (
-                <div className={`text-body-secondary ${styles.matrixEmpty}`}>
-                  Add at least one device to use matrix selection.
-                </div>
-              ) : (
-                <div className={styles.matrixContainer}>
-                  <table className={styles.matrixTable}>
-                    <thead>
-                      <tr>
-                        <th>App</th>
-                        {matrixAliases.map((alias) => (
-                          <th
-                            key={alias}
-                            className={styles.matrixAliasColumnHead}
-                            style={matrixColumnStyleByAlias[alias]}
-                          >
-                            <span className={styles.matrixAliasHead}>
-                              <span aria-hidden="true">
-                                {serverMetaByAlias?.[alias]?.logoEmoji || "💻"}
-                              </span>
-                              <span className={styles.matrixAliasName} title={alias}>
-                                {alias}
-                              </span>
-                            </span>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedRoles.map((role) => (
-                        <tr key={role.id}>
-                          <th className={styles.matrixRoleCell}>
-                            <div className={styles.matrixRoleInner}>
-                              <RoleLogoView role={role} size={28} />
-                              <div className={styles.matrixRoleText}>
-                                <span className={styles.matrixRoleName}>
-                                  {role.display_name}
-                                </span>
-                              </div>
-                            </div>
-                          </th>
-                          {matrixAliases.map((alias) => {
-                            const selectedState = Boolean(
-                              selectedLookup[alias]?.has(role.id)
-                            );
-                            const selectable = canToggleAliasRole(alias);
-                            return (
-                              <td
-                                key={`${alias}:${role.id}`}
-                                className={styles.matrixAliasColumnCell}
-                                style={matrixColumnStyleByAlias[alias]}
-                              >
-                                <div className={styles.matrixCellActions}>
-                                  <EnableDropdown
-                                    enabled={selectedState}
-                                    disabled={!selectable}
-                                    compact
-                                    pricingModel="app"
-                                    plans={rolePlanOptions[role.id]}
-                                    selectedPlanId={
-                                      selectedPlanLookup[alias]?.[role.id] ?? null
-                                    }
-                                    onSelectPlan={(planId) =>
-                                      selectPlanByAlias(alias, role.id, planId)
-                                    }
-                                    roleId={role.id}
-                                    pricing={role.pricing || null}
-                                    pricingSummary={role.pricing_summary || null}
-                                    baseUrl={baseUrl}
-                                    serverCount={selectedState ? 1 : 0}
-                                    appCount={1}
-                                    onEnable={() => {
-                                      if (!selectedState) {
-                                        toggleSelectedByAlias(alias, role.id);
-                                      }
-                                    }}
-                                    onDisable={() => {
-                                      if (selectedState) {
-                                        toggleSelectedByAlias(alias, role.id);
-                                      }
-                                    }}
-                                  />
-                                </div>
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )
-            ) : viewMode === "list" ? (
-              <RoleListView
-                roles={paginatedRoles}
-                selected={selected}
-                iconSize={viewConfig.iconSize}
-                onToggleSelected={onToggleSelected}
-                rolePlans={rolePlanOptions}
-                selectedPlanByRole={activeSelectedPlanByRole}
-                onSelectRolePlan={(roleId, planId) =>
-                  selectPlanByAlias(String(activeAlias || "").trim(), roleId, planId)
-                }
-                roleServerCountByRole={roleServerCountByRole}
-                baseUrl={baseUrl}
-                onOpenVideo={(url, title) => setActiveVideo({ url, title })}
-                forcedOpenColumns={listForcedOpenColumns}
-                forcedClosedColumns={listForcedClosedColumns}
-                onListColumnsChange={({ open, closed }) => {
-                  const normalized = normalizeListColumnState(
-                    open,
-                    closed,
-                    OPTIONAL_LIST_COLUMNS
-                  );
-                  setListForcedOpenColumns(normalized.open);
-                  setListForcedClosedColumns(normalized.closed);
-                }}
-              />
-            ) : viewMode === "row" || viewMode === "column" ? (
-              <RoleColumnView
-                roles={paginatedRoles}
-                selected={selected}
-                iconSize={viewConfig.iconSize}
-                variant={viewMode}
-                laneCount={rows}
-                laneSize={viewMode === "row" ? rowLaneSize : columnLaneSize}
-                animationRunning={columnAnimationRunning}
-                onToggleSelected={onToggleSelected}
-                rolePlans={rolePlanOptions}
-                selectedPlanByRole={activeSelectedPlanByRole}
-                onSelectRolePlan={(roleId, planId) =>
-                  selectPlanByAlias(String(activeAlias || "").trim(), roleId, planId)
-                }
-                roleServerCountByRole={roleServerCountByRole}
-                baseUrl={baseUrl}
-                onOpenVideo={(url, title) => setActiveVideo({ url, title })}
-                onOpenDetails={(role) =>
-                  setActiveDetails({
-                    role,
-                    alias: String(activeAlias || "").trim() || matrixAliases[0] || "server",
-                  })
-                }
-              />
-            ) : (
-              <RoleGridView
-                roles={paginatedRoles}
-                selected={selected}
-                onToggleSelected={onToggleSelected}
-                rolePlans={rolePlanOptions}
-                selectedPlanByRole={activeSelectedPlanByRole}
-                onSelectRolePlan={(roleId, planId) =>
-                  selectPlanByAlias(String(activeAlias || "").trim(), roleId, planId)
-                }
-                roleServerCountByRole={roleServerCountByRole}
-                baseUrl={baseUrl}
-                viewMode={viewMode}
-                viewConfig={viewConfig}
-                computedColumns={computedColumns}
-                gridGap={gridGap}
-                onOpenVideo={(url, title) => setActiveVideo({ url, title })}
-                onOpenDetails={(role) =>
-                  setActiveDetails({
-                    role,
-                    alias: String(activeAlias || "").trim() || matrixAliases[0] || "server",
-                  })
-                }
-              />
-            )}
-          </div>
-        </div>
-
-        <div className={`text-body-secondary ${styles.pagination}`}>
-          <button
-            type="button"
-            onClick={() => {
-              if (isLaneAnimatedView) {
-                if (laneAnimatedItemCount === 0) return;
-                const animatedStep = Math.max(1, laneCount);
-                if (softwareScope === "bundles") {
-                  setAnimatedBundleOffset((prev) => prev - animatedStep);
-                } else {
-                  setAnimatedRoleOffset((prev) => prev - animatedStep);
-                }
-                return;
+      <RoleDashboardOverlays
+        activeVideo={activeVideo}
+        onCloseVideo={() => setActiveVideo(null)}
+        activeDetails={activeDetails}
+        detailAliases={selection.detailAliases}
+        activeDetailsAlias={selection.activeDetailsAlias}
+        activeDetailsSelected={selection.activeDetailsSelected}
+        activeDetailsPlans={selection.activeDetailsPlans}
+        activeDetailsPlanId={selection.activeDetailsPlanId}
+        activeMode={activeMode}
+        onDetailsAliasChange={(alias) =>
+          setActiveDetails((prev) => (prev ? { ...prev, alias } : prev))
+        }
+        onDetailsSelectPlan={(planId) => {
+          if (!selection.activeDetailsRoleId) return;
+          selection.selectPlanByAlias(
+            selection.activeDetailsAlias,
+            selection.activeDetailsRoleId,
+            planId
+          );
+        }}
+        onDetailsEnable={() => {
+          if (!selection.activeDetailsRoleId || selection.activeDetailsSelected) return;
+          selection.toggleSelectedByAlias(
+            selection.activeDetailsAlias,
+            selection.activeDetailsRoleId
+          );
+        }}
+        onDetailsDisable={() => {
+          if (!selection.activeDetailsRoleId || !selection.activeDetailsSelected) return;
+          selection.toggleSelectedByAlias(
+            selection.activeDetailsAlias,
+            selection.activeDetailsRoleId
+          );
+        }}
+        onDetailsEditRoleConfig={
+          onLoadRoleAppConfig && activeDetails
+            ? () => {
+                setActiveDetails(null);
+                void editor.startEditRoleConfig(activeDetails.role, selection.activeDetailsAlias);
               }
-              setPage((prev) => Math.max(1, prev - 1));
-            }}
-            disabled={isLaneAnimatedView ? laneAnimatedItemCount <= 1 : currentPage <= 1}
-            className={`${styles.pageButton} ${
-              isLaneAnimatedView
-                ? laneAnimatedItemCount <= 1
-                  ? styles.pageButtonDisabled
-                  : `${styles.pageButtonEnabled} ${styles.columnTransportButton}`
-                : currentPage <= 1
-                ? styles.pageButtonDisabled
-                  : styles.pageButtonEnabled
-            }`}
-            aria-label={
-              isLaneAnimatedView
-                ? "Skip backward"
-                : "Previous page"
-            }
-            title={isLaneAnimatedView ? "Zurückspringen" : "Previous page"}
-          >
-            {isLaneAnimatedView ? (
-              <>
-                <i className="fa-solid fa-backward-step" aria-hidden="true" />
-                <span className="visually-hidden">Zurückspringen</span>
-              </>
-            ) : (
-              "Prev"
-            )}
-          </button>
-          {isLaneAnimatedView ? (
-            <button
-              type="button"
-              onClick={() => setColumnAnimationRunning((prev) => !prev)}
-              className={`${styles.pageButton} ${styles.pageButtonEnabled} ${styles.columnToggleButton}`}
-              aria-label={columnAnimationRunning ? "Stop animation" : "Start animation"}
-              title={columnAnimationRunning ? "Stop animation" : "Start animation"}
-            >
-              <i
-                className={
-                  columnAnimationRunning
-                    ? "fa-solid fa-circle-stop"
-                    : "fa-solid fa-circle-play"
-                }
-                aria-hidden="true"
-              />
-              <span className="visually-hidden">
-                {columnAnimationRunning ? "Stop" : "Start"}
-              </span>
-            </button>
-          ) : (
-            <span>
-              Page {currentPage} / {pageCount}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              if (isLaneAnimatedView) {
-                if (laneAnimatedItemCount === 0) return;
-                const animatedStep = Math.max(1, laneCount);
-                if (softwareScope === "bundles") {
-                  setAnimatedBundleOffset((prev) => prev + animatedStep);
-                } else {
-                  setAnimatedRoleOffset((prev) => prev + animatedStep);
-                }
-                return;
-              }
-              setPage((prev) => Math.min(pageCount, prev + 1));
-            }}
-            disabled={isLaneAnimatedView ? laneAnimatedItemCount <= 1 : currentPage >= pageCount}
-            className={`${styles.pageButton} ${
-              isLaneAnimatedView
-                ? laneAnimatedItemCount <= 1
-                  ? styles.pageButtonDisabled
-                  : `${styles.pageButtonEnabled} ${styles.columnTransportButton}`
-                : currentPage >= pageCount
-                ? styles.pageButtonDisabled
-                  : styles.pageButtonEnabled
-            }`}
-            aria-label={isLaneAnimatedView ? "Skip forward" : "Next page"}
-            title={isLaneAnimatedView ? "Vorspringen" : "Next page"}
-          >
-            {isLaneAnimatedView ? (
-              <>
-                <i className="fa-solid fa-forward-step" aria-hidden="true" />
-                <span className="visually-hidden">Vorspringen</span>
-              </>
-            ) : (
-              "Next"
-            )}
-          </button>
-        </div>
-      </div>
-
-      <RoleVideoModal activeVideo={activeVideo} onClose={() => setActiveVideo(null)} />
-      {activeDetails ? (
-        <RoleDetailsModal
-          role={activeDetails.role}
-          aliases={detailAliases}
-          selectedAlias={activeDetailsAlias}
-          selected={activeDetailsSelected}
-          plans={activeDetailsPlans}
-          selectedPlanId={activeDetailsPlanId}
-          serverCount={activeDetailsSelected ? 1 : 0}
-          onAliasChange={(alias) =>
-            setActiveDetails((prev) => (prev ? { ...prev, alias } : prev))
-          }
-          onSelectPlan={(planId) => {
-            if (!activeDetailsRoleId) return;
-            selectPlanByAlias(activeDetailsAlias, activeDetailsRoleId, planId);
-          }}
-          onEnable={() => {
-            if (!activeDetailsRoleId || activeDetailsSelected) return;
-            toggleSelectedByAlias(activeDetailsAlias, activeDetailsRoleId);
-          }}
-          onDisable={() => {
-            if (!activeDetailsRoleId || !activeDetailsSelected) return;
-            toggleSelectedByAlias(activeDetailsAlias, activeDetailsRoleId);
-          }}
-          expertMode={activeMode === "expert"}
-          onEditRoleConfig={
-            onLoadRoleAppConfig
-              ? () => {
-                  setActiveDetails(null);
-                  void startEditRoleConfig(activeDetails.role, activeDetailsAlias);
-                }
-              : undefined
-          }
-          onOpenVideo={(url, title) => setActiveVideo({ url, title })}
-          onClose={() => setActiveDetails(null)}
-        />
-      ) : null}
-      {bundleMergePrompt ? (
-        <div
-          onClick={() => setBundleMergePrompt(null)}
-          className={styles.modeConfirmOverlay}
-        >
-          <div
-            onClick={(event) => event.stopPropagation()}
-            className={styles.modeConfirmCard}
-          >
-            <div className={styles.modeConfirmTitleRow}>
-              <i
-                className={`fa-solid fa-diagram-project ${styles.modeConfirmIcon}`}
-                aria-hidden="true"
-              />
-              <h3 className={styles.modeConfirmTitle}>Bundle deployment strategy</h3>
-            </div>
-            <p className={styles.modeConfirmText}>
-              Server "{bundleMergePrompt.alias}" already has app selections. Choose how
-              to apply "{bundleMergePrompt.bundle.title}".
-            </p>
-            <div className={styles.modeConfirmActions}>
-              <button
-                onClick={() => setBundleMergePrompt(null)}
-                className={styles.modeActionButton}
-              >
-                <span>Cancel</span>
-              </button>
-              <button
-                onClick={() => {
-                  applyBundleToAlias(
-                    bundleMergePrompt.bundle,
-                    bundleMergePrompt.alias,
-                    "merge"
-                  );
-                  setBundleMergePrompt(null);
-                }}
-                className={`${styles.modeActionButton} ${styles.modeActionButtonSuccess}`}
-              >
-                <span>Merge</span>
-              </button>
-              <button
-                onClick={() => {
-                  applyBundleToAlias(
-                    bundleMergePrompt.bundle,
-                    bundleMergePrompt.alias,
-                    "overwrite"
-                  );
-                  setBundleMergePrompt(null);
-                }}
-                className={`${styles.modeActionButton} ${styles.modeActionButtonDanger}`}
-              >
-                <span>Overwrite</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-      {editingRole ? (
-        <div onClick={() => setEditingRole(null)} className={styles.configEditorOverlay}>
-          <div
-            onClick={(event) => event.stopPropagation()}
-            className={styles.configEditorCard}
-          >
-            <div className={styles.configEditorHeader}>
-              <div>
-                <h3 className={styles.configEditorTitle}>
-                  Edit app config: {editingRole.display_name}
-                </h3>
-                <p className={`text-body-secondary ${styles.configEditorMeta}`}>
-                  {editorAlias ? `Alias: ${editorAlias} · ` : ""}
-                  {editorPath || "host_vars file"}
-                </p>
-              </div>
-            </div>
-            <div className={styles.configEditorSurface}>
-              <CodeMirror
-                value={editorContent}
-                height="100%"
-                editable={!editorBusy}
-                extensions={editorExtensions}
-                onChange={(value) => {
-                  setEditorContent(value);
-                  setEditorStatus(null);
-                  setEditorError(null);
-                }}
-                className={styles.configEditorCodeMirror}
-              />
-            </div>
-            {editorError ? (
-              <p className={`text-danger ${styles.configEditorMessage}`}>{editorError}</p>
-            ) : null}
-            {editorStatus ? (
-              <p className={`text-success ${styles.configEditorMessage}`}>{editorStatus}</p>
-            ) : null}
-            <div className={styles.configEditorActions}>
-              <button
-                onClick={() => void importRoleDefaults()}
-                disabled={editorBusy || !onImportRoleAppDefaults}
-                className={styles.modeActionButton}
-              >
-                {editorBusy ? "Working..." : "Import defaults"}
-              </button>
-              <button
-                onClick={() => setEditingRole(null)}
-                className={styles.modeActionButton}
-              >
-                Close
-              </button>
-              <button
-                onClick={() => void saveRoleConfig()}
-                disabled={editorBusy || !onSaveRoleAppConfig}
-                className={`${styles.modeActionButton} ${styles.modeActionButtonPrimary}`}
-              >
-                {editorBusy ? "Saving..." : "Save"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-      {filtersOverlay}
+            : undefined
+        }
+        onDetailsOpenVideo={(url, title) => setActiveVideo({ url, title })}
+        onCloseDetails={() => setActiveDetails(null)}
+        bundleMergePrompt={bundleMergePrompt}
+        onCloseBundleMergePrompt={() => setBundleMergePrompt(null)}
+        onMergeBundlePrompt={() => {
+          if (!bundleMergePrompt) return;
+          selection.applyBundleToAlias(
+            bundleMergePrompt.bundle,
+            bundleMergePrompt.alias,
+            "merge"
+          );
+          setBundleMergePrompt(null);
+        }}
+        onOverwriteBundlePrompt={() => {
+          if (!bundleMergePrompt) return;
+          selection.applyBundleToAlias(
+            bundleMergePrompt.bundle,
+            bundleMergePrompt.alias,
+            "overwrite"
+          );
+          setBundleMergePrompt(null);
+        }}
+        editingRole={editor.editingRole}
+        editorAlias={editor.editorAlias}
+        editorPath={editor.editorPath}
+        editorContent={editor.editorContent}
+        editorBusy={editor.editorBusy}
+        editorError={editor.editorError}
+        editorStatus={editor.editorStatus}
+        canImportDefaults={Boolean(onImportRoleAppDefaults)}
+        canSave={Boolean(onSaveRoleAppConfig)}
+        onCloseEditor={() => editor.setEditingRole(null)}
+        onEditorContentChange={(value) => {
+          editor.setEditorContent(value);
+          editor.setEditorStatus(null);
+          editor.setEditorError(null);
+        }}
+        onImportDefaults={() => void editor.importRoleDefaults()}
+        onSaveEditor={() => void editor.saveRoleConfig()}
+        filtersOpen={filtersOpen}
+        filtersPopoverRef={filtersPopoverRef}
+        filtersPos={filtersPos}
+        rowsOverride={rowsOverride}
+        computedRows={filtering.computedRows}
+        rowOptions={filtering.rowOptions}
+        onRowsOverrideChange={setRowsOverride}
+        targetFilter={targetFilter}
+        onTargetFilterChange={setTargetFilter}
+        lifecycleStatusOptions={filtering.lifecycleStatusOptions}
+        statusFilter={statusFilter}
+        onToggleStatus={toggleStatus}
+        softwareScope={softwareScope}
+        showSelectedOnly={showSelectedOnly}
+        onShowSelectedOnlyChange={setShowSelectedOnly}
+        categoryDraft={categoryDraft}
+        onCategoryDraftChange={setCategoryDraft}
+        onAddCategoryFilter={addCategoryFilter}
+        activeCategoryOptions={filtering.activeCategoryOptions}
+        categoryFilter={categoryFilter}
+        activeCategoryLabelByToken={filtering.activeCategoryLabelByToken}
+        onRemoveCategoryFilter={removeCategoryFilter}
+        tagDraft={tagDraft}
+        onTagDraftChange={setTagDraft}
+        onAddTagFilter={addTagFilter}
+        activeTagOptions={filtering.activeTagOptions}
+        tagFilter={tagFilter}
+        activeTagLabelByToken={filtering.activeTagLabelByToken}
+        onRemoveTagFilter={removeTagFilter}
+      />
     </Wrapper>
   );
 }
