@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { colorForStatus, displayTargets } from "./helpers";
 import EnableDropdown from "./EnableDropdown";
@@ -8,6 +8,23 @@ import RoleLogoView from "./RoleLogoView";
 import RoleQuickLinks from "./RoleQuickLinks";
 import styles from "./styles";
 import type { Role } from "./types";
+import { formatMonthlyPrice } from "./formatting";
+import {
+  LIST_COLUMN_GAP_PX,
+  LIST_COLUMN_LABEL,
+  LIST_COLUMN_MIN_WIDTH,
+  LIST_COLUMN_ORDER,
+  LIST_COLUMN_TEMPLATE,
+  OPTIONAL_LIST_COLUMNS,
+  collapseEmojiForRole,
+  type ListColumnKey,
+  type OptionalListColumnKey,
+} from "./role-list-columns";
+import useDeselectionFlash from "./useDeselectionFlash";
+import useSyncedTopScrollbar from "./useSyncedTopScrollbar";
+
+export type { OptionalListColumnKey } from "./role-list-columns";
+export { OPTIONAL_LIST_COLUMNS } from "./role-list-columns";
 
 type RoleListViewProps = {
   baseUrl?: string;
@@ -28,99 +45,6 @@ type RoleListViewProps = {
   }) => void;
 };
 
-const DESELECTION_FADE_DURATION_MS = 3000;
-const LIST_COLUMN_GAP_PX = 12;
-
-export type OptionalListColumnKey =
-  | "version"
-  | "status"
-  | "targets"
-  | "description"
-  | "links"
-  | "price";
-
-type ListColumnKey = "software" | OptionalListColumnKey | "enabled";
-
-const LIST_COLUMN_ORDER: ListColumnKey[] = [
-  "software",
-  "version",
-  "status",
-  "targets",
-  "description",
-  "links",
-  "price",
-  "enabled",
-];
-
-export const OPTIONAL_LIST_COLUMNS: OptionalListColumnKey[] = [
-  "version",
-  "price",
-  "status",
-  "targets",
-  "description",
-  "links",
-];
-
-const LIST_COLUMN_LABEL: Record<ListColumnKey, string> = {
-  software: "Software",
-  version: "Version",
-  status: "Status",
-  targets: "Targets",
-  description: "Description",
-  links: "Links",
-  price: "Price",
-  enabled: "Enabled",
-};
-
-const LIST_COLUMN_TEMPLATE: Record<ListColumnKey, string> = {
-  software: "minmax(188px, 2.1fr)",
-  version: "minmax(92px, 0.75fr)",
-  status: "minmax(94px, 0.8fr)",
-  targets: "minmax(116px, 0.95fr)",
-  description: "minmax(186px, 1.8fr)",
-  links: "minmax(102px, 0.8fr)",
-  price: "minmax(96px, 0.8fr)",
-  enabled: "minmax(132px, 0.95fr)",
-};
-
-const LIST_COLUMN_MIN_WIDTH: Record<ListColumnKey, number> = {
-  software: 188,
-  version: 92,
-  status: 94,
-  targets: 116,
-  description: 186,
-  links: 102,
-  price: 96,
-  enabled: 132,
-};
-
-function collapseEmojiForRole(role: Role): string {
-  const targets = (role.deployment_targets || []).map((entry) =>
-    String(entry || "").trim().toLowerCase()
-  );
-  const hasUniversal = targets.includes("universal");
-  const hasServer = targets.includes("server");
-  const hasWorkstation = targets.includes("workstation");
-  if (hasUniversal || (hasServer && hasWorkstation)) return "🧩";
-  if (hasServer) return "🖥️";
-  if (hasWorkstation) return "💻";
-  return "📦";
-}
-
-function formatMonthlyPrice(amount: number): string {
-  const normalizedAmount = Math.max(0, Number(amount) || 0);
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: "EUR",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(normalizedAmount);
-  } catch {
-    return `€${normalizedAmount.toFixed(2)}`;
-  }
-}
-
 export default function RoleListView({
   baseUrl,
   roles,
@@ -137,15 +61,17 @@ export default function RoleListView({
   onListColumnsChange,
 }: RoleListViewProps) {
   const [expandedTitleIds, setExpandedTitleIds] = useState<Set<string>>(new Set());
-  const [deselectionFlashRoleIds, setDeselectionFlashRoleIds] = useState<Set<string>>(
-    new Set()
-  );
-  const deselectionTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const listScrollRef = useRef<HTMLDivElement | null>(null);
-  const listTopScrollRef = useRef<HTMLDivElement | null>(null);
-  const listTopScrollInnerRef = useRef<HTMLDivElement | null>(null);
-  const [containerWidth, setContainerWidth] = useState(0);
-  const [showTopScrollbar, setShowTopScrollbar] = useState(false);
+  const { flashingIds, clearDeselectionFlash, triggerDeselectionFlash } =
+    useDeselectionFlash(3000);
+  const {
+    listScrollRef,
+    listTopScrollRef,
+    listTopScrollInnerRef,
+    containerWidth,
+    showTopScrollbar,
+    syncTopScrollbarMetrics,
+  } = useSyncedTopScrollbar();
+
   const forcedOpenColumnSet = useMemo(
     () => new Set<OptionalListColumnKey>(forcedOpenColumns),
     [forcedOpenColumns]
@@ -154,22 +80,6 @@ export default function RoleListView({
     () => new Set<OptionalListColumnKey>(forcedClosedColumns),
     [forcedClosedColumns]
   );
-
-  const syncTopScrollbarMetrics = () => {
-    const listNode = listScrollRef.current;
-    const topNode = listTopScrollRef.current;
-    const topInnerNode = listTopScrollInnerRef.current;
-    if (!listNode || !topNode || !topInnerNode) return;
-    const requiredWidth = Math.max(listNode.scrollWidth, listNode.clientWidth);
-    topInnerNode.style.width = `${requiredWidth}px`;
-    const needsScrollbar = listNode.scrollWidth - listNode.clientWidth > 1;
-    setShowTopScrollbar(needsScrollbar);
-    if (!needsScrollbar) {
-      topNode.scrollLeft = 0;
-      return;
-    }
-    topNode.scrollLeft = listNode.scrollLeft;
-  };
 
   const toggleTitleExpansion = (roleId: string) => {
     setExpandedTitleIds((prev) => {
@@ -182,93 +92,6 @@ export default function RoleListView({
       return next;
     });
   };
-
-  const clearDeselectionFlash = (roleId: string) => {
-    const timer = deselectionTimersRef.current[roleId];
-    if (timer) {
-      clearTimeout(timer);
-      delete deselectionTimersRef.current[roleId];
-    }
-    setDeselectionFlashRoleIds((prev) => {
-      if (!prev.has(roleId)) return prev;
-      const next = new Set(prev);
-      next.delete(roleId);
-      return next;
-    });
-  };
-
-  const triggerDeselectionFlash = (roleId: string) => {
-    clearDeselectionFlash(roleId);
-    setDeselectionFlashRoleIds((prev) => {
-      const next = new Set(prev);
-      next.add(roleId);
-      return next;
-    });
-    deselectionTimersRef.current[roleId] = setTimeout(() => {
-      setDeselectionFlashRoleIds((prev) => {
-        if (!prev.has(roleId)) return prev;
-        const next = new Set(prev);
-        next.delete(roleId);
-        return next;
-      });
-      delete deselectionTimersRef.current[roleId];
-    }, DESELECTION_FADE_DURATION_MS);
-  };
-
-  useEffect(() => {
-    return () => {
-      Object.values(deselectionTimersRef.current).forEach((timer) => clearTimeout(timer));
-      deselectionTimersRef.current = {};
-    };
-  }, []);
-
-  useEffect(() => {
-    const node = listScrollRef.current;
-    if (!node) return;
-
-    const measure = () => {
-      setContainerWidth(Math.max(0, node.clientWidth));
-      syncTopScrollbarMetrics();
-    };
-    measure();
-
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", measure);
-      return () => window.removeEventListener("resize", measure);
-    }
-
-    const observer = new ResizeObserver(() => measure());
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const listNode = listScrollRef.current;
-    const topNode = listTopScrollRef.current;
-    if (!listNode || !topNode) return;
-    let syncing = false;
-
-    const syncToTop = () => {
-      if (syncing) return;
-      syncing = true;
-      topNode.scrollLeft = listNode.scrollLeft;
-      syncing = false;
-    };
-
-    const syncToList = () => {
-      if (syncing) return;
-      syncing = true;
-      listNode.scrollLeft = topNode.scrollLeft;
-      syncing = false;
-    };
-
-    listNode.addEventListener("scroll", syncToTop, { passive: true });
-    topNode.addEventListener("scroll", syncToList, { passive: true });
-    return () => {
-      listNode.removeEventListener("scroll", syncToTop);
-      topNode.removeEventListener("scroll", syncToList);
-    };
-  }, [showTopScrollbar]);
 
   const visibleColumns = useMemo(() => {
     const visible = new Set<ListColumnKey>(["software", "enabled"]);
@@ -296,25 +119,20 @@ export default function RoleListView({
     return LIST_COLUMN_ORDER.filter((column) => visible.has(column));
   }, [containerWidth, forcedOpenColumnSet, forcedClosedColumnSet]);
 
-  const listGridStyle = useMemo(
-    () => {
-      const minWidth =
-        visibleColumns.reduce((sum, column) => sum + LIST_COLUMN_MIN_WIDTH[column], 0) +
-        Math.max(0, visibleColumns.length - 1) * LIST_COLUMN_GAP_PX;
-      return {
-        gridTemplateColumns: visibleColumns
-          .map((column) => LIST_COLUMN_TEMPLATE[column])
-          .join(" "),
-        width: "100%",
-        minWidth: `max(100%, ${minWidth}px)`,
-      } as CSSProperties;
-    },
-    [visibleColumns]
-  );
+  const listGridStyle = useMemo(() => {
+    const minWidth =
+      visibleColumns.reduce((sum, column) => sum + LIST_COLUMN_MIN_WIDTH[column], 0) +
+      Math.max(0, visibleColumns.length - 1) * LIST_COLUMN_GAP_PX;
+    return {
+      gridTemplateColumns: visibleColumns.map((column) => LIST_COLUMN_TEMPLATE[column]).join(" "),
+      width: "100%",
+      minWidth: `max(100%, ${minWidth}px)`,
+    } as CSSProperties;
+  }, [visibleColumns]);
 
   useEffect(() => {
     syncTopScrollbarMetrics();
-  }, [visibleColumns, roles.length]);
+  }, [visibleColumns, roles.length, syncTopScrollbarMetrics]);
 
   const toggleColumn = (column: OptionalListColumnKey) => {
     const isCurrentlyVisible = visibleColumns.includes(column);
@@ -350,7 +168,11 @@ export default function RoleListView({
                   visible ? styles.listColumnToggleActive : styles.listColumnToggleCollapsed
                 }`}
                 aria-pressed={visible}
-                title={visible ? `Collapse ${LIST_COLUMN_LABEL[column]}` : `Expand ${LIST_COLUMN_LABEL[column]}`}
+                title={
+                  visible
+                    ? `Collapse ${LIST_COLUMN_LABEL[column]}`
+                    : `Expand ${LIST_COLUMN_LABEL[column]}`
+                }
               >
                 <span>{LIST_COLUMN_LABEL[column]}</span>
                 <i
@@ -386,7 +208,7 @@ export default function RoleListView({
 
         {roles.map((role) => {
           const selectedState = selected.has(role.id);
-          const isDeselectionFlashing = deselectionFlashRoleIds.has(role.id);
+          const isDeselectionFlashing = flashingIds.has(role.id);
           const roleServerCount = Math.max(
             0,
             Math.floor(Number(roleServerCountByRole?.[role.id] || 0))
@@ -490,7 +312,10 @@ export default function RoleListView({
 
                 if (column === "description") {
                   return (
-                    <div key={`${role.id}:description`} className={`text-body-secondary ${styles.listDescription}`}>
+                    <div
+                      key={`${role.id}:description`}
+                      className={`text-body-secondary ${styles.listDescription}`}
+                    >
                       {role.description || "No description provided."}
                     </div>
                   );

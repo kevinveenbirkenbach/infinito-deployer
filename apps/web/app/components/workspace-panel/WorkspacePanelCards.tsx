@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import WorkspacePanelCardModals from "./WorkspacePanelCardModals";
+import WorkspacePanelUsersMenu from "./WorkspacePanelUsersMenu";
 import styles from "./WorkspacePanelCards.module.css";
 
 type CredentialsTarget = {
@@ -398,175 +400,18 @@ export default function WorkspacePanelCards(props: any) {
             ) : null}
           </div>
 
-          <div className={styles.menuWrap}>
-            <button
-              type="button"
-              onClick={() => {
-                setUsersMenuOpen((prev) => !prev);
-                setSecretsMenuOpen(false);
-                setWorkspaceMenuOpen(false);
-                setUsersImportMenuOpen(false);
-                setUsersExportMenuOpen(false);
-              }}
-              disabled={!workspaceId}
-              className={styles.menuTrigger}
-            >
-              <i className="fa-solid fa-users" aria-hidden="true" />
-              <span>Users</span>
-              <i
-                className={`fa-solid ${
-                  usersMenuOpen ? "fa-chevron-up" : "fa-chevron-down"
-                }`}
-                aria-hidden="true"
-              />
-            </button>
-            {usersMenuOpen ? (
-              <div className={styles.menuPanel}>
-                <ul className={styles.menuList}>
-                  <li>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUsersMenuOpen(false);
-                        setUsersImportMenuOpen(false);
-                        setUsersExportMenuOpen(false);
-                        onUsersAction?.("overview");
-                      }}
-                      disabled={!workspaceId}
-                      className={styles.menuItem}
-                    >
-                      <span className={styles.menuItemLabel}>
-                        <i className="fa-solid fa-table-list" aria-hidden="true" />
-                        Overview
-                      </span>
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUsersMenuOpen(false);
-                        setUsersImportMenuOpen(false);
-                        setUsersExportMenuOpen(false);
-                        onUsersAction?.("add");
-                      }}
-                      disabled={!workspaceId}
-                      className={styles.menuItem}
-                    >
-                      <span className={styles.menuItemLabel}>
-                        <i className="fa-solid fa-user-plus" aria-hidden="true" />
-                        Add
-                      </span>
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUsersImportMenuOpen((prev) => !prev);
-                        setUsersExportMenuOpen(false);
-                      }}
-                      disabled={!workspaceId}
-                      className={styles.menuItem}
-                    >
-                      <span className={styles.menuItemLabel}>
-                        <i className="fa-solid fa-file-arrow-up" aria-hidden="true" />
-                        Import
-                      </span>
-                      <i
-                        className={`fa-solid ${
-                          usersImportMenuOpen ? "fa-chevron-up" : "fa-chevron-down"
-                        }`}
-                        aria-hidden="true"
-                      />
-                    </button>
-                    {usersImportMenuOpen ? (
-                      <div className={styles.submenu}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setUsersMenuOpen(false);
-                            setUsersImportMenuOpen(false);
-                            setUsersExportMenuOpen(false);
-                            onUsersAction?.("import-csv");
-                          }}
-                          className={styles.submenuItem}
-                        >
-                          <i className="fa-solid fa-file-csv" aria-hidden="true" />
-                          CSV
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setUsersMenuOpen(false);
-                            setUsersImportMenuOpen(false);
-                            setUsersExportMenuOpen(false);
-                            onUsersAction?.("import-yaml");
-                          }}
-                          className={styles.submenuItem}
-                        >
-                          <i className="fa-solid fa-file-code" aria-hidden="true" />
-                          YAML
-                        </button>
-                      </div>
-                    ) : null}
-                  </li>
-                  <li>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUsersExportMenuOpen((prev) => !prev);
-                        setUsersImportMenuOpen(false);
-                      }}
-                      disabled={!workspaceId}
-                      className={styles.menuItem}
-                    >
-                      <span className={styles.menuItemLabel}>
-                        <i className="fa-solid fa-file-export" aria-hidden="true" />
-                        Export
-                      </span>
-                      <i
-                        className={`fa-solid ${
-                          usersExportMenuOpen ? "fa-chevron-up" : "fa-chevron-down"
-                        }`}
-                        aria-hidden="true"
-                      />
-                    </button>
-                    {usersExportMenuOpen ? (
-                      <div className={styles.submenu}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setUsersMenuOpen(false);
-                            setUsersImportMenuOpen(false);
-                            setUsersExportMenuOpen(false);
-                            onUsersAction?.("export-csv");
-                          }}
-                          className={styles.submenuItem}
-                        >
-                          <i className="fa-solid fa-file-csv" aria-hidden="true" />
-                          CSV
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setUsersMenuOpen(false);
-                            setUsersImportMenuOpen(false);
-                            setUsersExportMenuOpen(false);
-                            onUsersAction?.("export-yaml");
-                          }}
-                          className={styles.submenuItem}
-                        >
-                          <i className="fa-solid fa-file-code" aria-hidden="true" />
-                          YAML
-                        </button>
-                      </div>
-                    ) : null}
-                  </li>
-                </ul>
-              </div>
-            ) : null}
-          </div>
+          <WorkspacePanelUsersMenu
+            workspaceId={workspaceId}
+            usersMenuOpen={usersMenuOpen}
+            setUsersMenuOpen={setUsersMenuOpen}
+            setSecretsMenuOpen={setSecretsMenuOpen}
+            setWorkspaceMenuOpen={setWorkspaceMenuOpen}
+            usersImportMenuOpen={usersImportMenuOpen}
+            setUsersImportMenuOpen={setUsersImportMenuOpen}
+            usersExportMenuOpen={usersExportMenuOpen}
+            setUsersExportMenuOpen={setUsersExportMenuOpen}
+            onUsersAction={onUsersAction}
+          />
 
           <input
             ref={uploadInputRef}
@@ -578,206 +423,34 @@ export default function WorkspacePanelCards(props: any) {
         </div>
       </div>
 
-      {vaultResetConfirmOpen ? (
-        <div onClick={() => setVaultResetConfirmOpen(false)} className={styles.modalOverlay}>
-          <div onClick={(event) => event.stopPropagation()} className={styles.modalCard}>
-            <h3 className={styles.modalTitle}>Reset vault password</h3>
-            <p className={`text-body-secondary ${styles.statusText}`}>
-              Reset vault password and re-encrypt all vault values in this workspace?
-            </p>
-            <div className={styles.modalActions}>
-              <button
-                onClick={() => setVaultResetConfirmOpen(false)}
-                className={styles.modalButton}
-              >
-                <i className="fa-solid fa-xmark" aria-hidden="true" />
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  resetVaultPassword();
-                }}
-                disabled={credentialsBusy}
-                className={styles.modalButton}
-              >
-                <i className="fa-solid fa-check" aria-hidden="true" />
-                Continue
-              </button>
-            </div>
-            {vaultErrorMessage ? (
-              <p className={`text-danger ${styles.statusText}`}>{vaultErrorMessage}</p>
-            ) : null}
-            {vaultStatusMessage ? (
-              <p className={`text-success ${styles.statusText}`}>{vaultStatusMessage}</p>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {scopeModalOpen ? (
-        <div onClick={() => setScopeModalOpen(false)} className={styles.modalOverlay}>
-          <div
-            onClick={(event) => event.stopPropagation()}
-            className={`${styles.modalCard} ${styles.modalCardLarge}`}
-          >
-            <h3 className={styles.modalTitle}>App credentials</h3>
-
-            <div className={styles.radioGroup}>
-              <span className={`text-body-tertiary ${styles.label}`}>Action</span>
-              <label className={`text-body-secondary ${styles.radioLabel}`}>
-                <input
-                  type="radio"
-                  name="credentials-action-modal"
-                  checked={submitIntent === "generate"}
-                  onChange={() => setSubmitIntent("generate")}
-                />
-                Generate
-              </label>
-              <label className={`text-body-secondary ${styles.radioLabel}`}>
-                <input
-                  type="radio"
-                  name="credentials-action-modal"
-                  checked={submitIntent === "regenerate"}
-                  onChange={() => setSubmitIntent("regenerate")}
-                />
-                Regenerate
-              </label>
-            </div>
-
-            <div className={styles.tabRow}>
-              <button
-                onClick={() => setSelectionMode("all")}
-                className={`${styles.tabButton} ${
-                  selectionMode === "all" ? styles.tabButtonActive : ""
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setSelectionMode("custom")}
-                className={`${styles.tabButton} ${
-                  selectionMode === "custom" ? styles.tabButtonActive : ""
-                }`}
-              >
-                Custom
-              </button>
-            </div>
-
-            {selectionMode === "all" ? (
-              <p className={`text-body-secondary ${styles.statusText}`}>
-                All available server-role targets will run. Regenerate recreates all of them.
-              </p>
-            ) : (
-              <div className={styles.matrixBlock}>
-                <div className={styles.matrixToolbar}>
-                  <button
-                    onClick={selectAllCustomCells}
-                    className={styles.matrixActionButton}
-                  >
-                    Select all
-                  </button>
-                  <button
-                    onClick={deselectAllCustomCells}
-                    className={styles.matrixActionButton}
-                  >
-                    Deselect all
-                  </button>
-                  <span className={`text-body-secondary ${styles.helpSmall}`}>
-                    {selectedCellCount} selected
-                  </span>
-                </div>
-                {matrixAliases.length === 0 || matrixRoles.length === 0 ? (
-                  <p className={`text-body-secondary ${styles.statusText}`}>
-                    No selected roles available.
-                  </p>
-                ) : (
-                  <div className={styles.matrixContainer}>
-                    <table className={styles.matrixTable}>
-                      <thead>
-                        <tr>
-                          <th>Role</th>
-                          {matrixAliases.map((alias) => (
-                            <th key={alias}>{alias}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {matrixRoles.map((roleId) => (
-                          <tr key={roleId}>
-                            <th>{roleId}</th>
-                            {matrixAliases.map((alias) => {
-                              const available = (serverRolesByAlias?.[alias] ?? []).includes(
-                                roleId
-                              );
-                              const cellId = matrixKey(alias, roleId);
-                              return (
-                                <td key={cellId}>
-                                  {available ? (
-                                    <input
-                                      type="checkbox"
-                                      checked={Boolean(matrixSelection[cellId])}
-                                      onChange={() => toggleMatrixCell(alias, roleId)}
-                                      disabled={credentialsBusy}
-                                      className={styles.matrixCheckbox}
-                                    />
-                                  ) : (
-                                    <span className={styles.matrixUnavailable}>-</span>
-                                  )}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {submitIntent !== "regenerate" ? (
-              <label className={`text-body-secondary ${styles.checkboxLabel}`}>
-                <input
-                  type="checkbox"
-                  checked={overwriteDraft}
-                  onChange={(event) => setOverwriteDraft(event.target.checked)}
-                />
-                Overwrite existing credentials
-              </label>
-            ) : (
-              <span className={`text-body-secondary ${styles.helpSmall}`}>
-                Recreate always runs in overwrite mode.
-              </span>
-            )}
-
-            {credentialsError ? (
-              <p className={`text-danger ${styles.statusText}`}>{credentialsError}</p>
-            ) : null}
-            {credentialsStatus ? (
-              <p className={`text-success ${styles.statusText}`}>{credentialsStatus}</p>
-            ) : null}
-
-            <div className={styles.modalActions}>
-              <button onClick={() => setScopeModalOpen(false)} className={styles.modalButton}>
-                <i className="fa-solid fa-xmark" aria-hidden="true" />
-                Close
-              </button>
-              <button
-                onClick={confirmGenerate}
-                disabled={!canSubmitGenerate || credentialsBusy}
-                className={styles.modalButton}
-              >
-                <i className="fa-solid fa-play" aria-hidden="true" />
-                {credentialsBusy
-                  ? "Working..."
-                  : submitIntent === "regenerate"
-                  ? "Recreate"
-                  : "Create"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <WorkspacePanelCardModals
+        vaultResetConfirmOpen={vaultResetConfirmOpen}
+        setVaultResetConfirmOpen={setVaultResetConfirmOpen}
+        resetVaultPassword={resetVaultPassword}
+        credentialsBusy={credentialsBusy}
+        vaultErrorMessage={vaultErrorMessage}
+        vaultStatusMessage={vaultStatusMessage}
+        scopeModalOpen={scopeModalOpen}
+        setScopeModalOpen={setScopeModalOpen}
+        submitIntent={submitIntent}
+        setSubmitIntent={setSubmitIntent}
+        selectionMode={selectionMode}
+        setSelectionMode={setSelectionMode}
+        selectAllCustomCells={selectAllCustomCells}
+        deselectAllCustomCells={deselectAllCustomCells}
+        selectedCellCount={selectedCellCount}
+        matrixAliases={matrixAliases}
+        matrixRoles={matrixRoles}
+        serverRolesByAlias={serverRolesByAlias}
+        matrixSelection={matrixSelection}
+        toggleMatrixCell={toggleMatrixCell}
+        overwriteDraft={overwriteDraft}
+        setOverwriteDraft={setOverwriteDraft}
+        credentialsError={credentialsError}
+        credentialsStatus={credentialsStatus}
+        confirmGenerate={confirmGenerate}
+        canSubmitGenerate={canSubmitGenerate}
+      />
     </div>
   );
 }

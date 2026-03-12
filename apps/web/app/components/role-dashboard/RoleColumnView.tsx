@@ -1,19 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type {
-  CSSProperties,
-  PointerEvent as ReactPointerEvent,
-  WheelEvent as ReactWheelEvent,
-} from "react";
+import { useEffect, useMemo } from "react";
+import type { CSSProperties } from "react";
 import { colorForStatus } from "./helpers";
 import EnableDropdown from "./EnableDropdown";
 import RoleLogoView from "./RoleLogoView";
 import RoleQuickLinks from "./RoleQuickLinks";
 import styles from "./styles";
 import type { Role } from "./types";
-
-type ColumnVariant = "row" | "column";
+import { formatMonthlyPrice } from "./formatting";
+import {
+  LOOP_SEGMENT_INDICES,
+  buildLaneRandomDurations,
+  buildLanes,
+  type ColumnVariant,
+} from "./lane-utils";
+import useDeselectionFlash from "./useDeselectionFlash";
+import useLoopingLaneScroller from "./useLoopingLaneScroller";
 
 type RoleColumnViewProps = {
   baseUrl?: string;
@@ -33,49 +36,6 @@ type RoleColumnViewProps = {
   onOpenDetails?: (role: Role) => void;
 };
 
-const DESELECTION_FADE_DURATION_MS = 3000;
-const PER_ITEM_DURATION_MIN_SECONDS = 14;
-const PER_ITEM_DURATION_MAX_SECONDS = 20;
-const LOOP_SEGMENT_COUNT = 3;
-const LOOP_SEGMENT_INDICES = [0, 1, 2] as const;
-
-type LaneDragState = {
-  laneIndex: number;
-  pointerId: number;
-  startPointerAxis: number;
-  startScrollAxis: number;
-};
-
-function buildLanes(roles: Role[], laneCount: number): Role[][] {
-  const safeLaneCount = Math.max(1, Math.floor(Number(laneCount) || 1));
-  const lanes = Array.from({ length: safeLaneCount }, () => [] as Role[]);
-  roles.forEach((role, index) => {
-    lanes[index % safeLaneCount].push(role);
-  });
-  if (roles.length > 0) {
-    lanes.forEach((lane, laneIndex) => {
-      if (lane.length === 0) {
-        lane.push(roles[laneIndex % roles.length]);
-      }
-    });
-  }
-  return lanes;
-}
-
-function formatMonthlyPrice(amount: number): string {
-  const normalizedAmount = Math.max(0, Number(amount) || 0);
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: "EUR",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(normalizedAmount);
-  } catch {
-    return `€${normalizedAmount.toFixed(2)}`;
-  }
-}
-
 export default function RoleColumnView({
   baseUrl,
   roles,
@@ -93,14 +53,8 @@ export default function RoleColumnView({
   onOpenVideo,
   onOpenDetails,
 }: RoleColumnViewProps) {
-  const [deselectionFlashRoleIds, setDeselectionFlashRoleIds] = useState<Set<string>>(
-    new Set()
-  );
-  const [hoveredLaneIndex, setHoveredLaneIndex] = useState<number | null>(null);
-  const [draggingLaneIndex, setDraggingLaneIndex] = useState<number | null>(null);
-  const deselectionTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const laneViewportRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const laneDragRef = useRef<LaneDragState | null>(null);
+  const { flashingIds, clearDeselectionFlash, triggerDeselectionFlash } =
+    useDeselectionFlash(3000);
   const lanes = useMemo(() => buildLanes(roles, laneCount), [roles, laneCount]);
   const safeLaneCount = Math.max(1, lanes.length);
   const safeLaneSize = Math.max(
@@ -113,198 +67,31 @@ export default function RoleColumnView({
     "--column-row-card-width": `${Math.max(420, Math.round(safeLaneSize * 2))}px`,
     "--column-column-card-min-height": `${Math.max(260, Math.round(safeLaneSize * 2))}px`,
   } as CSSProperties;
+
   const laneRandomPerItemSeconds = useMemo(
-    () =>
-      lanes.map(() => {
-        const random = Math.random();
-        return (
-          PER_ITEM_DURATION_MIN_SECONDS +
-          random * (PER_ITEM_DURATION_MAX_SECONDS - PER_ITEM_DURATION_MIN_SECONDS)
-        );
-      }),
-    [lanes, variant]
+    () => buildLaneRandomDurations(lanes.length),
+    [lanes.length, variant]
   );
 
-  const clearDeselectionFlash = (roleId: string) => {
-    const timer = deselectionTimersRef.current[roleId];
-    if (timer) {
-      clearTimeout(timer);
-      delete deselectionTimersRef.current[roleId];
-    }
-    setDeselectionFlashRoleIds((prev) => {
-      if (!prev.has(roleId)) return prev;
-      const next = new Set(prev);
-      next.delete(roleId);
-      return next;
-    });
-  };
+  const {
+    hoveredLaneIndex,
+    draggingLaneIndex,
+    setLaneViewportRef,
+    handleLaneWheel,
+    handleLanePointerDown,
+    handleLanePointerMove,
+    handleLanePointerUp,
+    handleLanePointerCancel,
+    handleLaneScroll,
+    handleLaneMouseEnter,
+    handleLaneMouseLeave,
+    alignLaneViewportsToMiddleSegment,
+  } = useLoopingLaneScroller({ variant });
 
-  const triggerDeselectionFlash = (roleId: string) => {
-    clearDeselectionFlash(roleId);
-    setDeselectionFlashRoleIds((prev) => {
-      const next = new Set(prev);
-      next.add(roleId);
-      return next;
-    });
-    deselectionTimersRef.current[roleId] = setTimeout(() => {
-      setDeselectionFlashRoleIds((prev) => {
-        if (!prev.has(roleId)) return prev;
-        const next = new Set(prev);
-        next.delete(roleId);
-        return next;
-      });
-      delete deselectionTimersRef.current[roleId];
-    }, DESELECTION_FADE_DURATION_MS);
-  };
-
-  const readLaneScrollAxis = (viewport: HTMLDivElement): number =>
-    variant === "row" ? viewport.scrollLeft : viewport.scrollTop;
-
-  const writeLaneScrollAxis = (viewport: HTMLDivElement, value: number) => {
-    if (variant === "row") {
-      viewport.scrollLeft = value;
-      return;
-    }
-    viewport.scrollTop = value;
-  };
-
-  const laneLoopSegmentSize = (viewport: HTMLDivElement): number => {
-    const fullSize = variant === "row" ? viewport.scrollWidth : viewport.scrollHeight;
-    if (!Number.isFinite(fullSize) || fullSize <= 0) return 0;
-    return fullSize / LOOP_SEGMENT_COUNT;
-  };
-
-  const wrapLaneScroll = (viewport: HTMLDivElement) => {
-    const segmentSize = laneLoopSegmentSize(viewport);
-    if (!Number.isFinite(segmentSize) || segmentSize <= 0) return;
-    const min = segmentSize * 0.5;
-    const max = segmentSize * 1.5;
-    let axis = readLaneScrollAxis(viewport);
-    let wrapped = false;
-    while (axis < min) {
-      axis += segmentSize;
-      wrapped = true;
-    }
-    while (axis > max) {
-      axis -= segmentSize;
-      wrapped = true;
-    }
-    if (wrapped) writeLaneScrollAxis(viewport, axis);
-  };
-
-  const pointerAxis = (event: ReactPointerEvent<HTMLDivElement>): number =>
-    variant === "row" ? event.clientX : event.clientY;
-
-  const isInteractiveDragTarget = (target: EventTarget | null): boolean => {
-    if (!(target instanceof HTMLElement)) return false;
-    return Boolean(target.closest("button, a, input, select, textarea, [role='button']"));
-  };
-
-  const stopLaneDrag = (laneIndex: number, pointerId?: number) => {
-    const drag = laneDragRef.current;
-    if (!drag || drag.laneIndex !== laneIndex) return;
-    if (typeof pointerId === "number" && drag.pointerId !== pointerId) return;
-    const viewport = laneViewportRefs.current[laneIndex];
-    if (
-      viewport &&
-      typeof pointerId === "number" &&
-      typeof viewport.releasePointerCapture === "function"
-    ) {
-      try {
-        viewport.releasePointerCapture(pointerId);
-      } catch {
-        // no-op: capture might already be released
-      }
-    }
-    laneDragRef.current = null;
-    setDraggingLaneIndex((prev) => (prev === laneIndex ? null : prev));
-  };
-
-  const handleLaneWheel =
-    (laneIndex: number) => (event: ReactWheelEvent<HTMLDivElement>) => {
-      const viewport = laneViewportRefs.current[laneIndex];
-      if (!viewport) return;
-      const delta =
-        Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
-      if (!Number.isFinite(delta) || delta === 0) return;
-      writeLaneScrollAxis(viewport, readLaneScrollAxis(viewport) + delta);
-      wrapLaneScroll(viewport);
-      setHoveredLaneIndex(laneIndex);
-      event.preventDefault();
-    };
-
-  const handleLanePointerDown =
-    (laneIndex: number) => (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) return;
-      if (isInteractiveDragTarget(event.target)) return;
-      const viewport = laneViewportRefs.current[laneIndex];
-      if (!viewport) return;
-      laneDragRef.current = {
-        laneIndex,
-        pointerId: event.pointerId,
-        startPointerAxis: pointerAxis(event),
-        startScrollAxis: readLaneScrollAxis(viewport),
-      };
-      setDraggingLaneIndex(laneIndex);
-      setHoveredLaneIndex(laneIndex);
-      if (typeof viewport.setPointerCapture === "function") {
-        try {
-          viewport.setPointerCapture(event.pointerId);
-        } catch {
-          // no-op: capture can fail on unsupported targets
-        }
-      }
-      event.preventDefault();
-    };
-
-  const handleLanePointerMove =
-    (laneIndex: number) => (event: ReactPointerEvent<HTMLDivElement>) => {
-      const drag = laneDragRef.current;
-      if (!drag || drag.laneIndex !== laneIndex || drag.pointerId !== event.pointerId) return;
-      const viewport = laneViewportRefs.current[laneIndex];
-      if (!viewport) return;
-      const delta = pointerAxis(event) - drag.startPointerAxis;
-      writeLaneScrollAxis(viewport, drag.startScrollAxis - delta);
-      wrapLaneScroll(viewport);
-      event.preventDefault();
-    };
-
-  const handleLanePointerUp =
-    (laneIndex: number) => (event: ReactPointerEvent<HTMLDivElement>) => {
-      stopLaneDrag(laneIndex, event.pointerId);
-    };
-
-  const handleLanePointerCancel =
-    (laneIndex: number) => (event: ReactPointerEvent<HTMLDivElement>) => {
-      stopLaneDrag(laneIndex, event.pointerId);
-    };
-
-  const handleLaneScroll = (laneIndex: number) => () => {
-    const viewport = laneViewportRefs.current[laneIndex];
-    if (!viewport) return;
-    wrapLaneScroll(viewport);
-  };
-
-  useEffect(() => {
-    return () => {
-      Object.values(deselectionTimersRef.current).forEach((timer) => clearTimeout(timer));
-      deselectionTimersRef.current = {};
-      laneDragRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => {
-      lanes.forEach((_, laneIndex) => {
-        const viewport = laneViewportRefs.current[laneIndex];
-        if (!viewport) return;
-        const segmentSize = laneLoopSegmentSize(viewport);
-        if (segmentSize <= 0) return;
-        writeLaneScrollAxis(viewport, Math.floor(segmentSize));
-      });
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [lanes, variant]);
+  useEffect(
+    () => alignLaneViewportsToMiddleSegment(lanes.length),
+    [alignLaneViewportsToMiddleSegment, lanes.length, variant]
+  );
 
   if (roles.length === 0) {
     return (
@@ -327,9 +114,7 @@ export default function RoleColumnView({
         }`}
       >
         {lanes.map((laneRoles, laneIndex) => {
-          const basePerItemSeconds =
-            laneRandomPerItemSeconds[laneIndex] ??
-            (PER_ITEM_DURATION_MIN_SECONDS + PER_ITEM_DURATION_MAX_SECONDS) / 2;
+          const basePerItemSeconds = laneRandomPerItemSeconds[laneIndex] ?? 17;
           const itemsPerLoop = Math.max(1, laneRoles.length);
           const duration = Number((basePerItemSeconds * itemsPerLoop).toFixed(2));
           const laneStyle = {
@@ -344,22 +129,12 @@ export default function RoleColumnView({
               }`}
             >
               <div
-                ref={(node) => {
-                  laneViewportRefs.current[laneIndex] = node;
-                }}
+                ref={setLaneViewportRef(laneIndex)}
                 className={`${styles.columnViewport} ${styles.columnViewportInteractive} ${
                   draggingLaneIndex === laneIndex ? styles.columnViewportDragging : ""
                 }`}
-                onMouseEnter={() => setHoveredLaneIndex(laneIndex)}
-                onMouseLeave={() =>
-                  setHoveredLaneIndex((prev) =>
-                    draggingLaneIndex === laneIndex
-                      ? laneIndex
-                      : prev === laneIndex
-                        ? null
-                        : prev
-                  )
-                }
+                onMouseEnter={handleLaneMouseEnter(laneIndex)}
+                onMouseLeave={handleLaneMouseLeave(laneIndex)}
                 onWheel={handleLaneWheel(laneIndex)}
                 onPointerDown={handleLanePointerDown(laneIndex)}
                 onPointerMove={handleLanePointerMove(laneIndex)}
@@ -369,9 +144,7 @@ export default function RoleColumnView({
               >
                 <div
                   className={`${styles.columnTrack} ${
-                    variant === "row"
-                      ? styles.columnTrackHorizontal
-                      : styles.columnTrackVertical
+                    variant === "row" ? styles.columnTrackHorizontal : styles.columnTrackVertical
                   } ${lanePaused ? styles.columnTrackPaused : ""}`}
                   style={laneStyle}
                 >
@@ -386,7 +159,7 @@ export default function RoleColumnView({
                     >
                       {laneRoles.map((role, cardIndex) => {
                         const selectedState = selected.has(role.id);
-                        const isDeselectionFlashing = deselectionFlashRoleIds.has(role.id);
+                        const isDeselectionFlashing = flashingIds.has(role.id);
                         const plans = rolePlans?.[role.id] || [
                           { id: "community", label: "Community" },
                         ];

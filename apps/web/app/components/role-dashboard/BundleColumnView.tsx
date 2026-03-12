@@ -1,34 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type {
-  CSSProperties,
-  PointerEvent as ReactPointerEvent,
-  WheelEvent as ReactWheelEvent,
-} from "react";
-import BundleAppList, { type BundleAppListRow } from "./BundleAppList";
+import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
+import BundleAppList from "./BundleAppList";
 import BundleDetailsModal from "./BundleDetailsModal";
 import EnableDropdown from "./EnableDropdown";
 import styles from "./styles";
 import type { Bundle, Role } from "./types";
-
-type ColumnVariant = "row" | "column";
-
-type BundleState = {
-  enabled: boolean;
-  selectedCount: number;
-  totalCount: number;
-};
-
-type BundleEntry = {
-  bundle: Bundle;
-  roleIds: string[];
-  roleRows: BundleRoleRow[];
-  totalPriceLabel: string;
-  state: BundleState;
-};
-
-type BundleRoleRow = BundleAppListRow;
+import type { BundleEntry, BundleState } from "./bundle-types";
+import { buildBundleEntries } from "./bundle-entries";
+import { bundleLogo } from "./bundle-visuals";
+import {
+  LOOP_SEGMENT_INDICES,
+  buildLaneRandomDurations,
+  buildLanes,
+  type ColumnVariant,
+} from "./lane-utils";
+import useDeselectionFlash from "./useDeselectionFlash";
+import useLoopingLaneScroller from "./useLoopingLaneScroller";
 
 type BundleColumnViewProps = {
   bundles: Bundle[];
@@ -46,70 +35,6 @@ type BundleColumnViewProps = {
   onDisableBundle: (bundle: Bundle) => void;
 };
 
-const DESELECTION_FADE_DURATION_MS = 3000;
-const PER_ITEM_DURATION_MIN_SECONDS = 14;
-const PER_ITEM_DURATION_MAX_SECONDS = 20;
-const LOOP_SEGMENT_COUNT = 3;
-const LOOP_SEGMENT_INDICES = [0, 1, 2] as const;
-
-type LaneDragState = {
-  laneIndex: number;
-  pointerId: number;
-  startPointerAxis: number;
-  startScrollAxis: number;
-};
-
-function formatMonthlyPrice(amount: number): string {
-  const normalizedAmount = Math.max(0, Number(amount) || 0);
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: "EUR",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(normalizedAmount);
-  } catch {
-    return `€${normalizedAmount.toFixed(2)}`;
-  }
-}
-
-function buildLanes<T>(items: T[], laneCount: number): T[][] {
-  const safeLaneCount = Math.max(1, Math.floor(Number(laneCount) || 1));
-  const lanes = Array.from({ length: safeLaneCount }, () => [] as T[]);
-  items.forEach((item, index) => {
-    lanes[index % safeLaneCount].push(item);
-  });
-  if (items.length > 0) {
-    lanes.forEach((lane, laneIndex) => {
-      if (lane.length === 0) {
-        lane.push(items[laneIndex % items.length]);
-      }
-    });
-  }
-  return lanes;
-}
-
-function bundleIconClass(bundle: Bundle): string {
-  const raw = String(bundle.logo_class || "").trim();
-  return raw || "fa-solid fa-layer-group";
-}
-
-function bundleLogo(bundle: Bundle, size: number, className?: string) {
-  const logoSizeStyle = {
-    "--role-logo-size": `${size}px`,
-    "--role-logo-meta-size": `${Math.max(20, Math.floor(size * 0.82))}px`,
-    "--role-logo-initial-size": `${Math.max(14, Math.floor(size * 0.32))}px`,
-  } as CSSProperties;
-  return (
-    <div
-      className={className ? `${styles.logoRoot} ${className}` : styles.logoRoot}
-      style={logoSizeStyle}
-    >
-      <i className={`${bundleIconClass(bundle)} ${styles.logoMetaIcon}`} aria-hidden="true" />
-    </div>
-  );
-}
-
 export default function BundleColumnView({
   bundles,
   iconSize,
@@ -125,55 +50,18 @@ export default function BundleColumnView({
   onEnableBundle,
   onDisableBundle,
 }: BundleColumnViewProps) {
-  const [deselectionFlashBundleIds, setDeselectionFlashBundleIds] = useState<Set<string>>(
-    new Set()
-  );
-  const [hoveredLaneIndex, setHoveredLaneIndex] = useState<number | null>(null);
-  const [draggingLaneIndex, setDraggingLaneIndex] = useState<number | null>(null);
+  const { flashingIds, clearDeselectionFlash, triggerDeselectionFlash } =
+    useDeselectionFlash(3000);
   const [activeBundleDetailsId, setActiveBundleDetailsId] = useState<string | null>(null);
-  const deselectionTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const laneViewportRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const laneDragRef = useRef<LaneDragState | null>(null);
 
   const entries = useMemo<BundleEntry[]>(
     () =>
-      bundles.map((bundle) => {
-        const roleIds = (Array.isArray(bundle.role_ids) ? bundle.role_ids : [])
-          .map((roleId) => String(roleId || "").trim())
-          .filter(Boolean);
-        const roleRows = roleIds.map((roleId) => {
-          const role = roleById[roleId] || null;
-          const rawServerCount = Math.max(
-            0,
-            Math.floor(Number(roleServerCountByRole?.[roleId] || 0))
-          );
-          const monthlyPriceAmount = Math.max(
-            1,
-            rawServerCount
-          );
-          return {
-            roleId,
-            role,
-            label: String(role?.display_name || roleId).trim(),
-            monthlyPriceAmount,
-            monthlyPriceLabel: formatMonthlyPrice(monthlyPriceAmount),
-            isActive: rawServerCount > 0,
-          };
-        });
-        const state = bundleStates[bundle.id] || {
-          enabled: false,
-          selectedCount: 0,
-          totalCount: roleIds.length,
-        };
-        const totalPriceAmount = roleRows.reduce((sum, row) => sum + row.monthlyPriceAmount, 0);
-        return {
-          bundle,
-          roleIds,
-          roleRows,
-          totalPriceLabel: formatMonthlyPrice(totalPriceAmount),
-          state,
-        };
-      }),
+      buildBundleEntries(
+        bundles,
+        bundleStates,
+        roleById,
+        roleServerCountByRole
+      ),
     [bundles, bundleStates, roleById, roleServerCountByRole]
   );
 
@@ -182,6 +70,7 @@ export default function BundleColumnView({
     () => entries.find((entry) => entry.bundle.id === activeBundleDetailsId) || null,
     [entries, activeBundleDetailsId]
   );
+
   const safeLaneCount = Math.max(1, lanes.length);
   const safeLaneSize = Math.max(
     variant === "row" ? 110 : 160,
@@ -193,177 +82,26 @@ export default function BundleColumnView({
     "--column-row-card-width": `${Math.max(420, Math.round(safeLaneSize * 2))}px`,
     "--column-column-card-min-height": `${Math.max(260, Math.round(safeLaneSize * 2))}px`,
   } as CSSProperties;
+
   const laneRandomPerItemSeconds = useMemo(
-    () =>
-      lanes.map(() => {
-        const random = Math.random();
-        return (
-          PER_ITEM_DURATION_MIN_SECONDS +
-          random * (PER_ITEM_DURATION_MAX_SECONDS - PER_ITEM_DURATION_MIN_SECONDS)
-        );
-      }),
-    [lanes, variant]
+    () => buildLaneRandomDurations(lanes.length),
+    [lanes.length, variant]
   );
 
-  const clearDeselectionFlash = (bundleId: string) => {
-    const timer = deselectionTimersRef.current[bundleId];
-    if (timer) {
-      clearTimeout(timer);
-      delete deselectionTimersRef.current[bundleId];
-    }
-    setDeselectionFlashBundleIds((prev) => {
-      if (!prev.has(bundleId)) return prev;
-      const next = new Set(prev);
-      next.delete(bundleId);
-      return next;
-    });
-  };
-
-  const triggerDeselectionFlash = (bundleId: string) => {
-    clearDeselectionFlash(bundleId);
-    setDeselectionFlashBundleIds((prev) => {
-      const next = new Set(prev);
-      next.add(bundleId);
-      return next;
-    });
-    deselectionTimersRef.current[bundleId] = setTimeout(() => {
-      setDeselectionFlashBundleIds((prev) => {
-        if (!prev.has(bundleId)) return prev;
-        const next = new Set(prev);
-        next.delete(bundleId);
-        return next;
-      });
-      delete deselectionTimersRef.current[bundleId];
-    }, DESELECTION_FADE_DURATION_MS);
-  };
-
-  const readLaneScrollAxis = (viewport: HTMLDivElement): number =>
-    variant === "row" ? viewport.scrollLeft : viewport.scrollTop;
-
-  const writeLaneScrollAxis = (viewport: HTMLDivElement, value: number) => {
-    if (variant === "row") {
-      viewport.scrollLeft = value;
-      return;
-    }
-    viewport.scrollTop = value;
-  };
-
-  const laneLoopSegmentSize = (viewport: HTMLDivElement): number => {
-    const fullSize = variant === "row" ? viewport.scrollWidth : viewport.scrollHeight;
-    if (!Number.isFinite(fullSize) || fullSize <= 0) return 0;
-    return fullSize / LOOP_SEGMENT_COUNT;
-  };
-
-  const wrapLaneScroll = (viewport: HTMLDivElement) => {
-    const segmentSize = laneLoopSegmentSize(viewport);
-    if (!Number.isFinite(segmentSize) || segmentSize <= 0) return;
-    const min = segmentSize * 0.5;
-    const max = segmentSize * 1.5;
-    let axis = readLaneScrollAxis(viewport);
-    let wrapped = false;
-    while (axis < min) {
-      axis += segmentSize;
-      wrapped = true;
-    }
-    while (axis > max) {
-      axis -= segmentSize;
-      wrapped = true;
-    }
-    if (wrapped) writeLaneScrollAxis(viewport, axis);
-  };
-
-  const pointerAxis = (event: ReactPointerEvent<HTMLDivElement>): number =>
-    variant === "row" ? event.clientX : event.clientY;
-
-  const isInteractiveDragTarget = (target: EventTarget | null): boolean => {
-    if (!(target instanceof HTMLElement)) return false;
-    return Boolean(target.closest("button, a, input, select, textarea, [role='button']"));
-  };
-
-  const stopLaneDrag = (laneIndex: number, pointerId?: number) => {
-    const drag = laneDragRef.current;
-    if (!drag || drag.laneIndex !== laneIndex) return;
-    if (typeof pointerId === "number" && drag.pointerId !== pointerId) return;
-    const viewport = laneViewportRefs.current[laneIndex];
-    if (
-      viewport &&
-      typeof pointerId === "number" &&
-      typeof viewport.releasePointerCapture === "function"
-    ) {
-      try {
-        viewport.releasePointerCapture(pointerId);
-      } catch {
-        // no-op: capture might already be released
-      }
-    }
-    laneDragRef.current = null;
-    setDraggingLaneIndex((prev) => (prev === laneIndex ? null : prev));
-  };
-
-  const handleLaneWheel =
-    (laneIndex: number) => (event: ReactWheelEvent<HTMLDivElement>) => {
-      const viewport = laneViewportRefs.current[laneIndex];
-      if (!viewport) return;
-      const delta =
-        Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
-      if (!Number.isFinite(delta) || delta === 0) return;
-      writeLaneScrollAxis(viewport, readLaneScrollAxis(viewport) + delta);
-      wrapLaneScroll(viewport);
-      setHoveredLaneIndex(laneIndex);
-      event.preventDefault();
-    };
-
-  const handleLanePointerDown =
-    (laneIndex: number) => (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) return;
-      if (isInteractiveDragTarget(event.target)) return;
-      const viewport = laneViewportRefs.current[laneIndex];
-      if (!viewport) return;
-      laneDragRef.current = {
-        laneIndex,
-        pointerId: event.pointerId,
-        startPointerAxis: pointerAxis(event),
-        startScrollAxis: readLaneScrollAxis(viewport),
-      };
-      setDraggingLaneIndex(laneIndex);
-      setHoveredLaneIndex(laneIndex);
-      if (typeof viewport.setPointerCapture === "function") {
-        try {
-          viewport.setPointerCapture(event.pointerId);
-        } catch {
-          // no-op: capture can fail on unsupported targets
-        }
-      }
-      event.preventDefault();
-    };
-
-  const handleLanePointerMove =
-    (laneIndex: number) => (event: ReactPointerEvent<HTMLDivElement>) => {
-      const drag = laneDragRef.current;
-      if (!drag || drag.laneIndex !== laneIndex || drag.pointerId !== event.pointerId) return;
-      const viewport = laneViewportRefs.current[laneIndex];
-      if (!viewport) return;
-      const delta = pointerAxis(event) - drag.startPointerAxis;
-      writeLaneScrollAxis(viewport, drag.startScrollAxis - delta);
-      wrapLaneScroll(viewport);
-      event.preventDefault();
-    };
-
-  const handleLanePointerUp =
-    (laneIndex: number) => (event: ReactPointerEvent<HTMLDivElement>) => {
-      stopLaneDrag(laneIndex, event.pointerId);
-    };
-
-  const handleLanePointerCancel =
-    (laneIndex: number) => (event: ReactPointerEvent<HTMLDivElement>) => {
-      stopLaneDrag(laneIndex, event.pointerId);
-    };
-
-  const handleLaneScroll = (laneIndex: number) => () => {
-    const viewport = laneViewportRefs.current[laneIndex];
-    if (!viewport) return;
-    wrapLaneScroll(viewport);
-  };
+  const {
+    hoveredLaneIndex,
+    draggingLaneIndex,
+    setLaneViewportRef,
+    handleLaneWheel,
+    handleLanePointerDown,
+    handleLanePointerMove,
+    handleLanePointerUp,
+    handleLanePointerCancel,
+    handleLaneScroll,
+    handleLaneMouseEnter,
+    handleLaneMouseLeave,
+    alignLaneViewportsToMiddleSegment,
+  } = useLoopingLaneScroller({ variant });
 
   const renderBundleRoleList = (
     entry: BundleEntry,
@@ -379,26 +117,10 @@ export default function BundleColumnView({
     />
   );
 
-  useEffect(() => {
-    return () => {
-      Object.values(deselectionTimersRef.current).forEach((timer) => clearTimeout(timer));
-      deselectionTimersRef.current = {};
-      laneDragRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => {
-      lanes.forEach((_, laneIndex) => {
-        const viewport = laneViewportRefs.current[laneIndex];
-        if (!viewport) return;
-        const segmentSize = laneLoopSegmentSize(viewport);
-        if (segmentSize <= 0) return;
-        writeLaneScrollAxis(viewport, Math.floor(segmentSize));
-      });
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [lanes, variant]);
+  useEffect(
+    () => alignLaneViewportsToMiddleSegment(lanes.length),
+    [alignLaneViewportsToMiddleSegment, lanes.length, variant]
+  );
 
   useEffect(() => {
     if (!activeBundleDetailsId) return;
@@ -428,9 +150,7 @@ export default function BundleColumnView({
           }`}
         >
           {lanes.map((laneEntries, laneIndex) => {
-            const basePerItemSeconds =
-              laneRandomPerItemSeconds[laneIndex] ??
-              (PER_ITEM_DURATION_MIN_SECONDS + PER_ITEM_DURATION_MAX_SECONDS) / 2;
+            const basePerItemSeconds = laneRandomPerItemSeconds[laneIndex] ?? 17;
             const itemsPerLoop = Math.max(1, laneEntries.length);
             const duration = Number((basePerItemSeconds * itemsPerLoop).toFixed(2));
             const laneStyle = {
@@ -445,22 +165,12 @@ export default function BundleColumnView({
                 }`}
               >
                 <div
-                  ref={(node) => {
-                    laneViewportRefs.current[laneIndex] = node;
-                  }}
+                  ref={setLaneViewportRef(laneIndex)}
                   className={`${styles.columnViewport} ${styles.columnViewportInteractive} ${
                     draggingLaneIndex === laneIndex ? styles.columnViewportDragging : ""
                   }`}
-                  onMouseEnter={() => setHoveredLaneIndex(laneIndex)}
-                  onMouseLeave={() =>
-                    setHoveredLaneIndex((prev) =>
-                      draggingLaneIndex === laneIndex
-                        ? laneIndex
-                        : prev === laneIndex
-                          ? null
-                          : prev
-                    )
-                  }
+                  onMouseEnter={handleLaneMouseEnter(laneIndex)}
+                  onMouseLeave={handleLaneMouseLeave(laneIndex)}
                   onWheel={handleLaneWheel(laneIndex)}
                   onPointerDown={handleLanePointerDown(laneIndex)}
                   onPointerMove={handleLanePointerMove(laneIndex)}
@@ -487,7 +197,7 @@ export default function BundleColumnView({
                       >
                         {laneEntries.map((entry, cardIndex) => {
                           const { bundle, roleIds, state } = entry;
-                          const isDeselectionFlashing = deselectionFlashBundleIds.has(bundle.id);
+                          const isDeselectionFlashing = flashingIds.has(bundle.id);
 
                           return (
                             <article
@@ -513,7 +223,7 @@ export default function BundleColumnView({
                                       <div
                                         className={`${styles.columnLogoFrame} ${styles.bundleRowLogoFrame}`}
                                       >
-                                        {bundleLogo(bundle, Math.max(60, iconSize + 2))}
+                                        {bundleLogo(bundle, Math.max(60, iconSize + 2), styles)}
                                       </div>
                                       <div
                                         className={`${styles.columnLinksRow} ${styles.bundleRowLinksRow}`}
@@ -581,6 +291,7 @@ export default function BundleColumnView({
                                       {bundleLogo(
                                         bundle,
                                         Math.max(92, iconSize + 28),
+                                        styles,
                                         styles.logoRootColumnVertical
                                       )}
                                     </div>

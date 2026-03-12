@@ -1,16 +1,8 @@
 "use client";
-
-import { createPortal } from "react-dom";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type {
-  CSSProperties,
-  ChangeEvent as ReactChangeEvent,
-  MouseEvent as ReactMouseEvent,
-} from "react";
-import type { FocusEvent as ReactFocusEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
-import CountryFlagSelectPlugin from "./CountryFlagSelectPlugin";
 import { SERVER_VIEW_CONFIG } from "./types";
 import styles from "./styles.module.css";
 import { normalizeDeviceColor } from "./device-visuals";
@@ -18,22 +10,21 @@ import type {
   OverlayMenu,
   PrimaryDomainMenu,
   ServerCollectionViewProps,
-  StatusIndicator,
   StatusPopover,
-  ValidationState,
 } from "./ServerCollectionView.types";
 import {
   MOTION_LOOP_SEGMENTS,
   buildMotionLanes,
-  getAliasErrorFor,
   getStatusIndicator,
   getTintStyle,
-  getValidationState as buildValidationState,
-  hasFormIssues,
-  normalizePortValue,
 } from "./ServerCollectionView.utils";
-import type { ServerState } from "./types";
-
+import { renderServerMotionMode } from "./ServerCollectionMotionMode";
+import { renderServerListMode } from "./ServerCollectionListMode";
+import { renderServerCardMode } from "./ServerCollectionCardMode";
+import { useServerCollectionActions } from "./useServerCollectionActions";
+import { renderServerCollectionDetailModal } from "./ServerCollectionDetailModal";
+import { renderServerCollectionOverlays } from "./ServerCollectionOverlays";
+import { buildServerCollectionCells } from "./ServerCollectionCells";
 export default function ServerCollectionView({
   viewMode,
   deviceMode = "customer",
@@ -59,7 +50,6 @@ export default function ServerCollectionView({
 }: ServerCollectionViewProps) {
   const viewConfig = SERVER_VIEW_CONFIG[viewMode];
   const isCustomerMode = deviceMode === "customer";
-
   const [aliasDrafts, setAliasDrafts] = useState<Record<string, string>>({});
   const [passwordConfirmDrafts, setPasswordConfirmDrafts] = useState<
     Record<string, string>
@@ -81,7 +71,6 @@ export default function ServerCollectionView({
   const [keyInputModeByAlias, setKeyInputModeByAlias] = useState<
     Record<string, "import" | "generate">
   >({});
-
   const normalizedPrimaryDomainOptions = useMemo(() => {
     const seen = new Set<string>();
     const out: string[] = [];
@@ -96,7 +85,6 @@ export default function ServerCollectionView({
     }
     return out;
   }, [primaryDomainOptions]);
-
   const primaryDomainByLower = useMemo(
     () =>
       new Map(
@@ -104,7 +92,6 @@ export default function ServerCollectionView({
       ),
     [normalizedPrimaryDomainOptions]
   );
-
   useEffect(() => {
     setAliasDrafts((prev) => {
       const next: Record<string, string> = {};
@@ -127,7 +114,6 @@ export default function ServerCollectionView({
       });
       return next;
     });
-
     const aliases = new Set(paginatedServers.map((server) => server.alias));
     setSelectedAliases((prev) => {
       const next = new Set<string>();
@@ -136,7 +122,6 @@ export default function ServerCollectionView({
       });
       return next;
     });
-
     if (openEmojiAlias && !aliases.has(openEmojiAlias)) {
       setOpenEmojiAlias(null);
     }
@@ -160,13 +145,11 @@ export default function ServerCollectionView({
     statusPopover,
     primaryDomainMenu,
   ]);
-
   useEffect(() => {
     setDetailActionError(null);
     setDetailActionStatus(null);
     setDetailActionBusy(null);
   }, [detailAlias]);
-
   useEffect(() => {
     if (!requestedDetailAlias) return;
     if (isCustomerMode) {
@@ -187,7 +170,6 @@ export default function ServerCollectionView({
     onRequestedDetailAliasHandled,
     isCustomerMode,
   ]);
-
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
       const target = event.target as Node | null;
@@ -207,7 +189,6 @@ export default function ServerCollectionView({
       if (!inActionPortal && !inActionTrigger) {
         setActionMenu(null);
       }
-
       const inBulkPortal = Boolean(
         (target as HTMLElement).closest(`.${styles.bulkOverlayMenu}`)
       );
@@ -217,7 +198,6 @@ export default function ServerCollectionView({
       if (!inBulkPortal && !inBulkTrigger) {
         setBulkMenu(null);
       }
-
       const inPrimaryDomainMenu = Boolean(
         (target as HTMLElement).closest(`.${styles.primaryDomainDropdown}`)
       );
@@ -228,7 +208,6 @@ export default function ServerCollectionView({
         setPrimaryDomainMenu(null);
       }
     };
-
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setOpenEmojiAlias(null);
@@ -238,14 +217,12 @@ export default function ServerCollectionView({
       setPrimaryDomainMenu(null);
       setDetailAlias(null);
     };
-
     const closeFloatingOverlays = () => {
       setActionMenu(null);
       setBulkMenu(null);
       setStatusPopover(null);
       setPrimaryDomainMenu(null);
     };
-
     document.addEventListener("mousedown", handleOutsideClick);
     document.addEventListener("keydown", handleEscape);
     window.addEventListener("resize", closeFloatingOverlays);
@@ -257,7 +234,6 @@ export default function ServerCollectionView({
       window.removeEventListener("scroll", closeFloatingOverlays, true);
     };
   }, []);
-
   const visibleAliases = useMemo(
     () =>
       paginatedServers
@@ -265,14 +241,12 @@ export default function ServerCollectionView({
         .filter(Boolean),
     [paginatedServers]
   );
-
   const selectedCount = selectedAliases.size;
   const selectedVisibleCount = visibleAliases.filter((alias) =>
     selectedAliases.has(alias)
   ).length;
   const allVisibleSelected =
     visibleAliases.length > 0 && selectedVisibleCount === visibleAliases.length;
-
   const detailServer = useMemo(
     () =>
       detailAlias
@@ -280,548 +254,100 @@ export default function ServerCollectionView({
         : null,
     [detailAlias, paginatedServers]
   );
-
-  const updateAliasDraft = (alias: string, value: string) => {
-    setAliasDrafts((prev) => ({ ...prev, [alias]: value }));
-  };
-
-  const resolvePrimaryDomainSelection = useCallback(
-    (value: string) => {
-      const normalized = String(value || "").trim().toLowerCase();
-      if (!normalized) return null;
-      return primaryDomainByLower.get(normalized) || null;
-    },
-    [primaryDomainByLower]
-  );
-
-  const patchPort = (alias: string, value: string) => {
-    onPatchServer(alias, { port: normalizePortValue(value) });
-  };
-
-  const ensurePortDefault = (alias: string, value: string) => {
-    const normalized = normalizePortValue(value);
-    onPatchServer(alias, { port: normalized || "22" });
-  };
-
-  const getValidationState = (
-    server: ServerState,
-    options?: { enforcePasswordConfirm?: boolean }
-  ): ValidationState => {
-    const aliasDraft = String(aliasDrafts[server.alias] ?? server.alias).trim();
-    const passwordConfirmDraft = String(passwordConfirmDrafts[server.alias] ?? "");
-    return buildValidationState(server, {
-      aliasDraft,
-      aliasCounts,
-      primaryDomainByLower,
-      passwordConfirmDraft,
-      enforcePasswordConfirm: Boolean(options?.enforcePasswordConfirm),
-    });
-  };
-
-  const getVisualState = (
-    validation: ValidationState,
-    indicator: StatusIndicator
-  ) => {
-    if (validation.credentialsMissing || hasFormIssues(validation)) {
-      return {
-        cardClass: styles.cardStateDanger,
-        rowClass: styles.rowStateDanger,
-      };
-    }
-    if (indicator.tone === "green") {
-      return {
-        cardClass: styles.cardStateSuccess,
-        rowClass: styles.rowStateSuccess,
-      };
-    }
-    return {
-      cardClass: styles.cardStateWarning,
-      rowClass: styles.rowStateWarning,
-    };
-  };
-
-
-  const syncAliasDraftState = (fromAlias: string, toAlias: string) => {
-    setAliasDrafts((prev) => {
-      const next = { ...prev };
-      delete next[fromAlias];
-      next[toAlias] = toAlias;
-      return next;
-    });
-    setPasswordConfirmDrafts((prev) => {
-      const next = { ...prev };
-      const previousConfirm = next[fromAlias] ?? "";
-      delete next[fromAlias];
-      next[toAlias] = previousConfirm;
-      return next;
-    });
-    setDetailAlias((prev) => (prev === fromAlias ? toAlias : prev));
-    setSelectedAliases((prev) => {
-      if (!prev.has(fromAlias)) return prev;
-      const next = new Set(prev);
-      next.delete(fromAlias);
-      next.add(toAlias);
-      return next;
-    });
-    setActionMenu((prev) => {
-      if (!prev || prev.alias !== fromAlias) return prev;
-      return { ...prev, alias: toAlias };
-    });
-    setStatusPopover((prev) => {
-      if (!prev || prev.alias !== fromAlias) return prev;
-      return { ...prev, alias: toAlias };
-    });
-  };
-
-  const tryRenameAlias = (server: ServerState, rawValue: string) => {
-    const trimmed = String(rawValue ?? "").trim();
-    const error = getAliasErrorFor(trimmed, server.alias, aliasCounts);
-    if (error || trimmed === server.alias) return false;
-    onAliasChange(server.alias, trimmed);
-    syncAliasDraftState(server.alias, trimmed);
-    return true;
-  };
-
-  const commitAlias = (server: ServerState) => {
-    const draft = String(aliasDrafts[server.alias] ?? server.alias);
-    if (tryRenameAlias(server, draft)) return;
-    const trimmed = draft.trim();
-    setAliasDrafts((prev) => ({
-      ...prev,
-      [server.alias]: trimmed || server.alias,
-    }));
-  };
-
-  const onAliasTyping = (server: ServerState, value: string) => {
-    updateAliasDraft(server.alias, value);
-  };
-
-  const updateAuthMethod = (server: ServerState, method: "password" | "private_key") => {
-    setPasswordConfirmDrafts((prev) => ({
-      ...prev,
-      [server.alias]: "",
-    }));
-    if (method === "password") {
-      onPatchServer(server.alias, {
-        authMethod: method,
-        privateKey: "",
-        publicKey: "",
-      });
-      return;
-    }
-    onPatchServer(server.alias, {
-      authMethod: method,
-      password: "",
-    });
-  };
-
-  const statusDotClass = (tone: StatusIndicator["tone"]) => {
-    if (tone === "green") return styles.statusDotGreen;
-    if (tone === "yellow") return styles.statusDotYellow;
-    return styles.statusDotOrange;
-  };
-
-  const toggleAliasSelection = (alias: string, checked: boolean) => {
-    setSelectedAliases((prev) => {
-      const next = new Set(prev);
-      if (checked) {
-        next.add(alias);
-      } else {
-        next.delete(alias);
-      }
-      return next;
-    });
-  };
-
-  const toggleSelectAllVisible = (checked: boolean) => {
-    setSelectedAliases((prev) => {
-      const next = new Set(prev);
-      if (checked) {
-        visibleAliases.forEach((alias) => next.add(alias));
-      } else {
-        visibleAliases.forEach((alias) => next.delete(alias));
-      }
-      return next;
-    });
-  };
-
-  const openDetailModal = (alias: string) => {
-    onOpenDetail(alias);
-    setDetailAlias(alias);
-    setActionMenu(null);
-    setBulkMenu(null);
-  };
-
-  const openActionMenuFor = (alias: string, event: ReactMouseEvent<HTMLButtonElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const width = 220;
-    setActionMenu({
-      alias,
-      top: rect.bottom + 8,
-      left: Math.max(12, rect.right - width),
-    });
-    setBulkMenu(null);
-  };
-
-  const openBulkMenu = (event: ReactMouseEvent<HTMLButtonElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const width = 230;
-    setBulkMenu({
-      top: rect.bottom + 8,
-      left: Math.max(12, rect.right - width),
-    });
-    setActionMenu(null);
-  };
-
-  const runBulkAction = (mode: "delete" | "purge") => {
-    const aliases = Array.from(selectedAliases);
-    if (aliases.length === 0) return;
-    if (mode === "purge") {
-      onRequestPurge(aliases);
-    } else {
-      onRequestDelete(aliases);
-    }
-    setSelectedAliases(new Set());
-    setBulkMenu(null);
-  };
-
-  const openStatusPopoverFor = (
-    alias: string,
-    indicator: StatusIndicator,
-    event: ReactMouseEvent<HTMLElement> | ReactFocusEvent<HTMLElement>
-  ) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    setStatusPopover({
-      alias,
-      top: rect.bottom + 10,
-      left: rect.left + rect.width / 2,
-      label: indicator.label,
-      tooltip: indicator.tooltip,
-    });
-  };
-
-  const closeStatusPopoverFor = (alias: string) => {
-    setStatusPopover((prev) => {
-      if (!prev || prev.alias !== alias) return prev;
-      return null;
-    });
-  };
-
-  const runDetailKeygen = async (server: ServerState) => {
-    setDetailActionError(null);
-    setDetailActionStatus(null);
-    setDetailActionBusy("keygen");
-    try {
-      await onGenerateKey(server.alias);
-      setDetailActionStatus("SSH keypair generated.");
-    } catch (err: any) {
-      setDetailActionError(err?.message ?? "SSH key generation failed.");
-    } finally {
-      setDetailActionBusy(null);
-    }
-  };
-
-  const emitCredentialBlur = (
-    server: ServerState,
-    field:
-      | "host"
-      | "port"
-      | "user"
-      | "password"
-      | "passwordConfirm"
-      | "privateKey"
-      | "keyPassphrase"
-      | "primaryDomain",
-    passwordConfirm?: string
-  ) => {
-    setDetailActionError(null);
-    void Promise.resolve(
-      onCredentialFieldBlur({
-        server,
-        field,
-        passwordConfirm,
-      })
-    ).catch((err: any) => {
-      setDetailActionError(err?.message ?? "Automatic credential sync failed.");
-    });
-  };
-
-  const commitPrimaryDomain = (server: ServerState, value?: string) => {
-    const typed = String(value ?? server.primaryDomain ?? "").trim().toLowerCase();
-    const resolved = resolvePrimaryDomainSelection(typed);
-    if (!resolved) {
-      onRequestAddPrimaryDomain?.({
-        alias: server.alias,
-        value: typed,
-        kind: typed && !typed.includes(".") ? "local" : "fqdn",
-        reason: typed ? "unknown" : "missing",
-      });
-      return;
-    }
-    if (resolved !== String(server.primaryDomain || "")) {
-      onPatchServer(server.alias, { primaryDomain: resolved });
-    }
-    emitCredentialBlur({ ...server, primaryDomain: resolved }, "primaryDomain");
-  };
-
-  const openPrimaryDomainMenuFor = (alias: string, target: HTMLElement) => {
-    const rect = target.getBoundingClientRect();
-    setPrimaryDomainMenu({
-      alias,
-      top: rect.bottom + 6,
-      left: rect.left,
-      width: Math.max(220, rect.width),
-    });
-  };
-
-  const activePrimaryDomainServer = useMemo(
-    () =>
-      primaryDomainMenu
-        ? paginatedServers.find((server) => server.alias === primaryDomainMenu.alias) ||
-          null
-        : null,
-    [paginatedServers, primaryDomainMenu]
-  );
-
-  const activePrimaryDomainOptions = useMemo(() => {
-    const query = String(activePrimaryDomainServer?.primaryDomain || "")
-      .trim()
-      .toLowerCase();
-    if (!query) return normalizedPrimaryDomainOptions;
-    return normalizedPrimaryDomainOptions.filter((domain) =>
-      domain.toLowerCase().includes(query)
-    );
-  }, [activePrimaryDomainServer, normalizedPrimaryDomainOptions]);
-
-  const selectPrimaryDomainFromMenu = (server: ServerState, domain: string) => {
-    onPatchServer(server.alias, { primaryDomain: domain });
-    emitCredentialBlur({ ...server, primaryDomain: domain }, "primaryDomain");
-    setPrimaryDomainMenu(null);
-  };
-
-  const onPortFieldBlur = (server: ServerState) => {
-    const normalizedPort = normalizePortValue(server.port) || "22";
-    ensurePortDefault(server.alias, server.port);
-    emitCredentialBlur({ ...server, port: normalizedPort }, "port");
-  };
-
-  const setKeyInputMode = (alias: string, mode: "import" | "generate") => {
-    setKeyInputModeByAlias((prev) => ({ ...prev, [alias]: mode }));
-  };
-
-  const handlePrivateKeyUpload = (
-    server: ServerState,
-    event: ReactChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = String(reader.result || "").replace(/\r\n/g, "\n");
-      onPatchServer(server.alias, { privateKey: text });
-      emitCredentialBlur({ ...server, privateKey: text }, "privateKey");
-      setKeyInputMode(server.alias, "import");
-    };
-    reader.onerror = () => {
-      setDetailActionError("Failed to read private key file.");
-    };
-    reader.readAsText(file);
-  };
-
-  const renderStatusCell = (server: ServerState, indicator: StatusIndicator) => (
-    <div className={styles.listStatusCell}>
-      <button
-        type="button"
-        className={styles.statusDotButton}
-        onMouseEnter={(event) => openStatusPopoverFor(server.alias, indicator, event)}
-        onMouseLeave={() => closeStatusPopoverFor(server.alias)}
-        onFocus={(event) => openStatusPopoverFor(server.alias, indicator, event)}
-        onBlur={() => closeStatusPopoverFor(server.alias)}
-        aria-label={`Status: ${indicator.label}`}
-      >
-        <span
-          className={`${styles.statusDot} ${statusDotClass(indicator.tone)}`}
-          aria-hidden="true"
-        />
-      </button>
-    </div>
-  );
-
-  const renderActionCell = (server: ServerState) => (
-    <div className={styles.rowActions}>
-      <button
-        type="button"
-        onClick={() => openDetailModal(server.alias)}
-        className={styles.detailInfoButton}
-      >
-        <i className="fa-solid fa-circle-info" aria-hidden="true" />
-        <span>Detail</span>
-      </button>
-      <button
-        type="button"
-        onClick={(event) => {
-          if (actionMenu?.alias === server.alias) {
-            setActionMenu(null);
-          } else {
-            openActionMenuFor(server.alias, event);
-          }
-        }}
-        className={styles.actionMenuTrigger}
-      >
-        <span>Action</span>
-        <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-      </button>
-    </div>
-  );
-
+  const {
+    getValidationState,
+    getVisualState,
+    statusDotClass,
+    onAliasTyping,
+    commitAlias,
+    updateAuthMethod,
+    toggleAliasSelection,
+    toggleSelectAllVisible,
+    openDetailModal,
+    openActionMenuFor,
+    openBulkMenu,
+    runBulkAction,
+    openStatusPopoverFor,
+    closeStatusPopoverFor,
+    runDetailKeygen,
+    emitCredentialBlur,
+    commitPrimaryDomain,
+    openPrimaryDomainMenuFor,
+    activePrimaryDomainServer,
+    activePrimaryDomainOptions,
+    selectPrimaryDomainFromMenu,
+    patchPort,
+    onPortFieldBlur,
+    setKeyInputMode,
+    handlePrivateKeyUpload,
+  } = useServerCollectionActions({
+    aliasCounts,
+    aliasDrafts,
+    setAliasDrafts,
+    passwordConfirmDrafts,
+    setPasswordConfirmDrafts,
+    keyInputModeByAlias,
+    setKeyInputModeByAlias,
+    selectedAliases,
+    setSelectedAliases,
+    visibleAliases,
+    paginatedServers,
+    detailAlias,
+    setDetailAlias,
+    actionMenu,
+    setActionMenu,
+    setBulkMenu,
+    statusPopover,
+    setStatusPopover,
+    primaryDomainMenu,
+    setPrimaryDomainMenu,
+    primaryDomainByLower,
+    normalizedPrimaryDomainOptions,
+    setDetailActionBusy,
+    setDetailActionError,
+    setDetailActionStatus,
+    onAliasChange,
+    onPatchServer,
+    onOpenDetail,
+    onGenerateKey,
+    onCredentialFieldBlur,
+    onRequestDelete,
+    onRequestPurge,
+    onRequestAddPrimaryDomain,
+  });
+  const { renderStatusCell, renderActionCell } = buildServerCollectionCells({
+    actionMenu,
+    setActionMenu,
+    openDetailModal,
+    openActionMenuFor,
+    openStatusPopoverFor,
+    closeStatusPopoverFor,
+    statusDotClass,
+  });
   const gridStyle = {
     "--server-grid-columns": computedColumns,
   } as CSSProperties;
-
-  const actionMenuOverlay =
-    actionMenu && typeof document !== "undefined"
-      ? createPortal(
-          <div
-            className={styles.actionOverlayMenu}
-            style={{ top: actionMenu.top, left: actionMenu.left }}
-            role="menu"
-          >
-            <button
-              type="button"
-              className={styles.actionDropdownItem}
-              onClick={() => {
-                onRequestDelete([actionMenu.alias]);
-                setActionMenu(null);
-              }}
-            >
-              <i className="fa-solid fa-trash" aria-hidden="true" />
-              <span>Delete</span>
-            </button>
-            <button
-              type="button"
-              className={`${styles.actionDropdownItem} ${styles.actionDropdownDanger}`}
-              onClick={() => {
-                onRequestPurge([actionMenu.alias]);
-                setActionMenu(null);
-              }}
-            >
-              <i className="fa-solid fa-broom" aria-hidden="true" />
-              <span>Purge</span>
-            </button>
-          </div>,
-          document.body
-        )
-      : null;
-
-  const bulkMenuOverlay =
-    bulkMenu && typeof document !== "undefined"
-      ? createPortal(
-          <div
-            className={styles.bulkOverlayMenu}
-            style={{ top: bulkMenu.top, left: bulkMenu.left }}
-            role="menu"
-          >
-            <button
-              type="button"
-              className={styles.actionDropdownItem}
-              disabled={selectedCount === 0}
-              onClick={() => runBulkAction("delete")}
-            >
-              <i className="fa-solid fa-trash" aria-hidden="true" />
-              <span>Delete selected</span>
-            </button>
-            <button
-              type="button"
-              className={`${styles.actionDropdownItem} ${styles.actionDropdownDanger}`}
-              disabled={selectedCount === 0}
-              onClick={() => runBulkAction("purge")}
-            >
-              <i className="fa-solid fa-broom" aria-hidden="true" />
-              <span>Purge selected</span>
-            </button>
-          </div>,
-          document.body
-        )
-      : null;
-
-  const statusPopoverOverlay =
-    statusPopover && typeof document !== "undefined"
-      ? createPortal(
-          <div
-            className={styles.statusPopoverOverlay}
-            style={{ top: statusPopover.top, left: statusPopover.left }}
-            role="tooltip"
-          >
-            <strong>{statusPopover.label}</strong>
-            <span>{statusPopover.tooltip}</span>
-          </div>,
-          document.body
-        )
-      : null;
-
-  const primaryDomainMenuOverlay =
-    primaryDomainMenu &&
-    activePrimaryDomainServer &&
-    typeof document !== "undefined"
-      ? createPortal(
-          <div
-            className={styles.primaryDomainDropdown}
-            style={{
-              top: primaryDomainMenu.top,
-              left: primaryDomainMenu.left,
-              width: primaryDomainMenu.width,
-            }}
-            role="listbox"
-          >
-            <div className={styles.primaryDomainDropdownList}>
-              {activePrimaryDomainOptions.length === 0 ? (
-                <span className={styles.primaryDomainDropdownEmpty}>
-                  No matching domains.
-                </span>
-              ) : (
-                activePrimaryDomainOptions.map((domain) => (
-                  <button
-                    key={domain}
-                    type="button"
-                    className={styles.primaryDomainDropdownItem}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() =>
-                      selectPrimaryDomainFromMenu(activePrimaryDomainServer, domain)
-                    }
-                  >
-                    {domain}
-                  </button>
-                ))
-              )}
-            </div>
-            <button
-              type="button"
-              className={styles.primaryDomainDropdownAdd}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                setPrimaryDomainMenu(null);
-                const typed = String(
-                  activePrimaryDomainServer.primaryDomain || ""
-                )
-                  .trim()
-                  .toLowerCase();
-                onRequestAddPrimaryDomain?.({
-                  alias: activePrimaryDomainServer.alias,
-                  value: typed,
-                  kind: typed && !typed.includes(".") ? "local" : "fqdn",
-                  reason: typed ? "unknown" : "missing",
-                });
-              }}
-            >
-              <i className="fa-solid fa-plus" aria-hidden="true" />
-              <span>Add new</span>
-            </button>
-          </div>,
-          document.body
-        )
-      : null;
-
+  const {
+    actionMenuOverlay,
+    bulkMenuOverlay,
+    statusPopoverOverlay,
+    primaryDomainMenuOverlay,
+  } = renderServerCollectionOverlays({
+    actionMenu,
+    setActionMenu,
+    bulkMenu,
+    selectedCount,
+    runBulkAction,
+    statusPopover,
+    primaryDomainMenu,
+    setPrimaryDomainMenu,
+    activePrimaryDomainServer,
+    activePrimaryDomainOptions,
+    selectPrimaryDomainFromMenu,
+    onRequestDelete,
+    onRequestPurge,
+    onRequestAddPrimaryDomain,
+  });
   const detailValidation = detailServer
     ? getValidationState(detailServer, { enforcePasswordConfirm: true })
     : null;
@@ -832,1449 +358,138 @@ export default function ServerCollectionView({
   const detailConnectionResult = detailServer
     ? testResults[detailServer.alias]
     : undefined;
-
-  const detailModal =
-    !isCustomerMode && detailServer && typeof document !== "undefined"
-      ? createPortal(
-          <div
-            className={`${styles.modalOverlay} ${styles.serverModalOverlay}`}
-            onClick={() => setDetailAlias(null)}
-          >
-            <div
-              className={`${styles.modalCard} ${styles.serverModalCard} ${styles.detailModalCard}`}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className={styles.modalHeader}>
-                <div>
-                  <h3 className={styles.modalTitle}>
-                    <i className="fa-solid fa-circle-info" aria-hidden="true" />{" "}
-                    Device detail · {detailServer.alias}
-                  </h3>
-                  <p className={`text-body-secondary ${styles.modalHint}`}>
-                    Edit identity, connectivity and credentials in one place.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className={styles.closeButton}
-                  onClick={() => setDetailAlias(null)}
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className={styles.fieldGrid}>
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>Identity</label>
-                  <div className={styles.aliasInputRow}>
-                    <input
-                      type="color"
-                      value={normalizeDeviceColor(detailServer.color) || "#89CFF0"}
-                      onChange={(event) =>
-                        onPatchServer(detailServer.alias, { color: event.target.value })
-                      }
-                      className={styles.colorPickerInput}
-                      aria-label="Device color"
-                    />
-                    <div className={styles.emojiPickerShell}>
-                      <button
-                        type="button"
-                        className={`${styles.emojiPickerTrigger} ${
-                          openEmojiAlias === detailServer.alias
-                            ? styles.emojiPickerTriggerOpen
-                            : ""
-                        }`}
-                        onClick={() =>
-                          setOpenEmojiAlias((prev) =>
-                            prev === detailServer.alias ? null : detailServer.alias
-                          )
-                        }
-                        title="Choose device emoji"
-                        aria-label="Choose device emoji"
-                      >
-                        <span className={styles.aliasEmojiPreview} aria-hidden="true">
-                          {detailServer.logoEmoji || "💻"}
-                        </span>
-                      </button>
-                      {openEmojiAlias === detailServer.alias ? (
-                        <div className={styles.emojiPickerMenu}>
-                          <Picker
-                            data={data}
-                            theme="dark"
-                            previewPosition="none"
-                            navPosition="bottom"
-                            searchPosition="sticky"
-                            perLine={8}
-                            maxFrequentRows={2}
-                            onEmojiSelect={(emoji: any) => {
-                              const nextEmoji = String(emoji?.native || "").trim();
-                              if (!nextEmoji) return;
-                              onPatchServer(detailServer.alias, { logoEmoji: nextEmoji });
-                              setOpenEmojiAlias(null);
-                            }}
-                          />
-                        </div>
-                      ) : null}
-                    </div>
-                    <input
-                      value={aliasDrafts[detailServer.alias] ?? detailServer.alias}
-                      onChange={(event) =>
-                        onAliasTyping(detailServer, event.target.value)
-                      }
-                      onBlur={() => commitAlias(detailServer)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          commitAlias(detailServer);
-                        }
-                      }}
-                      placeholder="device"
-                      className={`${styles.fieldInput} ${styles.identityAliasInput} ${
-                        detailValidation?.aliasError ? styles.inputError : ""
-                      }`}
-                    />
-                  </div>
-                  {detailValidation?.aliasError ? (
-                    <p className="text-danger">{detailValidation.aliasError}</p>
-                  ) : null}
-                </div>
-
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>Description</label>
-                  <input
-                    value={detailServer.description}
-                    onChange={(event) =>
-                      onPatchServer(detailServer.alias, {
-                        description: event.target.value,
-                      })
-                    }
-                    placeholder="Optional description"
-                    className={styles.fieldInput}
-                  />
-                </div>
-
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>
-                    Primary domain
-                  </label>
-                  <div className={styles.primaryDomainInputRow}>
-                    <input
-                      value={detailServer.primaryDomain || ""}
-                      onChange={(event) =>
-                        onPatchServer(detailServer.alias, {
-                          primaryDomain: event.target.value,
-                        })
-                      }
-                      onFocus={(event) =>
-                        openPrimaryDomainMenuFor(detailServer.alias, event.currentTarget)
-                      }
-                      onClick={(event) =>
-                        openPrimaryDomainMenuFor(detailServer.alias, event.currentTarget)
-                      }
-                      onBlur={(event) =>
-                        commitPrimaryDomain(detailServer, event.currentTarget.value)
-                      }
-                      placeholder="localhost"
-                      className={`${styles.fieldInput} ${
-                        styles.primaryDomainDropdownTrigger
-                      } ${
-                        detailValidation?.primaryDomainError ? styles.inputError : ""
-                      }`}
-                    />
-                  </div>
-                  {detailValidation?.primaryDomainError ? (
-                    <p className="text-danger">{detailValidation.primaryDomainError}</p>
-                  ) : null}
-                </div>
-
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>Host</label>
-                  <input
-                    value={detailServer.host}
-                    onChange={(event) =>
-                      onPatchServer(detailServer.alias, { host: event.target.value })
-                    }
-                    onBlur={() => emitCredentialBlur(detailServer, "host")}
-                    placeholder="example.com"
-                    className={`${styles.fieldInput} ${
-                      detailValidation?.hostMissing ? styles.inputError : ""
-                    }`}
-                  />
-                  {detailValidation?.hostMissing ? (
-                    <p className="text-danger">Host is required.</p>
-                  ) : null}
-                </div>
-
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>Port</label>
-                  <input
-                    type="number"
-                    value={detailServer.port}
-                    onChange={(event) =>
-                      patchPort(detailServer.alias, event.target.value)
-                    }
-                    onBlur={() => onPortFieldBlur(detailServer)}
-                    placeholder="22"
-                    min={1}
-                    max={65535}
-                    step={1}
-                    inputMode="numeric"
-                    className={`${styles.fieldInput} ${
-                      detailValidation?.portError ? styles.inputError : ""
-                    }`}
-                  />
-                  {detailValidation?.portError ? (
-                    <p className="text-danger">{detailValidation.portError}</p>
-                  ) : null}
-                </div>
-
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>User</label>
-                  <input
-                    value={detailServer.user}
-                    onChange={(event) =>
-                      onPatchServer(detailServer.alias, { user: event.target.value })
-                    }
-                    onBlur={() => emitCredentialBlur(detailServer, "user")}
-                    placeholder="root"
-                    className={`${styles.fieldInput} ${
-                      detailValidation?.userMissing ? styles.inputError : ""
-                    }`}
-                  />
-                  {detailValidation?.userMissing ? (
-                    <p className="text-danger">User is required.</p>
-                  ) : null}
-                </div>
-
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>
-                    Credential type
-                  </label>
-                  <div className={styles.segmentedButtons}>
-                    <button
-                      type="button"
-                      onClick={() => updateAuthMethod(detailServer, "password")}
-                      className={`${styles.segmentedButton} ${
-                        detailServer.authMethod === "password"
-                          ? styles.segmentedButtonActive
-                          : ""
-                      }`}
-                    >
-                      Password
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => updateAuthMethod(detailServer, "private_key")}
-                      className={`${styles.segmentedButton} ${
-                        detailServer.authMethod === "private_key"
-                          ? styles.segmentedButtonActive
-                          : ""
-                      }`}
-                    >
-                      SSH key
-                    </button>
-                  </div>
-                </div>
-
-                {detailServer.authMethod === "password" ? (
-                  <div className={styles.fieldWrap}>
-                    <label className={`text-body-tertiary ${styles.fieldLabel}`}>
-                      Password
-                    </label>
-                    <input
-                      type="password"
-                      value={detailServer.password}
-                      onChange={(event) =>
-                        onPatchServer(detailServer.alias, {
-                          password: event.target.value,
-                        })
-                      }
-                      onBlur={() =>
-                        emitCredentialBlur(
-                          detailServer,
-                          "password",
-                          passwordConfirmDrafts[detailServer.alias] ?? ""
-                        )
-                      }
-                      placeholder="Enter password"
-                      autoComplete="off"
-                      className={`${styles.fieldInput} ${
-                        detailValidation?.credentialsMissing ? styles.inputError : ""
-                      }`}
-                    />
-                    <input
-                      type="password"
-                      value={passwordConfirmDrafts[detailServer.alias] ?? ""}
-                      onChange={(event) =>
-                        setPasswordConfirmDrafts((prev) => ({
-                          ...prev,
-                          [detailServer.alias]: event.target.value,
-                        }))
-                      }
-                      onBlur={(event) =>
-                        emitCredentialBlur(
-                          detailServer,
-                          "passwordConfirm",
-                          event.currentTarget.value
-                        )
-                      }
-                      placeholder="Confirm password"
-                      autoComplete="off"
-                      className={`${styles.fieldInput} ${
-                        detailValidation?.passwordConfirmError ? styles.inputError : ""
-                      }`}
-                    />
-                    {detailValidation?.passwordConfirmError ? (
-                      <p className="text-danger">{detailValidation.passwordConfirmError}</p>
-                    ) : null}
-                  </div>
-                ) : (
-                  <>
-                    <div className={styles.fieldWrap}>
-                      <label className={`text-body-tertiary ${styles.fieldLabel}`}>
-                        Algorithm
-                      </label>
-                      <select
-                        value={detailServer.keyAlgorithm || "ed25519"}
-                        onChange={(event) =>
-                          onPatchServer(detailServer.alias, {
-                            keyAlgorithm: event.target.value,
-                          })
-                        }
-                        className={styles.selectControl}
-                      >
-                        <option value="ed25519">ed25519 (recommended)</option>
-                        <option value="rsa">rsa 4096</option>
-                        <option value="ecdsa">ecdsa</option>
-                      </select>
-                      {!String(detailServer.privateKey || "").trim() ? (
-                        <div className={styles.segmentedButtons}>
-                          <button
-                            type="button"
-                            onClick={() => setKeyInputMode(detailServer.alias, "import")}
-                            className={`${styles.segmentedButton} ${
-                              (keyInputModeByAlias[detailServer.alias] ?? "import") ===
-                              "import"
-                                ? styles.segmentedButtonActive
-                                : ""
-                            }`}
-                          >
-                            Import
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setKeyInputMode(detailServer.alias, "generate")}
-                            className={`${styles.segmentedButton} ${
-                              (keyInputModeByAlias[detailServer.alias] ?? "import") ===
-                              "generate"
-                                ? styles.segmentedButtonActive
-                                : ""
-                            }`}
-                          >
-                            Generate
-                          </button>
-                        </div>
-                      ) : null}
-                      {!String(detailServer.privateKey || "").trim() &&
-                      (keyInputModeByAlias[detailServer.alias] ?? "import") ===
-                        "generate" ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void runDetailKeygen(detailServer);
-                          }}
-                          disabled={detailActionBusy === "keygen" || !workspaceId}
-                          className={styles.actionButtonSecondary}
-                        >
-                          <i className="fa-solid fa-key" aria-hidden="true" />
-                          <span>
-                            {detailActionBusy === "keygen"
-                              ? "Generating..."
-                              : "Generate key"}
-                          </span>
-                        </button>
-                      ) : null}
-                      {!String(detailServer.privateKey || "").trim() &&
-                      (keyInputModeByAlias[detailServer.alias] ?? "import") ===
-                        "generate" ? (
-                        <p className={`text-body-secondary ${styles.statusHint}`}>
-                          Generates a new keypair with random passphrase protection.
-                        </p>
-                      ) : null}
-                    </div>
-                    {(String(detailServer.privateKey || "").trim() ||
-                      (keyInputModeByAlias[detailServer.alias] ?? "import") ===
-                        "import") && (
-                      <div className={styles.fieldWrap}>
-                        <label className={`text-body-tertiary ${styles.fieldLabel}`}>
-                          Private key
-                        </label>
-                        <textarea
-                          value={detailServer.privateKey}
-                          onChange={(event) =>
-                            onPatchServer(detailServer.alias, {
-                              privateKey: event.target.value,
-                            })
-                          }
-                          onBlur={() => emitCredentialBlur(detailServer, "privateKey")}
-                          placeholder="Paste SSH private key"
-                          rows={6}
-                          autoComplete="off"
-                          spellCheck={false}
-                          className={`${styles.textAreaControl} ${
-                            detailValidation?.credentialsMissing ? styles.inputError : ""
-                          }`}
-                        />
-                        <label className={styles.uploadKeyButton}>
-                          <i className="fa-solid fa-upload" aria-hidden="true" />
-                          <span>Upload private key</span>
-                          <input
-                            type="file"
-                            accept=".pem,.key,.txt,text/plain"
-                            onChange={(event) => handlePrivateKeyUpload(detailServer, event)}
-                            className={styles.fileInputHidden}
-                          />
-                        </label>
-                        {detailValidation?.credentialsMissing ? (
-                          <p className="text-danger">Private key is required.</p>
-                        ) : null}
-                      </div>
-                    )}
-                    <div className={styles.fieldWrap}>
-                      <label className={`text-body-tertiary ${styles.fieldLabel}`}>
-                        Key passphrase (optional)
-                      </label>
-                      <input
-                        type="password"
-                        value={detailServer.keyPassphrase}
-                        onChange={(event) =>
-                          onPatchServer(detailServer.alias, {
-                            keyPassphrase: event.target.value,
-                          })
-                        }
-                        onBlur={() => emitCredentialBlur(detailServer, "keyPassphrase")}
-                        placeholder="Optional key passphrase"
-                        autoComplete="off"
-                        className={styles.fieldInput}
-                      />
-                    </div>
-                    <div className={styles.fieldWrap}>
-                      <label className={`text-body-tertiary ${styles.fieldLabel}`}>
-                        Public key
-                      </label>
-                      <textarea
-                        readOnly
-                        value={detailServer.publicKey || ""}
-                        placeholder="Public key will appear here"
-                        rows={3}
-                        className={`${styles.textAreaControl} ${styles.inputDisabledBg}`}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div className={styles.detailStatusBlock}>
-                <div
-                  className={styles.statusHeadline}
-                  onMouseEnter={(event) => {
-                    if (!detailIndicator) return;
-                    openStatusPopoverFor(detailServer.alias, detailIndicator, event);
-                  }}
-                  onMouseLeave={() => closeStatusPopoverFor(detailServer.alias)}
-                >
-                  <span
-                    className={`${styles.statusDot} ${statusDotClass(
-                      detailIndicator?.tone ?? "orange"
-                    )}`}
-                    aria-hidden="true"
-                  />
-                  <span>{detailIndicator?.label ?? "Unknown status"}</span>
-                </div>
-                <div className={styles.statusSummary}>
-                  {detailIndicator?.tooltip ?? "No status available."}
-                </div>
-                {detailConnectionResult ? (
-                  <div className={styles.detailResultGrid}>
-                    <span>
-                      Ping:{" "}
-                      {detailConnectionResult.ping_ok ? "ok" : detailConnectionResult.ping_error || "failed"}
-                    </span>
-                    <span>
-                      SSH:{" "}
-                      {detailConnectionResult.ssh_ok ? "ok" : detailConnectionResult.ssh_error || "failed"}
-                    </span>
-                  </div>
-                ) : null}
-                {detailActionError ? (
-                  <p className="text-danger">{detailActionError}</p>
-                ) : null}
-                {detailActionStatus ? (
-                  <p className="text-success">{detailActionStatus}</p>
-                ) : null}
-              </div>
-
-              <div className={styles.detailModalFooter}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onRequestDelete([detailServer.alias]);
-                    setDetailAlias(null);
-                  }}
-                  className={styles.actionButtonDangerSoft}
-                >
-                  <i className="fa-solid fa-trash" aria-hidden="true" />
-                  <span>Delete</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onRequestPurge([detailServer.alias]);
-                    setDetailAlias(null);
-                  }}
-                  className={styles.actionButtonDanger}
-                >
-                  <i className="fa-solid fa-broom" aria-hidden="true" />
-                  <span>Purge</span>
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )
-      : null;
-
+  const detailModal = renderServerCollectionDetailModal({
+    isCustomerMode,
+    detailServer,
+    detailValidation,
+    detailIndicator,
+    detailConnectionResult,
+    detailActionBusy,
+    detailActionError,
+    detailActionStatus,
+    aliasDrafts,
+    passwordConfirmDrafts,
+    setPasswordConfirmDrafts,
+    keyInputModeByAlias,
+    workspaceId,
+    openEmojiAlias,
+    setOpenEmojiAlias,
+    setDetailAlias,
+    onPatchServer,
+    onAliasTyping,
+    commitAlias,
+    openPrimaryDomainMenuFor,
+    commitPrimaryDomain,
+    emitCredentialBlur,
+    patchPort,
+    onPortFieldBlur,
+    updateAuthMethod,
+    setKeyInputMode,
+    handlePrivateKeyUpload,
+    runDetailKeygen,
+    onRequestDelete,
+    onRequestPurge,
+    openStatusPopoverFor,
+    closeStatusPopoverFor,
+    statusDotClass,
+    Picker,
+    data,
+  });
   if (viewMode === "row" || viewMode === "column") {
-    const motionLanes = buildMotionLanes(paginatedServers, laneCount);
-    const safeLaneSize = Math.max(
-      viewMode === "row" ? 120 : 160,
-      Math.floor(Number(laneSize) || 0)
-    );
-    const motionRootStyle = {
-      "--motion-lane-count": Math.max(1, motionLanes.length),
-      "--motion-lane-size": `${safeLaneSize}px`,
-      "--motion-row-card-width": `${Math.max(420, Math.round(safeLaneSize * 2))}px`,
-      "--motion-column-card-min-height": `${Math.max(260, Math.round(safeLaneSize * 1.6))}px`,
-    } as CSSProperties;
-
-    if (paginatedServers.length === 0) {
-      return (
-        <div
-          className={`${styles.motionRoot} ${
-            viewMode === "row" ? styles.motionRootRow : styles.motionRootColumn
-          }`}
-          style={motionRootStyle}
-        >
-          <div className={`text-body-secondary ${styles.motionEmpty}`}>
-            No devices match the filters.
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <>
-        <div
-          className={`${styles.motionRoot} ${
-            viewMode === "row" ? styles.motionRootRow : styles.motionRootColumn
-          }`}
-          style={motionRootStyle}
-        >
-          <div
-            className={`${styles.motionLanes} ${
-              viewMode === "row" ? styles.motionLanesRow : styles.motionLanesColumn
-            }`}
-          >
-            {motionLanes.map((laneServers, laneIndex) => {
-              const basePerItemSeconds = viewMode === "row" ? 6 : 7;
-              const duration = Number(
-                (Math.max(1, laneServers.length) * basePerItemSeconds + laneIndex).toFixed(2)
-              );
-              const laneStyle = {
-                "--motion-scroll-duration": `${duration}s`,
-              } as CSSProperties;
-              return (
-                <div
-                  key={`lane-${laneIndex}`}
-                  className={`${styles.motionLane} ${
-                    viewMode === "row" ? styles.motionLaneRow : styles.motionLaneColumn
-                  }`}
-                >
-                  <div className={styles.motionViewport}>
-                    <div
-                      className={`${styles.motionTrack} ${
-                        viewMode === "row"
-                          ? styles.motionTrackHorizontal
-                          : styles.motionTrackVertical
-                      }`}
-                      style={laneStyle}
-                    >
-                      {MOTION_LOOP_SEGMENTS.map((segmentIndex) => (
-                        <div
-                          key={`lane-${laneIndex}-segment-${segmentIndex}`}
-                          className={`${styles.motionTrackSegment} ${
-                            viewMode === "row"
-                              ? styles.motionTrackSegmentRow
-                              : styles.motionTrackSegmentColumn
-                          }`}
-                        >
-                          {laneServers.map((server, cardIndex) => {
-                            const validation = getValidationState(server);
-                            const indicator = getStatusIndicator(
-                              validation,
-                              testResults[server.alias]
-                            );
-                            const visual = getVisualState(validation, indicator);
-                            const tinted = visual.cardClass !== styles.cardStateDanger;
-                            const tintStyle = getTintStyle(server.color, tinted);
-                            return (
-                              <article
-                                key={`${laneIndex}-${segmentIndex}-${cardIndex}-${server.alias}`}
-                                data-server-card
-                                className={`${styles.motionCard} ${
-                                  viewMode === "row"
-                                    ? styles.motionCardRow
-                                    : styles.motionCardColumn
-                                } ${styles.cardDefault} ${visual.cardClass} ${
-                                  tintStyle ? styles.cardTinted : ""
-                                }`}
-                                style={tintStyle}
-                              >
-                                <div className={styles.motionCardHeader}>
-                                  <div className={styles.motionIdentity}>
-                                    <span
-                                      className={styles.aliasEmojiPreview}
-                                      aria-hidden="true"
-                                    >
-                                      {server.logoEmoji || "💻"}
-                                    </span>
-                                    <span className={styles.motionAlias}>
-                                      {server.alias || "device"}
-                                    </span>
-                                  </div>
-                                  <span
-                                    className={`${styles.statusDot} ${statusDotClass(
-                                      indicator.tone
-                                    )}`}
-                                    aria-hidden="true"
-                                  />
-                                </div>
-                                <div className={styles.motionCardMeta}>
-                                  <span>
-                                    {(server.user || "root").trim() || "root"}@
-                                    {(server.host || "example.com").trim() ||
-                                      "example.com"}
-                                    :{(server.port || "22").trim() || "22"}
-                                  </span>
-                                  <span>
-                                    {(server.primaryDomain || "localhost").trim() ||
-                                      "localhost"}
-                                  </span>
-                                </div>
-                                <div className={`text-body-secondary ${styles.motionCardHint}`}>
-                                  {indicator.label}
-                                </div>
-                                <div className={styles.motionCardActions}>
-                                  {!isCustomerMode ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => openDetailModal(server.alias)}
-                                      className={styles.actionButtonSecondary}
-                                    >
-                                      <i
-                                        className="fa-solid fa-circle-info"
-                                        aria-hidden="true"
-                                      />
-                                      <span>Detail</span>
-                                    </button>
-                                  ) : null}
-                                  {onOpenDetailSearch ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => onOpenDetailSearch(server.alias)}
-                                      className={styles.actionButtonSecondary}
-                                    >
-                                      <i
-                                        className="fa-solid fa-scale-balanced"
-                                        aria-hidden="true"
-                                      />
-                                      <span>Compare</span>
-                                    </button>
-                                  ) : null}
-                                </div>
-                              </article>
-                            );
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        {!isCustomerMode ? detailModal : null}
-      </>
-    );
+    return renderServerMotionMode({
+      styles,
+      viewMode,
+      paginatedServers,
+      laneCount,
+      laneSize,
+      buildMotionLanes,
+      MOTION_LOOP_SEGMENTS,
+      getValidationState,
+      getStatusIndicator,
+      testResults,
+      getVisualState,
+      getTintStyle,
+      statusDotClass,
+      isCustomerMode,
+      openDetailModal,
+      onOpenDetailSearch,
+      detailModal,
+    });
   }
-
   if (viewMode === "list" || viewMode === "matrix") {
-    if (isCustomerMode) {
-      return (
-        <div className={styles.listRoot} data-server-list-root>
-          <div className={styles.listTableWrap} data-server-list-wrap>
-            <table className={styles.listTable}>
-              <thead>
-                <tr>
-                  <th>Alias</th>
-                  <th>Server type</th>
-                  <th>Storage (GB)</th>
-                  <th>Location</th>
-                  <th className={styles.colCompare}>Compare</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedServers.map((server) => {
-                  const validation = getValidationState(server);
-                  const aliasValue = aliasDrafts[server.alias] ?? server.alias;
-                  return (
-                    <tr key={server.alias} className={styles.listTableRow}>
-                      <td>
-                        <div className={styles.fieldColumn}>
-                          <div className={styles.aliasInputRow}>
-                            <input
-                              type="color"
-                              value={normalizeDeviceColor(server.color) || "#89CFF0"}
-                              onChange={(event) =>
-                                onPatchServer(server.alias, { color: event.target.value })
-                              }
-                              className={styles.colorPickerInput}
-                              aria-label="Device color"
-                            />
-                            <div className={styles.emojiPickerShell}>
-                              <button
-                                type="button"
-                                className={`${styles.emojiPickerTrigger} ${
-                                  openEmojiAlias === server.alias
-                                    ? styles.emojiPickerTriggerOpen
-                                    : ""
-                                }`}
-                                onClick={() =>
-                                  setOpenEmojiAlias((prev) =>
-                                    prev === server.alias ? null : server.alias
-                                  )
-                                }
-                                title="Choose device emoji"
-                                aria-label="Choose device emoji"
-                              >
-                                <span className={styles.aliasEmojiPreview} aria-hidden="true">
-                                  {server.logoEmoji || "💻"}
-                                </span>
-                              </button>
-                              {openEmojiAlias === server.alias ? (
-                                <div className={styles.emojiPickerMenu}>
-                                  <Picker
-                                    data={data}
-                                    theme="dark"
-                                    previewPosition="none"
-                                    navPosition="bottom"
-                                    searchPosition="sticky"
-                                    perLine={8}
-                                    maxFrequentRows={2}
-                                    onEmojiSelect={(emoji: any) => {
-                                      const nextEmoji = String(emoji?.native || "").trim();
-                                      if (!nextEmoji) return;
-                                      onPatchServer(server.alias, { logoEmoji: nextEmoji });
-                                      setOpenEmojiAlias(null);
-                                    }}
-                                  />
-                                </div>
-                              ) : null}
-                            </div>
-                            <input
-                              value={aliasValue}
-                              onChange={(event) =>
-                                onAliasTyping(server, event.target.value)
-                              }
-                              onBlur={() => commitAlias(server)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                  event.preventDefault();
-                                  commitAlias(server);
-                                }
-                              }}
-                              placeholder="device"
-                              className={`${styles.inputSmall} ${
-                                validation.aliasError ? styles.inputError : ""
-                              }`}
-                            />
-                          </div>
-                          {validation.aliasError ? (
-                            <span className={`text-danger ${styles.aliasErrorText}`}>
-                              {validation.aliasError}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td>
-                        <select
-                          value={server.requirementServerType || "vps"}
-                          onChange={(event) =>
-                            onPatchServer(server.alias, {
-                              requirementServerType: event.target.value,
-                            })
-                          }
-                          className={styles.selectControl}
-                        >
-                          <option value="vps">VPS</option>
-                          <option value="dedicated">Dedicated</option>
-                          <option value="managed">Managed</option>
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          value={server.requirementStorageGb || "200"}
-                          onChange={(event) =>
-                            onPatchServer(server.alias, {
-                              requirementStorageGb: event.target.value,
-                            })
-                          }
-                          min={20}
-                          step={1}
-                          inputMode="numeric"
-                          placeholder="200"
-                          className={styles.inputSmall}
-                        />
-                      </td>
-                      <td>
-                        <CountryFlagSelectPlugin
-                          value={server.requirementLocation || "Germany"}
-                          onChange={(nextLocation) =>
-                            onPatchServer(server.alias, {
-                              requirementLocation: nextLocation,
-                            })
-                          }
-                          className={styles.selectControl}
-                          aria-label={`Location requirement for ${server.alias}`}
-                        />
-                      </td>
-                      <td className={styles.listCompareCell}>
-                        {onOpenDetailSearch ? (
-                          <button
-                            type="button"
-                            onClick={() => onOpenDetailSearch(server.alias)}
-                            className={styles.listCompareButton}
-                          >
-                            <i className="fa-solid fa-scale-balanced" aria-hidden="true" />
-                            <span>Compare</span>
-                          </button>
-                        ) : (
-                          <span className="text-body-secondary">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <>
-        <div className={styles.listRoot} data-server-list-root>
-          <div className={styles.listToolbar} data-server-list-toolbar>
-            <button
-              type="button"
-              className={styles.bulkActionTrigger}
-              onClick={(event) => {
-                if (bulkMenu) {
-                  setBulkMenu(null);
-                } else {
-                  openBulkMenu(event);
-                }
-              }}
-            >
-              Selected ({selectedCount})
-              <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-            </button>
-            <span className={`text-body-secondary ${styles.listToolbarMeta}`}>
-              {selectedCount} selected
-            </span>
-          </div>
-
-          <div className={styles.listTableWrap} data-server-list-wrap>
-            <table className={styles.listTable}>
-              <thead>
-                <tr>
-                  <th className={styles.colSelect}>
-                    <input
-                      type="checkbox"
-                      checked={allVisibleSelected}
-                      onChange={(event) =>
-                        toggleSelectAllVisible(event.target.checked)
-                      }
-                      aria-label="Select all visible devices"
-                    />
-                  </th>
-                  <th>Identity</th>
-                  <th>Host</th>
-                  <th>Port</th>
-                  <th>User</th>
-                  <th>Primary domain</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedServers.map((server) => {
-                  const validation = getValidationState(server);
-                  const indicator = getStatusIndicator(
-                    validation,
-                    testResults[server.alias]
-                  );
-                  const visual = getVisualState(validation, indicator);
-                  const tintStyle = getTintStyle(
-                    server.color,
-                    visual.rowClass !== styles.rowStateDanger
-                  );
-                  const aliasValue = aliasDrafts[server.alias] ?? server.alias;
-
-                  return (
-                    <tr
-                      key={server.alias}
-                      className={`${styles.listTableRow} ${visual.rowClass} ${
-                        tintStyle ? styles.rowTinted : ""
-                      }`}
-                      style={tintStyle}
-                    >
-                      <td className={styles.colSelect}>
-                        <input
-                          type="checkbox"
-                          checked={selectedAliases.has(server.alias)}
-                          onChange={(event) =>
-                            toggleAliasSelection(server.alias, event.target.checked)
-                          }
-                          aria-label={`Select ${server.alias}`}
-                        />
-                      </td>
-                      <td>
-                        <div className={styles.fieldColumn}>
-                          <div className={styles.aliasInputRow}>
-                            <span className={styles.aliasEmojiPreview} aria-hidden="true">
-                              {server.logoEmoji || "💻"}
-                            </span>
-                            <input
-                              value={aliasValue}
-                              onChange={(event) =>
-                                onAliasTyping(server, event.target.value)
-                              }
-                              onBlur={() => commitAlias(server)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                  event.preventDefault();
-                                  commitAlias(server);
-                                }
-                              }}
-                              placeholder="device"
-                              className={`${styles.inputSmall} ${
-                                validation.aliasError ? styles.inputError : ""
-                              }`}
-                            />
-                          </div>
-                          {validation.aliasError ? (
-                            <span className={`text-danger ${styles.aliasErrorText}`}>
-                              {validation.aliasError}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td>
-                        <input
-                          value={server.host}
-                          onChange={(event) =>
-                            onPatchServer(server.alias, { host: event.target.value })
-                          }
-                          onBlur={() => emitCredentialBlur(server, "host")}
-                          placeholder="example.com"
-                          className={`${styles.inputSmall} ${
-                            validation.hostMissing ? styles.inputError : ""
-                          }`}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          value={server.port}
-                          onChange={(event) => patchPort(server.alias, event.target.value)}
-                          onBlur={() => onPortFieldBlur(server)}
-                          placeholder="22"
-                          min={1}
-                          max={65535}
-                          step={1}
-                          inputMode="numeric"
-                          className={`${styles.inputSmall} ${
-                            validation.portError ? styles.inputError : ""
-                          }`}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          value={server.user}
-                          onChange={(event) =>
-                            onPatchServer(server.alias, { user: event.target.value })
-                          }
-                          onBlur={() => emitCredentialBlur(server, "user")}
-                          placeholder="root"
-                          className={`${styles.inputSmall} ${
-                            validation.userMissing ? styles.inputError : ""
-                          }`}
-                        />
-                      </td>
-                      <td>
-                        <div className={styles.fieldColumn}>
-                          <div className={styles.primaryDomainInputRow}>
-                            <input
-                              value={server.primaryDomain || ""}
-                              onChange={(event) =>
-                                onPatchServer(server.alias, {
-                                  primaryDomain: event.target.value,
-                                })
-                              }
-                              onFocus={(event) =>
-                                openPrimaryDomainMenuFor(server.alias, event.currentTarget)
-                              }
-                              onClick={(event) =>
-                                openPrimaryDomainMenuFor(server.alias, event.currentTarget)
-                              }
-                              onBlur={(event) =>
-                                commitPrimaryDomain(server, event.currentTarget.value)
-                              }
-                              placeholder="localhost"
-                              className={`${styles.inputSmall} ${
-                                styles.primaryDomainDropdownTrigger
-                              } ${
-                                validation.primaryDomainError ? styles.inputError : ""
-                              }`}
-                            />
-                          </div>
-                          {validation.primaryDomainError ? (
-                            <span className={`text-danger ${styles.aliasErrorText}`}>
-                              {validation.primaryDomainError}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td>{renderStatusCell(server, indicator)}</td>
-                      <td>{renderActionCell(server)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        {actionMenuOverlay}
-        {bulkMenuOverlay}
-        {statusPopoverOverlay}
-        {primaryDomainMenuOverlay}
-        {detailModal}
-      </>
-    );
+    return renderServerListMode({
+      styles,
+      isCustomerMode,
+      paginatedServers,
+      getValidationState,
+      aliasDrafts,
+      normalizeDeviceColor,
+      openEmojiAlias,
+      setOpenEmojiAlias,
+      Picker,
+      data,
+      onPatchServer,
+      onAliasTyping,
+      commitAlias,
+      onOpenDetailSearch,
+      bulkMenu,
+      setBulkMenu,
+      openBulkMenu,
+      selectedCount,
+      allVisibleSelected,
+      toggleSelectAllVisible,
+      getStatusIndicator,
+      testResults,
+      getVisualState,
+      getTintStyle,
+      selectedAliases,
+      toggleAliasSelection,
+      emitCredentialBlur,
+      patchPort,
+      onPortFieldBlur,
+      openPrimaryDomainMenuFor,
+      commitPrimaryDomain,
+      renderStatusCell,
+      renderActionCell,
+      actionMenuOverlay,
+      bulkMenuOverlay,
+      statusPopoverOverlay,
+      primaryDomainMenuOverlay,
+      detailModal,
+    });
   }
-
-  if (isCustomerMode) {
-    return (
-      <div className={styles.cardGrid} style={gridStyle}>
-        {paginatedServers.map((server) => {
-          const dense = viewConfig.dense;
-          const aliasValue = aliasDrafts[server.alias] ?? server.alias;
-          const validation = getValidationState(server);
-          const tintStyle = getTintStyle(server.color, true);
-          const cardStyle = {
-            "--server-card-padding": dense ? "12px" : "16px",
-            "--server-card-gap": dense ? "10px" : "12px",
-            "--server-fields-gap": dense ? "8px" : "10px",
-            "--server-input-padding": dense ? "6px 8px" : "8px 10px",
-            "--server-input-font": dense ? "12px" : "13px",
-            ...(tintStyle ?? {}),
-          } as CSSProperties;
-          return (
-            <div
-              key={server.alias}
-              data-server-card
-              className={`${styles.serverCard} ${styles.cardDefault} ${
-                tintStyle ? styles.cardTinted : ""
-              }`}
-              style={cardStyle}
-            >
-              <div className={styles.fieldGrid}>
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>Identity</label>
-                  <div className={styles.aliasInputRow}>
-                    <input
-                      type="color"
-                      value={normalizeDeviceColor(server.color) || "#89CFF0"}
-                      onChange={(event) =>
-                        onPatchServer(server.alias, { color: event.target.value })
-                      }
-                      className={styles.colorPickerInput}
-                      aria-label="Device color"
-                    />
-                    <div className={styles.emojiPickerShell}>
-                      <button
-                        type="button"
-                        className={`${styles.emojiPickerTrigger} ${
-                          openEmojiAlias === server.alias
-                            ? styles.emojiPickerTriggerOpen
-                            : ""
-                        }`}
-                        onClick={() =>
-                          setOpenEmojiAlias((prev) =>
-                            prev === server.alias ? null : server.alias
-                          )
-                        }
-                        title="Choose device emoji"
-                        aria-label="Choose device emoji"
-                      >
-                        <span className={styles.aliasEmojiPreview} aria-hidden="true">
-                          {server.logoEmoji || "💻"}
-                        </span>
-                      </button>
-                      {openEmojiAlias === server.alias ? (
-                        <div className={styles.emojiPickerMenu}>
-                          <Picker
-                            data={data}
-                            theme="dark"
-                            previewPosition="none"
-                            navPosition="bottom"
-                            searchPosition="sticky"
-                            perLine={8}
-                            maxFrequentRows={2}
-                            onEmojiSelect={(emoji: any) => {
-                              const nextEmoji = String(emoji?.native || "").trim();
-                              if (!nextEmoji) return;
-                              onPatchServer(server.alias, { logoEmoji: nextEmoji });
-                              setOpenEmojiAlias(null);
-                            }}
-                          />
-                        </div>
-                      ) : null}
-                    </div>
-                    <input
-                      value={aliasValue}
-                      onChange={(event) => onAliasTyping(server, event.target.value)}
-                      onBlur={() => commitAlias(server)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          commitAlias(server);
-                        }
-                      }}
-                      placeholder="device"
-                      className={`${styles.fieldInput} ${styles.identityAliasInput} ${
-                        validation.aliasError ? styles.inputError : ""
-                      }`}
-                    />
-                  </div>
-                  {validation.aliasError ? (
-                    <p className="text-danger">{validation.aliasError}</p>
-                  ) : null}
-                </div>
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>
-                    Server type
-                  </label>
-                  <select
-                    value={server.requirementServerType || "vps"}
-                    onChange={(event) =>
-                      onPatchServer(server.alias, {
-                        requirementServerType: event.target.value,
-                      })
-                    }
-                    className={styles.selectControl}
-                  >
-                    <option value="vps">VPS</option>
-                    <option value="dedicated">Dedicated</option>
-                    <option value="managed">Managed</option>
-                  </select>
-                </div>
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>
-                    Storage (GB)
-                  </label>
-                  <input
-                    type="number"
-                    value={server.requirementStorageGb || "200"}
-                    onChange={(event) =>
-                      onPatchServer(server.alias, {
-                        requirementStorageGb: event.target.value,
-                      })
-                    }
-                    min={20}
-                    step={1}
-                    inputMode="numeric"
-                    placeholder="200"
-                    className={styles.fieldInput}
-                  />
-                </div>
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>
-                    Location
-                  </label>
-                  <CountryFlagSelectPlugin
-                    value={server.requirementLocation || "Germany"}
-                    onChange={(nextLocation) =>
-                      onPatchServer(server.alias, {
-                        requirementLocation: nextLocation,
-                      })
-                    }
-                    className={styles.selectControl}
-                    aria-label={`Location requirement for ${server.alias}`}
-                  />
-                </div>
-              </div>
-              {onOpenDetailSearch ? (
-                <div className={styles.cardFooter}>
-                  <button
-                    type="button"
-                    onClick={() => onOpenDetailSearch(server.alias)}
-                    className={`${styles.actionButtonSecondary} ${styles.customerCompareButton}`}
-                  >
-                    <i className="fa-solid fa-scale-balanced" aria-hidden="true" />
-                    <span>Compare</span>
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <div className={styles.cardGrid} style={gridStyle}>
-        {paginatedServers.map((server) => {
-          const dense = viewConfig.dense;
-          const validation = getValidationState(server);
-          const indicator = getStatusIndicator(validation, testResults[server.alias]);
-          const visual = getVisualState(validation, indicator);
-          const tintStyle = getTintStyle(
-            server.color,
-            visual.cardClass !== styles.cardStateDanger
-          );
-
-          const cardStyle = {
-            "--server-card-padding": dense ? "12px" : "16px",
-            "--server-card-gap": dense ? "10px" : "12px",
-            "--server-fields-gap": dense ? "8px" : "10px",
-            "--server-input-padding": dense ? "6px 8px" : "8px 10px",
-            "--server-input-font": dense ? "12px" : "13px",
-            ...(tintStyle ?? {}),
-          } as CSSProperties;
-
-          return (
-            <div
-              key={server.alias}
-              data-server-card
-              className={`${styles.serverCard} ${styles.cardDefault} ${
-                visual.cardClass
-              } ${tintStyle ? styles.cardTinted : ""}`}
-              style={cardStyle}
-            >
-              <div className={styles.fieldGrid}>
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>Identity</label>
-                  <div className={styles.aliasInputRow}>
-                    <input
-                      type="color"
-                      value={normalizeDeviceColor(server.color) || "#89CFF0"}
-                      onChange={(event) =>
-                        onPatchServer(server.alias, { color: event.target.value })
-                      }
-                      className={styles.colorPickerInput}
-                      aria-label="Device color"
-                    />
-                    <div className={styles.emojiPickerShell}>
-                      <button
-                        type="button"
-                        className={`${styles.emojiPickerTrigger} ${
-                          openEmojiAlias === server.alias
-                            ? styles.emojiPickerTriggerOpen
-                            : ""
-                        }`}
-                        onClick={() =>
-                          setOpenEmojiAlias((prev) =>
-                            prev === server.alias ? null : server.alias
-                          )
-                        }
-                        title="Choose device emoji"
-                        aria-label="Choose device emoji"
-                      >
-                        <span className={styles.aliasEmojiPreview} aria-hidden="true">
-                          {server.logoEmoji || "💻"}
-                        </span>
-                      </button>
-                      {openEmojiAlias === server.alias ? (
-                        <div className={styles.emojiPickerMenu}>
-                          <Picker
-                            data={data}
-                            theme="dark"
-                            previewPosition="none"
-                            navPosition="bottom"
-                            searchPosition="sticky"
-                            perLine={8}
-                            maxFrequentRows={2}
-                            onEmojiSelect={(emoji: any) => {
-                              const nextEmoji = String(emoji?.native || "").trim();
-                              if (!nextEmoji) return;
-                              onPatchServer(server.alias, { logoEmoji: nextEmoji });
-                              setOpenEmojiAlias(null);
-                            }}
-                          />
-                        </div>
-                      ) : null}
-                    </div>
-                    <input
-                      value={aliasDrafts[server.alias] ?? server.alias}
-                      onChange={(event) => onAliasTyping(server, event.target.value)}
-                      onBlur={() => commitAlias(server)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          commitAlias(server);
-                        }
-                      }}
-                      placeholder="device"
-                      className={`${styles.fieldInput} ${styles.identityAliasInput} ${
-                        validation.aliasError ? styles.inputError : ""
-                      }`}
-                    />
-                  </div>
-                  {validation.aliasError ? (
-                    <p className="text-danger">{validation.aliasError}</p>
-                  ) : null}
-                </div>
-
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>Host</label>
-                  <input
-                    value={server.host}
-                    onChange={(event) =>
-                      onPatchServer(server.alias, { host: event.target.value })
-                    }
-                    onBlur={() => emitCredentialBlur(server, "host")}
-                    placeholder="example.com"
-                    className={`${styles.fieldInput} ${
-                      validation.hostMissing ? styles.inputError : ""
-                    }`}
-                  />
-                  {validation.hostMissing ? (
-                    <p className="text-danger">Host is required.</p>
-                  ) : null}
-                </div>
-
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>Port</label>
-                  <input
-                    type="number"
-                    value={server.port}
-                    onChange={(event) => patchPort(server.alias, event.target.value)}
-                    onBlur={() => onPortFieldBlur(server)}
-                    placeholder="22"
-                    min={1}
-                    max={65535}
-                    step={1}
-                    inputMode="numeric"
-                    className={`${styles.fieldInput} ${
-                      validation.portError ? styles.inputError : ""
-                    }`}
-                  />
-                  {validation.portError ? (
-                    <p className="text-danger">{validation.portError}</p>
-                  ) : null}
-                </div>
-
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>User</label>
-                  <input
-                    value={server.user}
-                    onChange={(event) =>
-                      onPatchServer(server.alias, { user: event.target.value })
-                    }
-                    onBlur={() => emitCredentialBlur(server, "user")}
-                    placeholder="root"
-                    className={`${styles.fieldInput} ${
-                      validation.userMissing ? styles.inputError : ""
-                    }`}
-                  />
-                  {validation.userMissing ? (
-                    <p className="text-danger">User is required.</p>
-                  ) : null}
-                </div>
-
-                <div className={styles.fieldWrap}>
-                  <label className={`text-body-tertiary ${styles.fieldLabel}`}>
-                    Primary domain
-                  </label>
-                  <div className={styles.primaryDomainInputRow}>
-                    <input
-                      value={server.primaryDomain || ""}
-                      onChange={(event) =>
-                        onPatchServer(server.alias, { primaryDomain: event.target.value })
-                      }
-                      onFocus={(event) =>
-                        openPrimaryDomainMenuFor(server.alias, event.currentTarget)
-                      }
-                      onClick={(event) =>
-                        openPrimaryDomainMenuFor(server.alias, event.currentTarget)
-                      }
-                      onBlur={(event) =>
-                        commitPrimaryDomain(server, event.currentTarget.value)
-                      }
-                      placeholder="localhost"
-                      className={`${styles.fieldInput} ${
-                        styles.primaryDomainDropdownTrigger
-                      } ${
-                        validation.primaryDomainError ? styles.inputError : ""
-                      }`}
-                    />
-                  </div>
-                  {validation.primaryDomainError ? (
-                    <p className="text-danger">{validation.primaryDomainError}</p>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className={styles.statusCard}>
-                <div className={styles.statusHeadline}>
-                  <span
-                    className={`${styles.statusDot} ${statusDotClass(indicator.tone)}`}
-                    aria-hidden="true"
-                  />
-                  <span>{indicator.label}</span>
-                </div>
-                <div className={styles.statusSummary}>{indicator.tooltip}</div>
-              </div>
-
-              <div className={styles.cardFooter}>
-                {renderActionCell(server)}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {actionMenuOverlay}
-      {bulkMenuOverlay}
-      {statusPopoverOverlay}
-      {primaryDomainMenuOverlay}
-      {detailModal}
-    </>
-  );
+  return renderServerCardMode({
+    styles,
+    isCustomerMode,
+    gridStyle,
+    paginatedServers,
+    viewConfig,
+    aliasDrafts,
+    getValidationState,
+    getStatusIndicator,
+    getVisualState,
+    getTintStyle,
+    normalizeDeviceColor,
+    onPatchServer,
+    openEmojiAlias,
+    setOpenEmojiAlias,
+    Picker,
+    data,
+    onAliasTyping,
+    commitAlias,
+    emitCredentialBlur,
+    patchPort,
+    onPortFieldBlur,
+    openPrimaryDomainMenuFor,
+    commitPrimaryDomain,
+    renderActionCell,
+    onOpenDetailSearch,
+    actionMenuOverlay,
+    bulkMenuOverlay,
+    statusPopoverOverlay,
+    primaryDomainMenuOverlay,
+    detailModal,
+    testResults,
+    statusDotClass,
+  });
 }

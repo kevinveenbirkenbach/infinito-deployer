@@ -1,24 +1,17 @@
 from __future__ import annotations
 
 from functools import lru_cache
-import json
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
-from api.auth import (
-    ensure_workspace_access,
-    ensure_workspace_list_allowed,
-    resolve_auth_context,
-)
+from api.auth import ensure_workspace_access
 from api.schemas.workspace import (
     WorkspaceConnectionTestIn,
     WorkspaceConnectionTestOut,
-    WorkspaceCreateOut,
     WorkspaceCredentialsIn,
     WorkspaceCredentialsOut,
-    WorkspaceDeleteOut,
     WorkspaceDirCreateOut,
     WorkspaceFileDeleteOut,
     WorkspaceFileListOut,
@@ -26,15 +19,12 @@ from api.schemas.workspace import (
     WorkspaceFileRenameIn,
     WorkspaceFileRenameOut,
     WorkspaceFileWriteIn,
-    WorkspaceGenerateIn,
-    WorkspaceGenerateOut,
     WorkspaceHistoryDiffOut,
     WorkspaceHistoryEntryOut,
     WorkspaceHistoryListOut,
     WorkspaceHistoryRestoreFileIn,
     WorkspaceHistoryRestoreOut,
     WorkspaceKeyPassphraseIn,
-    WorkspaceListOut,
     WorkspaceMasterPasswordIn,
     WorkspaceRoleAppConfigImportOut,
     WorkspaceRoleAppConfigIn,
@@ -54,6 +44,7 @@ from api.schemas.workspace import (
     WorkspaceVaultPasswordResetOut,
 )
 from services.workspaces import WorkspaceService
+from .workspaces_zip_utils import ensure_zip_upload, parse_upload_modes
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
@@ -65,50 +56,6 @@ def _svc() -> WorkspaceService:
 
 def _require_workspace(request: Request, workspace_id: str) -> None:
     ensure_workspace_access(request, workspace_id, _svc())
-
-
-@router.get("", response_model=WorkspaceListOut)
-def list_workspaces(request: Request) -> WorkspaceListOut:
-    ctx = ensure_workspace_list_allowed(request)
-    if not ctx.user_id:
-        return WorkspaceListOut(authenticated=False, user_id=None, workspaces=[])
-    return WorkspaceListOut(
-        authenticated=True,
-        user_id=ctx.user_id,
-        workspaces=_svc().list_for_user(ctx.user_id),
-    )
-
-
-@router.post("", response_model=WorkspaceCreateOut)
-def create_workspace(request: Request) -> WorkspaceCreateOut:
-    ctx = resolve_auth_context(request)
-    meta = _svc().create(owner_id=ctx.user_id, owner_email=ctx.email)
-    return WorkspaceCreateOut(
-        workspace_id=meta.get("workspace_id"),
-        created_at=meta.get("created_at"),
-    )
-
-
-@router.delete("/{workspace_id}", response_model=WorkspaceDeleteOut)
-def delete_workspace(workspace_id: str, request: Request) -> WorkspaceDeleteOut:
-    _require_workspace(request, workspace_id)
-    _svc().delete(workspace_id)
-    return WorkspaceDeleteOut(ok=True)
-
-
-@router.post("/{workspace_id}/generate-inventory", response_model=WorkspaceGenerateOut)
-def generate_inventory(
-    workspace_id: str, req: WorkspaceGenerateIn, request: Request
-) -> WorkspaceGenerateOut:
-    _require_workspace(request, workspace_id)
-    _svc().generate_inventory(workspace_id, req.model_dump())
-    files = _svc().list_files(workspace_id)
-    return WorkspaceGenerateOut(
-        workspace_id=workspace_id,
-        inventory_path="inventory.yml",
-        files=files,
-        warnings=[],
-    )
 
 
 @router.get("/{workspace_id}/files", response_model=WorkspaceFileListOut)
@@ -489,9 +436,7 @@ async def upload_zip_preview(
     workspace_id: str, request: Request, file: UploadFile = File(...)
 ) -> WorkspaceUploadPreviewOut:
     _require_workspace(request, workspace_id)
-    filename = (file.filename or "").lower()
-    if not filename.endswith(".zip"):
-        raise HTTPException(status_code=400, detail="zip file required")
+    ensure_zip_upload(file)
     data = await file.read()
     entries = _svc().list_zip_entries(data)
     existing_paths = {
@@ -512,35 +457,8 @@ async def upload_zip(
     per_file_mode_json: str | None = Form(default=None),
 ) -> WorkspaceUploadOut:
     _require_workspace(request, workspace_id)
-    filename = (file.filename or "").lower()
-    if not filename.endswith(".zip"):
-        raise HTTPException(status_code=400, detail="zip file required")
-
-    mode_default = str(default_mode or "").strip().lower()
-    if mode_default not in {"override", "merge"}:
-        raise HTTPException(status_code=400, detail="invalid default_mode")
-
-    per_file_mode: dict[str, str] = {}
-    if per_file_mode_json:
-        try:
-            loaded = json.loads(per_file_mode_json)
-        except Exception as exc:
-            raise HTTPException(
-                status_code=400, detail=f"invalid per_file_mode_json: {exc}"
-            ) from exc
-        if not isinstance(loaded, dict):
-            raise HTTPException(status_code=400, detail="per_file_mode_json must be an object")
-        for key, value in loaded.items():
-            path = str(key or "").strip()
-            if not path:
-                continue
-            mode = str(value or "").strip().lower()
-            if mode not in {"override", "merge"}:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"invalid merge mode for {path}: {mode}",
-                )
-            per_file_mode[path] = mode
+    ensure_zip_upload(file)
+    mode_default, per_file_mode = parse_upload_modes(default_mode, per_file_mode_json)
 
     data = await file.read()
     summary = _svc().load_zip(
@@ -550,3 +468,6 @@ async def upload_zip(
         per_file_mode=per_file_mode,
     )
     return WorkspaceUploadOut(ok=True, files=_svc().list_files(workspace_id), **summary)
+
+
+from . import workspaces_management_routes as _workspaces_management_routes  # noqa: F401
